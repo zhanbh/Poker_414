@@ -1,0 +1,24 @@
+:root { font-family: Segoe UI, sans-serif; color: #eaf2ff; background: #102331; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 960px; }
+button, input { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: .45; }
+main { min-height: 100vh; padding: 32px; }
+.access-view { display: grid; place-content: center; gap: 12px; max-width: 420px; margin: auto; }
+.access-view form { display: grid; gap: 14px; padding: 24px; background: #18384b; border-radius: 12px; }
+.access-view label { display: grid; gap: 6px; }
+.access-view input { padding: 8px; }
+.team-grid, .table-grid { display: grid; grid-template-columns: repeat(2, minmax(280px, 1fr)); gap: 16px; }
+.team-grid section { padding: 16px; background: #18384b; border-radius: 12px; }
+.player-seat { display: grid; gap: 4px; padding: 14px; min-height: 84px; background: #1d4b5e; border: 1px solid #397a8b; border-radius: 10px; }
+.table-grid { grid-template-columns: repeat(4, 1fr); margin: 24px 0; }
+.main-status, .action-bar, .stand-dialog, .burst-prompt { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 14px; background: #18384b; border-radius: 10px; }
+.opening-draw { padding: 12px; border: 1px solid #ffd166; border-radius: 10px; animation: draw-pulse 1s ease-in-out infinite alternate; }
+@keyframes draw-pulse { from { opacity: .55; } to { opacity: 1; } }
+.card-hand { display: flex; gap: 8px; min-height: 100px; align-items: end; padding: 20px 0; overflow-x: auto; }
+.card { min-width: 58px; padding: 18px 8px; background: #f5f8fc; color: #132431; border: 2px solid #d6e2ea; border-radius: 8px; }
+.card.selected { transform: translateY(-10px); border-color: #ffd166; }
+.presence-badge.away { color: #ffcf66; }
+.host-label, .burst-label { color: #ffd166; }
+.public-play { min-height: 80px; padding: 16px; margin: 12px 0; border: 1px dashed #397a8b; }

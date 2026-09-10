@@ -25,7 +25,7 @@ const playing: RoomSnapshot = {
 
 describe('对局视图', () => {
   it('显示有效主、当前牌权和四人剩余牌数，但不渲染他人手牌', () => {
-    render(<GameView snapshot={playing} onCommand={vi.fn()} onActivity={vi.fn()} />);
+    render(<GameView snapshot={playing} onCommand={vi.fn()} onActivity={vi.fn()} testMode={false} />);
 
     expect(screen.getByText('本手主：5')).toBeInTheDocument();
     expect(screen.getByText('当前牌权：甲')).toBeInTheDocument();
@@ -39,7 +39,7 @@ describe('对局视图', () => {
   it('选择自己的牌会触发用户活动，提交操作交给协议命令', () => {
     const onCommand = vi.fn();
     const onActivity = vi.fn();
-    render(<GameView snapshot={playing} onCommand={onCommand} onActivity={onActivity} />);
+    render(<GameView snapshot={playing} onCommand={onCommand} onActivity={onActivity} testMode={false} />);
 
     fireEvent.click(screen.getByRole('button', { name: '4♠' }));
     expect(onActivity).toHaveBeenCalledTimes(1);

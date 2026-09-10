@@ -9,6 +9,9 @@ main { min-height: 100vh; padding: 32px; }
 .access-view form { display: grid; gap: 14px; padding: 24px; background: #18384b; border-radius: 12px; }
 .access-view label { display: grid; gap: 6px; }
 .access-view input { padding: 8px; }
+.test-mode-link { color: #ffd166; text-align: center; }
+.test-mode-hint, .test-mode-banner { padding: 10px 14px; color: #102331; background: #ffd166; border-radius: 8px; }
+.test-mode-banner { margin-bottom: 16px; }
 .team-grid, .table-grid { display: grid; grid-template-columns: repeat(2, minmax(280px, 1fr)); gap: 16px; }
 .team-grid section { padding: 16px; background: #18384b; border-radius: 12px; }
 .player-seat { display: grid; gap: 4px; padding: 14px; min-height: 84px; background: #1d4b5e; border: 1px solid #397a8b; border-radius: 10px; }

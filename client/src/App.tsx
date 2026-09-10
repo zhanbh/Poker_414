@@ -7,12 +7,17 @@ import { ClientTransport, createSocketClient } from './transport/socket-client';
 
 const SESSION_KEY = '414.sessionToken';
 
+function isTestModeEnabled(): boolean {
+  return new URLSearchParams(window.location.search).get('test') === '1';
+}
+
 function requestId(): string {
   return typeof crypto?.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
 }
 
 export function App({ transport: providedTransport }: { readonly transport?: ClientTransport }) {
   const transport = useMemo(() => providedTransport ?? createSocketClient(), [providedTransport]);
+  const testMode = isTestModeEnabled();
   const [snapshot, setSnapshot] = useState<RoomSnapshot | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -36,9 +41,10 @@ export function App({ transport: providedTransport }: { readonly transport?: Cli
     setBusy(true);
     setError('');
     try {
-      const savedToken = localStorage.getItem(SESSION_KEY) ?? undefined;
+      const storage = testMode ? sessionStorage : localStorage;
+      const savedToken = storage.getItem(SESSION_KEY) ?? undefined;
       const auth = await transport.login(inviteCode, savedToken);
-      localStorage.setItem(SESSION_KEY, auth.sessionToken);
+      storage.setItem(SESSION_KEY, auth.sessionToken);
       setSnapshot(await transport.join(nickname, '414'));
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : '进入房间失败');
@@ -47,9 +53,9 @@ export function App({ transport: providedTransport }: { readonly transport?: Cli
     }
   };
 
-  if (!snapshot) return <AccessView onSubmit={enterRoom} error={error} busy={busy} />;
+  if (!snapshot) return <AccessView onSubmit={enterRoom} error={error} busy={busy} testMode={testMode} />;
   if (snapshot.public.phase === 'lobby') {
-    return <><LobbyView snapshot={snapshot.public} ownSeat={snapshot.private.seat} onStart={() => runCommand('start-hand', {})} onRemove={(seat) => runCommand('remove-player', { seat })} />{error ? <p role="alert">{error}</p> : null}</>;
+    return <><LobbyView snapshot={snapshot.public} ownSeat={snapshot.private.seat} onStart={() => runCommand('start-hand', {})} onRemove={(seat) => runCommand('remove-player', { seat })} testMode={testMode} />{error ? <p role="alert">{error}</p> : null}</>;
   }
-  return <><GameView snapshot={snapshot} onCommand={runCommand} onActivity={() => transport.activity()} />{error ? <p role="alert">{error}</p> : null}</>;
+  return <><GameView snapshot={snapshot} onCommand={runCommand} onActivity={() => transport.activity()} testMode={testMode} />{error ? <p role="alert">{error}</p> : null}</>;
 }

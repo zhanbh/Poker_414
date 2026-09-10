@@ -13,10 +13,11 @@ import { StandDialog } from '../components/StandDialog';
 
 export type GameCommand = (type: CommandType, payload: CommandPayload) => void;
 
-export function GameView({ snapshot, onCommand, onActivity }: {
+export function GameView({ snapshot, onCommand, onActivity, testMode }: {
   readonly snapshot: RoomSnapshot;
   readonly onCommand: GameCommand;
   readonly onActivity: () => void;
+  readonly testMode: boolean;
 }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const ownHand = snapshot.private.hand;
@@ -43,6 +44,7 @@ export function GameView({ snapshot, onCommand, onActivity }: {
 
   return (
     <main className="game-view">
+      {testMode ? <div className="test-mode-banner" role="status">单机四人测试模式 · 每个标签页都是独立玩家</div> : null}
       <MainStatus snapshot={snapshot.public} />
       {snapshot.public.phase === 'opening' ? <><div className="opening-draw">随机首牌权：{snapshot.public.candidateLeader ?? '抽取中'}</div><StandDialog mode={snapshot.public.openingMode} ownSeat={snapshot.private.seat ?? undefined} onChoose={(choice) => onCommand('opening', choice)} /></> : null}
       <div className="table-grid">

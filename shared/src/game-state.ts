@@ -17,6 +17,7 @@ import {
 
 export const SEATS = ['A', 'B', 'C', 'D'] as const;
 export type GamePhase = 'lobby' | 'opening' | 'playing' | 'settled' | 'ended';
+export const AWAY_TIMEOUT_MS = 60_000;
 
 export interface PlayerState {
   id: string;
@@ -48,8 +49,13 @@ export interface TrickState {
 }
 
 export interface OpeningChoice {
-  kind: 'normal' | 'stand' | 'reverse';
+  kind: 'pass' | 'stand' | 'reverse';
   seat?: Seat;
+}
+
+export interface BurstPending {
+  readonly seat: Seat;
+  readonly clearsTrick: boolean;
 }
 
 export interface GameState {
@@ -67,8 +73,12 @@ export interface GameState {
   effectiveMain: Level | null;
   openingMode: SettlementMode;
   modeTeam: Team | null;
+  openingTurn: Seat | null;
+  openingSkippedSeats: Seat[];
   trick: TrickState | null;
   publicLastPlay: PublicPlay | null;
+  burstPending: BurstPending | null;
+  readySeats: Seat[];
   finishOrder: Seat[];
   burstAnnounced: Seat[];
   settlement: SettlementResult | null;
@@ -104,8 +114,12 @@ export function createGameState(roomId: string, hostId: string): GameState {
     effectiveMain: null,
     openingMode: 'normal',
     modeTeam: null,
+    openingTurn: null,
+    openingSkippedSeats: [],
     trick: null,
     publicLastPlay: null,
+    burstPending: null,
+    readySeats: [],
     finishOrder: [],
     burstAnnounced: [],
     settlement: null,
@@ -213,8 +227,12 @@ export function startHand(
     effectiveMain: null,
     openingMode: 'normal',
     modeTeam: null,
+    openingTurn: candidateLeader,
+    openingSkippedSeats: [],
     trick: null,
     publicLastPlay: null,
+    burstPending: null,
+    readySeats: [],
     finishOrder: [],
     burstAnnounced: [],
     settlement: null,
@@ -248,62 +266,126 @@ function finalizeOpening(state: GameState, candidateLeader: Seat, mode: Settleme
     effectiveMain,
     openingMode: mode,
     modeTeam,
+    openingTurn: null,
+    openingSkippedSeats: [],
     trick: null,
   };
+}
+
+function nextSeat(seat: Seat): Seat {
+  return SEATS[(SEATS.indexOf(seat) + 1) % SEATS.length];
+}
+
+function nextOpponentSeat(seat: Seat, team: Team): Seat {
+  let candidate = nextSeat(seat);
+  while (teamOf(candidate) === team) candidate = nextSeat(candidate);
+  return candidate;
+}
+
+function standPlayers(state: GameState, standSeat: Seat): Record<Seat, PlayerState | null> {
+  const standTeam = teamOf(standSeat);
+  return Object.fromEntries(SEATS.map((seat) => {
+    const player = state.players[seat];
+    return [seat, player ? {
+      ...player,
+      activeInHand: seat === standSeat || teamOf(seat) !== standTeam,
+    } : null];
+  })) as Record<Seat, PlayerState | null>;
 }
 
 export function resolveOpening(state: GameState, choice: OpeningChoice, now: number): GameState {
   if (state.phase !== 'opening' || !state.candidateLeader) {
     throw new GameStateError('OPENING_CLOSED', '当前不在首牌权选择阶段');
   }
+  if (!state.openingTurn) throw new GameStateError('OPENING_CLOSED', '当前没有可操作的首牌权窗口');
+  const candidateLeader = state.candidateLeader;
+  const openingTurn = state.openingTurn;
+  const actor = choice.seat ?? openingTurn;
+  if (actor !== openingTurn) throw new GameStateError('NOT_OPENING_TURN', '还没有轮到该玩家选择');
+  if (!state.players[actor]) throw new GameStateError('INVALID_OPENING_PLAYER', '玩家不在房间内');
+  state = markActivity(state, actor, now);
 
-  if (choice.kind === 'normal') {
-    return finalizeOpening(state, state.candidateLeader, state.openingMode, state.modeTeam);
-  }
-
-  if (!choice.seat || !state.players[choice.seat]) {
-    throw new GameStateError('INVALID_OPENING_PLAYER', '立棍或反立玩家无效');
+  if (state.openingMode === 'normal' && choice.kind === 'pass') {
+    const skipped = [...state.openingSkippedSeats, actor];
+    if (skipped.length === SEATS.length) return finalizeOpening(state, candidateLeader, 'normal', null);
+    return { ...state, version: state.version + 1, openingTurn: nextSeat(actor), openingSkippedSeats: skipped };
   }
 
   if (state.openingMode === 'normal' && choice.kind === 'stand') {
-    const standTeam = teamOf(choice.seat);
-    const teammate = teammateOf(choice.seat);
-    const updated = withPlayer(state, teammate, { activeInHand: false, lastActivityAt: now });
+    const standTeam = teamOf(actor);
     return {
-      ...updated,
-      version: updated.version + 1,
-      candidateLeader: choice.seat,
-      currentTurn: null,
-      openingMode: 'stand',
-      modeTeam: standTeam,
-    };
-  }
-
-  if (state.openingMode === 'stand' && choice.kind === 'reverse') {
-    const standTeam = state.modeTeam;
-    if (!standTeam || teamOf(choice.seat) === standTeam) {
-      throw new GameStateError('INVALID_REVERSE', '反立必须由另一队选择');
-    }
-    const standSeat = state.candidateLeader;
-    const players = { ...state.players };
-    for (const seat of SEATS) {
-      const player = players[seat];
-      if (player) players[seat] = { ...player, activeInHand: seat === standSeat || seat === choice.seat };
-    }
-    const reversed: GameState = {
       ...state,
       version: state.version + 1,
-      players,
-      candidateLeader: choice.seat,
-      openingMode: 'reverse',
-      modeTeam: teamOf(choice.seat),
+      candidateLeader: actor,
+      openingMode: 'stand',
+      modeTeam: standTeam,
+      openingTurn: teammateOf(actor),
+      openingSkippedSeats: [],
     };
-    return finalizeOpening(reversed, choice.seat, 'reverse', teamOf(choice.seat));
   }
 
-  if (state.openingMode === 'stand' && choice.kind === 'stand') {
-    throw new GameStateError('STAND_ALREADY_CHOSEN', '本手只能立棍一次');
+  if (state.openingMode === 'stand') {
+    const standTeam = state.modeTeam;
+    if (!standTeam || actor !== teammateOf(candidateLeader) || teamOf(actor) !== standTeam) {
+      throw new GameStateError('INVALID_STAND_TURN', '只有立棍方队友可以继续抢立');
+    }
+    if (choice.kind === 'stand') {
+      return {
+        ...state,
+        version: state.version + 1,
+        candidateLeader: actor,
+        openingMode: 'reverse',
+        openingTurn: nextOpponentSeat(actor, standTeam),
+        openingSkippedSeats: [],
+      };
+    }
+    if (choice.kind === 'pass') {
+      return {
+        ...state,
+        version: state.version + 1,
+        openingMode: 'reverse',
+        openingTurn: nextOpponentSeat(candidateLeader, standTeam),
+        openingSkippedSeats: [],
+      };
+    }
   }
+
+  if (state.openingMode === 'reverse') {
+    const standTeam = state.modeTeam;
+    if (!standTeam || teamOf(actor) === standTeam) {
+      throw new GameStateError('INVALID_REVERSE', '反立必须由另一队选择');
+    }
+    if (choice.kind === 'reverse') {
+      const players = { ...state.players };
+      for (const seat of SEATS) {
+        const player = players[seat];
+        if (player) players[seat] = { ...player, activeInHand: seat === candidateLeader || seat === actor };
+      }
+      const reversed: GameState = {
+        ...state,
+        version: state.version + 1,
+        players,
+        candidateLeader: actor,
+        openingMode: 'reverse',
+        modeTeam: teamOf(actor),
+      };
+      return finalizeOpening(reversed, actor, 'reverse', teamOf(actor));
+    }
+    if (choice.kind === 'pass') {
+      const nextOpponent = nextOpponentSeat(actor, standTeam);
+      if (state.openingSkippedSeats.includes(nextOpponent)) {
+        const finalStand = { ...state, players: standPlayers(state, candidateLeader) };
+        return finalizeOpening(finalStand, candidateLeader, 'stand', standTeam);
+      }
+      return {
+        ...state,
+        version: state.version + 1,
+        openingTurn: nextOpponent,
+        openingSkippedSeats: [...state.openingSkippedSeats, actor],
+      };
+    }
+  }
+
   throw new GameStateError('INVALID_OPENING_CHOICE', '当前首牌权窗口不接受该选择');
 }
 
@@ -348,6 +430,8 @@ function settleCurrentHand(state: GameState): GameState {
     nextLeaderSeat: result.nextLeader,
     currentTurn: null,
     trick: null,
+    burstPending: null,
+    readySeats: [],
     settlement: result,
   };
 }
@@ -376,10 +460,68 @@ function leadAfterClear(state: GameState, lastPlaySeat: Seat): Seat | null {
   return nextActiveSeat(state, lastPlaySeat);
 }
 
+function responseSeats(state: GameState, trick: TrickState): Seat[] {
+  const active = activeSeats(state);
+  const lastPlayer = state.players[trick.lastPlaySeat];
+  const teammate = lastPlayer && lastPlayer.finishedRank !== null ? teammateOf(trick.lastPlaySeat) : null;
+  return active.filter((candidate) => candidate !== trick.lastPlaySeat && candidate !== teammate);
+}
+
+function nextResponseSeat(state: GameState, from: Seat, trick: TrickState): Seat | null {
+  const eligible = new Set(responseSeats(state, trick));
+  for (let offset = 1; offset <= SEATS.length; offset += 1) {
+    const seat = SEATS[(SEATS.indexOf(from) + offset) % SEATS.length];
+    if (eligible.has(seat)) return seat;
+  }
+  return null;
+}
+
+function canPromptBurst(state: GameState, seat: Seat): boolean {
+  const player = state.players[seat];
+  return state.phase === 'playing'
+    && state.effectiveMain !== null
+    && Boolean(player?.activeInHand && player.hand.length > 1)
+    && canBurst(player!.hand, state.effectiveMain!);
+}
+
+function autoBurstLastCard(state: GameState, seat: Seat): GameState {
+  const player = state.players[seat];
+  if (!player || !player.activeInHand || player.hand.length !== 1 || state.effectiveMain === null || !canBurst(player.hand, state.effectiveMain)) {
+    return state;
+  }
+  if (player.burstLocked && state.burstAnnounced.includes(seat)) return state;
+  const updated = withPlayer(state, seat, { burstLocked: true, burstKind: 'single' });
+  return {
+    ...updated,
+    burstAnnounced: updated.burstAnnounced.includes(seat) ? updated.burstAnnounced : [...updated.burstAnnounced, seat],
+  };
+}
+
+/** Public, hand-safe signal used to suppress the normal turn ring when any player can interrupt with a difference. */
+export function hasDifferenceOpportunity(state: GameState): boolean {
+  if (state.phase !== 'playing' || state.burstPending || state.effectiveMain === null || !state.trick || state.trick.lead.kind !== 'single') {
+    return false;
+  }
+  const lead = state.trick.lead;
+  const main = state.effectiveMain;
+  return SEATS.some((seat) => {
+    const player = state.players[seat];
+    if (!player?.activeInHand) return false;
+    for (let left = 0; left < player.hand.length; left += 1) {
+      for (let right = left + 1; right < player.hand.length; right += 1) {
+        if (validatePlay([player.hand[left], player.hand[right]], lead, main, 'difference').legal) return true;
+      }
+    }
+    return false;
+  });
+}
+
 export function markActivity(state: GameState, seat: Seat, now: number): GameState {
   const player = state.players[seat];
   if (!player) throw new GameStateError('PLAYER_NOT_FOUND', '玩家不在房间内');
-  if (player.away) return withPlayer(state, seat, { lastActivityAt: now, away: false });
+  // Activity is an auxiliary presence update. Keep the command version stable
+  // so a click that clears "away" cannot make the immediately-following play stale.
+  if (player.away) return { ...state, players: { ...state.players, [seat]: { ...player, lastActivityAt: now, away: false } } };
   return { ...state, players: { ...state.players, [seat]: { ...player, lastActivityAt: now } } };
 }
 
@@ -389,7 +531,7 @@ export function scanPresence(state: GameState, now: number): GameState {
   for (const seat of SEATS) {
     const player = players[seat];
     if (!player) continue;
-    const away = now - player.lastActivityAt >= 30_000;
+    const away = now - player.lastActivityAt >= AWAY_TIMEOUT_MS;
     if (away !== player.away) {
       players[seat] = { ...player, away };
       changed = true;
@@ -398,21 +540,39 @@ export function scanPresence(state: GameState, now: number): GameState {
   return changed ? { ...state, version: state.version + 1, players } : state;
 }
 
-export function declareBurst(state: GameState, seat: Seat, kind: HandKind, now: number): GameState {
+export type BurstDecision = HandKind | 'skip';
+
+export function resolveBurstDecision(state: GameState, seat: Seat, decision: BurstDecision, now: number): GameState {
   if (state.phase !== 'playing') throw new GameStateError('NOT_PLAYING', '当前不能报爆');
+  if (!state.burstPending || state.burstPending.seat !== seat) throw new GameStateError('BURST_NOT_PENDING', '当前没有轮到该玩家确认爆牌');
   const player = state.players[seat];
   if (!player || !player.activeInHand) throw new GameStateError('PLAYER_INACTIVE', '该玩家当前不能操作');
-  if (player.burstLocked) throw new GameStateError('BURST_ALREADY_LOCKED', '该玩家已经报爆');
-  if (!canBurst(player.hand, state.effectiveMain!)) throw new GameStateError('BURST_UNAVAILABLE', '剩余手牌不能一次出完');
-  if (!chooseBurstCandidate(player.hand, state.effectiveMain!, kind)) {
-    throw new GameStateError('BURST_KIND_INVALID', '报爆牌型与剩余手牌不匹配');
+  if (decision !== 'skip') {
+    if (!canBurst(player.hand, state.effectiveMain!)) throw new GameStateError('BURST_UNAVAILABLE', '剩余手牌不能一次出完');
+    if (!chooseBurstCandidate(player.hand, state.effectiveMain!, decision)) {
+      throw new GameStateError('BURST_KIND_INVALID', '报爆牌型与剩余手牌不匹配');
+    }
   }
+  const pending = state.burstPending;
   const activity = markActivity(state, seat, now);
-  const updated = withPlayer(activity, seat, { burstLocked: true, burstKind: kind });
-  return {
+  const updated = withPlayer(activity, seat, decision === 'skip'
+    ? { burstLocked: false, burstKind: null }
+    : { burstLocked: true, burstKind: decision });
+  const resolved = {
     ...updated,
-    burstAnnounced: updated.burstAnnounced.includes(seat) ? updated.burstAnnounced : [...updated.burstAnnounced, seat],
+    burstPending: null,
+    burstAnnounced: decision === 'skip' || updated.burstAnnounced.includes(seat)
+      ? updated.burstAnnounced
+      : [...updated.burstAnnounced, seat],
   };
+  if (pending.clearsTrick) {
+    return { ...resolved, trick: null, currentTurn: leadAfterClear(resolved, seat) };
+  }
+  return { ...resolved, currentTurn: nextActiveSeat(resolved, seat) };
+}
+
+export function declareBurst(state: GameState, seat: Seat, kind: HandKind, now: number): GameState {
+  return resolveBurstDecision(state, seat, kind, now);
 }
 
 function selectedCards(player: PlayerState, cardIds: readonly string[]): Card[] {
@@ -430,15 +590,13 @@ export function playCards(
   now: number,
 ): GameState {
   if (state.phase !== 'playing') throw new GameStateError('NOT_PLAYING', '当前不在出牌阶段');
-  if (state.currentTurn !== seat) throw new GameStateError('NOT_YOUR_TURN', '还没有轮到该玩家');
+  if (state.burstPending) throw new GameStateError('BURST_PENDING', '请先选择是否报爆');
   const player = state.players[seat];
   if (!player || !player.activeInHand) throw new GameStateError('PLAYER_INACTIVE', '该玩家当前不能出牌');
   if (cardIds.length === 0) throw new GameStateError('EMPTY_PLAY', '至少选择一张牌');
-  if (player.burstLocked && cardIds.length !== player.hand.length) {
-    throw new GameStateError('BURST_LOCKED', '报爆后必须一次出完全部剩余手牌');
-  }
-
   const cards = selectedCards(player, cardIds);
+  const mayPlayDifference = declaration === 'difference' && state.trick?.lead.kind === 'single';
+  if (!mayPlayDifference && state.currentTurn !== seat) throw new GameStateError('NOT_YOUR_TURN', '还没有轮到该玩家');
   const validation = validatePlay(cards, state.trick?.lead ?? null, state.effectiveMain!, declaration);
   if (!validation.legal || !validation.hand) {
     throw new GameStateError('ILLEGAL_PLAY', validation.reason ?? '出牌不合法');
@@ -460,39 +618,57 @@ export function playCards(
   if (finished) next = finishPlayer(next, seat);
   next = maybeSettle(next);
   if (next.phase === 'settled') return next;
-
-  if (validation.clearsTrick) {
-    const lead = leadAfterClear(next, seat);
-    return { ...next, trick: null, currentTurn: lead };
-  }
+  next = autoBurstLastCard(next, seat);
 
   const currentTrick: TrickState = next.trick
     ? { ...next.trick, lead: validation.hand, leadSeat: next.trick.leadSeat, lastPlaySeat: seat, passCount: 0 }
     : { lead: validation.hand, leadSeat: seat, lastPlaySeat: seat, passCount: 0 };
+  if (canPromptBurst(next, seat)) {
+    return {
+      ...next,
+      trick: validation.clearsTrick ? null : currentTrick,
+      currentTurn: seat,
+      burstPending: { seat, clearsTrick: validation.clearsTrick },
+    };
+  }
+  if (validation.clearsTrick) {
+    const lead = leadAfterClear(next, seat);
+    return { ...next, trick: null, currentTurn: lead };
+  }
   const currentTurn = nextActiveSeat(next, seat);
   return { ...next, trick: currentTrick, currentTurn };
 }
 
 export function passTurn(state: GameState, seat: Seat, now: number): GameState {
   if (state.phase !== 'playing') throw new GameStateError('NOT_PLAYING', '当前不在出牌阶段');
+  if (state.burstPending) throw new GameStateError('BURST_PENDING', '请先选择是否报爆');
   if (state.currentTurn !== seat) throw new GameStateError('NOT_YOUR_TURN', '还没有轮到该玩家');
   if (!state.trick) throw new GameStateError('NO_TRICK', '首出阶段不能过牌');
   const updated = markActivity(state, seat, now);
   const trick = updated.trick;
   if (!trick) throw new GameStateError('NO_TRICK', '首出阶段不能过牌');
-  const active = activeSeats(updated);
   const passCount = trick.passCount + 1;
-  const otherPlayers = active.filter((candidate) => candidate !== trick.lastPlaySeat).length;
-  if (passCount >= otherPlayers) {
+  const responders = responseSeats(updated, trick);
+  if (passCount >= responders.length) {
     const nextLeader = leadAfterClear(updated, trick.lastPlaySeat);
-    return { ...updated, trick: null, currentTurn: nextLeader };
+    return { ...updated, version: updated.version + 1, trick: null, currentTurn: nextLeader };
   }
 
   return {
     ...updated,
+    version: updated.version + 1,
     trick: { ...trick, passCount },
-    currentTurn: nextActiveSeat(updated, seat),
+    currentTurn: nextResponseSeat(updated, seat, trick),
   };
+}
+
+export function readyForNextHand(state: GameState, seat: Seat, random: RandomSource, now: number): GameState {
+  if (state.phase !== 'settled') throw new GameStateError('NOT_SETTLED', '当前还不能准备下一局');
+  if (state.readySeats.includes(seat)) return state;
+
+  const readySeats = [...state.readySeats, seat];
+  const updated = { ...state, version: state.version + 1, readySeats };
+  return readySeats.length === SEATS.length ? startHand(updated, random, now) : updated;
 }
 
 export function setPlayerConnection(state: GameState, seat: Seat, connected: boolean): GameState {
@@ -511,7 +687,7 @@ export function removePlayer(state: GameState, seat: Seat): GameState {
 
 export function endRoom(state: GameState): GameState {
   if (state.phase === 'ended') return state;
-  return { ...state, version: state.version + 1, phase: 'ended', currentTurn: null, trick: null };
+  return { ...state, version: state.version + 1, phase: 'ended', currentTurn: null, trick: null, burstPending: null, readySeats: [] };
 }
 
 export function resetRoom(state: GameState): GameState {
@@ -532,8 +708,12 @@ export function resetRoom(state: GameState): GameState {
     effectiveMain: null,
     openingMode: 'normal',
     modeTeam: null,
+    openingTurn: null,
+    openingSkippedSeats: [],
     trick: null,
     publicLastPlay: null,
+    burstPending: null,
+    readySeats: [],
     finishOrder: [],
     burstAnnounced: [],
     settlement: null,

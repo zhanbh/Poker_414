@@ -88,4 +88,24 @@ describe('414 升级与结算', () => {
     expect(reverseSuccess.levels).toEqual({ AC: '5', BD: 'J' });
     expect(reverseFailureAtThree.levels).toEqual({ AC: 'J', BD: '3' });
   });
+
+  it('立棍或反立奖励跨过J时封顶在J，不应完成一轮回到3', () => {
+    const standFromSeven = settleHand({
+      levels: { AC: '7', BD: '3' },
+      finishOrder: ['A', 'B'],
+      mode: 'stand',
+      modeTeam: 'AC',
+    });
+    const reverseFromSeven = settleHand({
+      levels: { AC: '7', BD: '3' },
+      finishOrder: ['A', 'B'],
+      mode: 'reverse',
+      modeTeam: 'AC',
+    });
+
+    expect(standFromSeven.levels).toEqual({ AC: 'J', BD: '3' });
+    expect(reverseFromSeven.levels).toEqual({ AC: 'J', BD: '3' });
+    expect(standFromSeven.completedRounds.AC).toBe(0);
+    expect(reverseFromSeven.completedRounds.AC).toBe(0);
+  });
 });

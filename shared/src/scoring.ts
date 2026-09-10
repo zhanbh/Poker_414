@@ -46,6 +46,7 @@ function otherTeam(team: Team): Team {
 export function applyLevelDelta(
   level: Level,
   delta: number,
+  capAt?: Level,
 ): { readonly level: Level; readonly completedRound: boolean } {
   if (delta < 0) {
     if (level === 'J') return { level: '3', completedRound: false };
@@ -54,6 +55,9 @@ export function applyLevelDelta(
   }
 
   const nextIndex = LEVELS.indexOf(level) + delta;
+  if (capAt && nextIndex >= LEVELS.indexOf(capAt)) {
+    return { level: capAt, completedRound: false };
+  }
   if (nextIndex >= LEVELS.length - 1) {
     return { level: '3', completedRound: true };
   }
@@ -65,8 +69,9 @@ function updateTeam(
   completedRounds: CompletedRounds,
   team: Team,
   delta: number,
+  capAt?: Level,
 ): { readonly levels: TeamLevels; readonly completedRounds: CompletedRounds } {
-  const change = applyLevelDelta(levels[team], delta);
+  const change = applyLevelDelta(levels[team], delta, capAt);
   return {
     levels: { ...levels, [team]: change.level },
     completedRounds: {
@@ -98,7 +103,7 @@ export function settleHand(input: SettlementInput): SettlementResult {
     const succeeded = firstTeam === input.modeTeam;
     const amount = mode === 'stand' ? 4 : 8;
     if (succeeded) {
-      const updated = updateTeam(levels, rounds, input.modeTeam, amount);
+      const updated = updateTeam(levels, rounds, input.modeTeam, amount, 'J');
       levels = updated.levels;
       rounds = updated.completedRounds;
       return {
@@ -111,7 +116,7 @@ export function settleHand(input: SettlementInput): SettlementResult {
     }
 
     const winner = otherTeam(input.modeTeam);
-    const winnerUpdate = updateTeam(levels, rounds, winner, amount);
+    const winnerUpdate = updateTeam(levels, rounds, winner, amount, 'J');
     const loserUpdate = updateTeam(winnerUpdate.levels, winnerUpdate.completedRounds, input.modeTeam, -amount);
     return {
       levels: loserUpdate.levels,

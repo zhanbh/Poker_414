@@ -10,17 +10,19 @@ import {
   GameStateError,
   createGameState,
   endRoom,
+  hasDifferenceOpportunity,
   joinPlayer,
   markActivity,
   passTurn,
   playCards,
   removePlayer,
+  readyForNextHand,
   resetRoom,
+  resolveBurstDecision,
   resolveOpening,
   scanPresence,
   setPlayerConnection,
   startHand,
-  declareBurst,
 } from '../../shared/src/game-state';
 import { HandKind } from '../../shared/src/hand-types';
 import { Session, SessionService } from './session-service';
@@ -120,6 +122,8 @@ export class RoomService {
         finishedRank: player.finishedRank,
         handCount: player.hand.length,
         burstAnnounced: state.burstAnnounced.includes(player.seat),
+        ready: state.readySeats.includes(player.seat),
+        remainingHand: state.phase === 'settled' ? [...player.hand] : [],
         isHost: player.id === state.hostId,
       }));
     const publicState: PublicSnapshot = {
@@ -136,6 +140,8 @@ export class RoomService {
       effectiveMain: state.effectiveMain,
       openingMode: state.openingMode,
       modeTeam: state.modeTeam,
+      openingTurn: state.openingTurn,
+      openingSkippedSeats: [...state.openingSkippedSeats],
       trick: state.trick ? {
         leadSeat: state.trick.leadSeat,
         lastPlaySeat: state.trick.lastPlaySeat,
@@ -144,6 +150,8 @@ export class RoomService {
         passCount: state.trick.passCount,
       } : null,
       publicLastPlay: state.publicLastPlay ? { ...state.publicLastPlay, cards: [...state.publicLastPlay.cards] } : null,
+      burstPendingSeat: state.burstPending?.seat ?? null,
+      differenceAvailable: hasDifferenceOpportunity(state),
       finishOrder: [...state.finishOrder],
       burstAnnounced: [...state.burstAnnounced],
       settlement: state.settlement,
@@ -194,7 +202,12 @@ export class RoomService {
     const previous = this.requestResults.get(sessionToken)?.get(command.requestId);
     if (previous) return previous;
     if (!this.state) throw new RoomServiceError('ROOM_NOT_FOUND', '房间尚未创建');
-    if (command.stateVersion !== this.state.version) throw new RoomServiceError('STALE_VERSION', '状态版本已过期，请刷新视图');
+    const canReconcileReady = command.type === 'ready'
+      && command.handNumber === this.state.handNumber
+      && this.state.phase === 'settled';
+    if (command.stateVersion !== this.state.version && !canReconcileReady) {
+      throw new RoomServiceError('STALE_VERSION', '状态版本已过期，请刷新视图');
+    }
     if (command.handNumber !== this.state.handNumber) throw new RoomServiceError('STALE_HAND', '牌局编号已过期，请刷新视图');
 
     try {
@@ -221,9 +234,9 @@ export class RoomService {
         return startHand(state, this.random, now);
       case 'opening':
         {
-          const opening = payload as Extract<CommandPayload, { readonly kind: 'normal' | 'stand' | 'reverse' }>;
-          if (opening.kind !== 'normal' && opening.seat !== seat) throw new RoomServiceError('UNAUTHORIZED', '不能替其他玩家选择立棍');
-          return resolveOpening(state, opening, now);
+          const opening = payload as Extract<CommandPayload, { readonly kind: 'pass' | 'stand' | 'reverse' }>;
+          if (opening.kind !== 'pass' && opening.seat !== seat) throw new RoomServiceError('UNAUTHORIZED', '不能替其他玩家选择立棍');
+          return resolveOpening(state, opening.kind === 'pass' ? { ...opening, seat } : opening, now);
         }
       case 'play': {
         const play = payload as Extract<CommandPayload, { readonly cardIds: readonly string[] }>;
@@ -232,8 +245,8 @@ export class RoomService {
       case 'pass':
         return passTurn(state, seat, now);
       case 'burst': {
-        const burst = payload as { readonly kind: HandKind };
-        return declareBurst(state, seat, burst.kind, now);
+        const burst = payload as { readonly kind: HandKind | 'skip' };
+        return resolveBurstDecision(state, seat, burst.kind, now);
       }
       case 'restart':
         if (session.playerId !== state.hostId) throw new RoomServiceError('NOT_HOST', '只有房主可以重新开始');
@@ -241,6 +254,8 @@ export class RoomService {
       case 'end-room':
         if (session.playerId !== state.hostId) throw new RoomServiceError('NOT_HOST', '只有房主可以结束房间');
         return endRoom(state);
+      case 'ready':
+        return readyForNextHand(state, seat, this.random, now);
       case 'activity':
         return markActivity(state, seat, now);
       case 'remove-player': {
@@ -271,8 +286,12 @@ export class RoomService {
       effectiveMain: null,
       openingMode: 'normal',
       modeTeam: null,
+      openingTurn: null,
+      openingSkippedSeats: [],
       trick: null,
       publicLastPlay: null,
+      burstPendingSeat: null,
+      differenceAvailable: false,
       finishOrder: [],
       burstAnnounced: [],
       settlement: null,

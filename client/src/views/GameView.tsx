@@ -1,29 +1,55 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { findBurstCandidates } from '../../../shared/src/rule-engine';
 import { Card } from '../../../shared/src/cards';
 import { CommandPayload, CommandType, RoomSnapshot } from '../../../shared/src/protocol';
 import { analyzeHand, getHandOptions } from '../../../shared/src/hand-types';
-import { PlayDeclaration } from '../../../shared/src/rules';
+import { PlayDeclaration, validatePlay } from '../../../shared/src/rules';
+import { Seat, teamOf } from '../../../shared/src/scoring';
 import { ActionBar } from '../components/ActionBar';
 import { BurstPrompt } from '../components/BurstPrompt';
-import { CardHand } from '../components/CardHand';
+import { CardHand, cardColorClass, cardLabel } from '../components/CardHand';
 import { MainStatus } from '../components/MainStatus';
 import { PlayerSeat } from '../components/PlayerSeat';
+import { SettlementDialog } from '../components/SettlementDialog';
 import { StandDialog } from '../components/StandDialog';
 
 export type GameCommand = (type: CommandType, payload: CommandPayload) => void;
 
-export function GameView({ snapshot, onCommand, onActivity, testMode }: {
+const SEATS: readonly Seat[] = ['A', 'B', 'C', 'D'];
+const TABLE_POSITIONS = ['bottom', 'left', 'top', 'right'] as const;
+
+function tableSeatsFor(ownSeat: Seat | null) {
+  const ownIndex = ownSeat ? SEATS.indexOf(ownSeat) : 0;
+  return SEATS.map((seat) => {
+    const offset = (SEATS.indexOf(seat) - ownIndex + SEATS.length) % SEATS.length;
+    return { seat, position: TABLE_POSITIONS[offset] };
+  });
+}
+
+export function GameView({ snapshot, onCommand, onActivity, onReady, testMode }: {
   readonly snapshot: RoomSnapshot;
   readonly onCommand: GameCommand;
   readonly onActivity: () => void;
+  readonly onReady?: () => void;
   readonly testMode: boolean;
 }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [showSettlement, setShowSettlement] = useState(snapshot.public.phase === 'settled');
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [snapshot.public.handNumber]);
   const ownHand = snapshot.private.hand;
-  const burstKinds = useMemo(() => snapshot.private.burstLocked || !snapshot.public.effectiveMain ? [] : Array.from(new Set(
+  const tableSeats = useMemo(() => tableSeatsFor(snapshot.private.seat), [snapshot.private.seat]);
+  const ownPlayer = snapshot.public.players.find((player) => player.seat === snapshot.private.seat);
+  const ownHandIsDiscarded = Boolean(ownPlayer && snapshot.public.openingMode !== 'normal' && !ownPlayer.activeInHand && ownPlayer.finishedRank === null);
+  const burstPendingForMe = snapshot.public.burstPendingSeat === snapshot.private.seat;
+  const isMyTurn = snapshot.public.phase === 'playing'
+    && snapshot.public.currentTurn === snapshot.private.seat
+    && !snapshot.public.burstPendingSeat
+    && Boolean(ownPlayer?.activeInHand);
+  const burstKinds = useMemo(() => !burstPendingForMe || !snapshot.public.effectiveMain ? [] : Array.from(new Set(
     findBurstCandidates(ownHand, snapshot.public.effectiveMain).map((candidate) => candidate.kind),
-  )), [ownHand, snapshot.private.burstLocked, snapshot.public.effectiveMain]);
+  )), [burstPendingForMe, ownHand, snapshot.private.burstLocked, snapshot.public.effectiveMain]);
   const playersBySeat = new Map(snapshot.public.players.map((player) => [player.seat, player]));
   const onToggle = (card: Card) => {
     onActivity();
@@ -35,37 +61,99 @@ export function GameView({ snapshot, onCommand, onActivity, testMode }: {
     ? analyzeHand(snapshot.public.trick.cards, snapshot.public.effectiveMain)
     : null;
   const declarations: PlayDeclaration[] = [];
+  let hasPlayableSelection = false;
+  let hasDifferenceSelection = false;
   if (snapshot.public.effectiveMain) {
     for (const option of getHandOptions(selectedCards, snapshot.public.effectiveMain)) {
-      if (lead?.kind === 'single' && option.kind === 'pair' && option.rank === lead.rank) declarations.push('difference');
-      else declarations.push(option.kind);
+      const declaration: PlayDeclaration = lead?.kind === 'single' && option.kind === 'pair' && option.rank === lead.rank
+        ? 'difference'
+        : option.kind;
+      if (validatePlay(selectedCards, lead, snapshot.public.effectiveMain, declaration).legal) {
+        if (declaration === 'difference') hasDifferenceSelection = true;
+        else {
+          declarations.push(declaration);
+          hasPlayableSelection = true;
+        }
+      }
     }
   }
+  const uniqueDeclarations = Array.from(new Set(declarations));
+  const plainPlayIsLegal = Boolean(snapshot.public.effectiveMain && validatePlay(selectedCards, lead, snapshot.public.effectiveMain).legal);
+  const canDifference = snapshot.public.phase === 'playing'
+    && !snapshot.public.burstPendingSeat
+    && Boolean(ownPlayer?.activeInHand)
+    && hasDifferenceSelection;
+  const handSortMain = snapshot.public.effectiveMain
+    ?? (snapshot.public.candidateLeader ? snapshot.public.levels[teamOf(snapshot.public.candidateLeader)] : null);
+
+  useEffect(() => {
+    if (snapshot.public.phase === 'settled') setShowSettlement(true);
+  }, [snapshot.public.phase, snapshot.public.handNumber]);
+
+  const closeSettlement = () => {
+    setShowSettlement(false);
+    if (!ownPlayer?.ready) onReady?.();
+  };
 
   return (
     <main className="game-view">
       {testMode ? <div className="test-mode-banner" role="status">单机四人测试模式 · 每个标签页都是独立玩家</div> : null}
-      <MainStatus snapshot={snapshot.public} />
-      {snapshot.public.phase === 'opening' ? <><div className="opening-draw">随机首牌权：{snapshot.public.candidateLeader ?? '抽取中'}</div><StandDialog mode={snapshot.public.openingMode} ownSeat={snapshot.private.seat ?? undefined} onChoose={(choice) => onCommand('opening', choice)} /></> : null}
-      <div className="table-grid">
-        {(['A', 'B', 'C', 'D'] as const).map((seat) => <PlayerSeat key={seat} seat={seat} player={playersBySeat.get(seat) ?? null} />)}
+      {snapshot.public.phase === 'opening' ? <><div className="opening-draw">{snapshot.public.openingMode === 'normal' ? '随机首牌权候选' : '当前立棍首牌权'}：{snapshot.public.candidateLeader ?? '抽取中'}</div><StandDialog mode={snapshot.public.openingMode} ownSeat={snapshot.private.seat} modeTeam={snapshot.public.modeTeam} openingTurn={snapshot.public.openingTurn} onChoose={(choice) => onCommand('opening', choice)} /></> : null}
+      <div className="table-layout">
+        <MainStatus snapshot={snapshot.public} />
+        <div className="team-scoreboard" aria-label="队伍主牌计分">
+          <div className="team-main-tag team-main-ac" aria-label={`AC主：${snapshot.public.levels.AC}`}><span>AC主</span><strong>{snapshot.public.levels.AC}</strong></div>
+          <div className="team-main-tag team-main-bd" aria-label={`BD主：${snapshot.public.levels.BD}`}><span>BD主</span><strong>{snapshot.public.levels.BD}</strong></div>
+        </div>
+        <div className="table-center">
+          <section className="public-play" aria-label="公开出牌">
+            {snapshot.public.publicLastPlay ? <>
+              <p>{snapshot.public.publicLastPlay.seat}出牌</p>
+              <div className="played-cards" aria-label="公开出牌">
+                {snapshot.public.publicLastPlay.cards.map((card) => <span className={`played-card ${cardColorClass(card)}`} key={card.id}>{cardLabel(card)}</span>)}
+              </div>
+            </> : <p>尚未出牌</p>}
+          </section>
+        </div>
+        {tableSeats.map(({ seat, position }) => <div className={`table-seat seat-${position}`} key={seat}>
+          {(() => {
+            const player = playersBySeat.get(seat) ?? null;
+            const playerIsDiscarded = Boolean(player && snapshot.public.openingMode !== 'normal' && !player.activeInHand && player.finishedRank === null);
+            return <PlayerSeat
+              seat={seat}
+              player={player}
+              isCurrentTurn={snapshot.public.currentTurn === seat && !snapshot.public.differenceAvailable}
+              showRemainingHand={snapshot.public.phase === 'settled'}
+              main={snapshot.public.effectiveMain}
+              isDiscarded={playerIsDiscarded}
+            />;
+          })()}
+          {seat === snapshot.private.seat && snapshot.public.phase === 'playing' ? <div className="seat-actions">
+            <ActionBar
+              selectedCount={selected.length}
+              canPlay={isMyTurn}
+              canDifference={canDifference}
+              hasPlayableSelection={plainPlayIsLegal || hasPlayableSelection}
+              canPass={Boolean(snapshot.public.trick) && isMyTurn}
+              declarations={[...uniqueDeclarations, ...(hasDifferenceSelection ? ['difference' as const] : [])]}
+              onPlay={(declaration) => onCommand('play', { cardIds: selected, ...(declaration ? { declaration } : {}) })}
+              onPass={() => onCommand('pass', {})}
+              onBurst={(kind) => onCommand('burst', { kind })}
+              burstKinds={[]}
+            />
+          </div> : null}
+        </div>)}
       </div>
-      <section className="public-play">
-        <h2>上一手</h2>
-        {snapshot.public.publicLastPlay ? <p>{snapshot.public.publicLastPlay.seat}：{snapshot.public.publicLastPlay.kind}</p> : <p>尚未出牌</p>}
-      </section>
-      {snapshot.public.phase === 'settled' && snapshot.public.settlement ? <section className="settlement"><h2>本手结算</h2><p>{JSON.stringify(snapshot.public.settlement)}</p></section> : null}
-      <CardHand cards={ownHand} selectedIds={selected} onToggle={onToggle} />
-      <BurstPrompt kinds={burstKinds} onChoose={(kind) => onCommand('burst', { kind })} />
-      <ActionBar
-        selectedCount={selected.length}
-        canPass={Boolean(snapshot.public.trick) && snapshot.public.currentTurn === snapshot.private.seat}
-        declarations={Array.from(new Set(declarations))}
-        onPlay={(declaration) => onCommand('play', { cardIds: selected, ...(declaration ? { declaration } : {}) })}
-        onPass={() => onCommand('pass', {})}
-        onBurst={(kind) => onCommand('burst', { kind })}
-        burstKinds={[]}
-      />
+      <CardHand cards={ownHand} main={handSortMain} selectedIds={selected} onToggle={onToggle} dimmed={ownHandIsDiscarded} />
+      {snapshot.public.burstPendingSeat && !burstPendingForMe ? <p className="burst-waiting">等待{playersBySeat.get(snapshot.public.burstPendingSeat)?.nickname ?? snapshot.public.burstPendingSeat}选择是否报爆</p> : null}
+      <BurstPrompt kinds={burstKinds} onChoose={(kind) => onCommand('burst', { kind })} onSkip={() => onCommand('burst', { kind: 'skip' })} />
+      {showSettlement && snapshot.public.phase === 'settled' && snapshot.public.settlement ? <SettlementDialog
+        settlement={snapshot.public.settlement}
+        mode={snapshot.public.openingMode}
+        modeTeam={snapshot.public.modeTeam}
+        onClose={closeSettlement}
+      /> : null}
+      {snapshot.public.phase === 'settled' && ownPlayer?.ready ? <p className="ready-waiting">已准备，等待其他玩家</p> : null}
     </main>
   );
 }

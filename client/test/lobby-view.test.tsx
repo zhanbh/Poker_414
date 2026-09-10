@@ -7,12 +7,12 @@ import { PublicSnapshot } from '../../shared/src/protocol';
 const lobby: PublicSnapshot = {
   roomId: '414', phase: 'lobby', handNumber: 0, version: 1, hostSeat: 'A',
   players: [
-    { seat: 'A', nickname: '甲', team: 'AC', connected: true, away: false, activeInHand: true, finishedRank: null, handCount: 0, burstAnnounced: false, isHost: true },
-    { seat: 'B', nickname: '乙', team: 'BD', connected: true, away: false, activeInHand: true, finishedRank: null, handCount: 0, burstAnnounced: false, isHost: false },
+    { seat: 'A', nickname: '甲', team: 'AC', connected: true, away: false, activeInHand: true, finishedRank: null, handCount: 0, burstAnnounced: false, ready: false, remainingHand: [], isHost: true },
+    { seat: 'B', nickname: '乙', team: 'BD', connected: true, away: false, activeInHand: true, finishedRank: null, handCount: 0, burstAnnounced: false, ready: false, remainingHand: [], isHost: false },
   ],
   levels: { AC: '3', BD: '3' }, completedRounds: { AC: 0, BD: 0 }, candidateLeader: null,
-  currentTurn: null, effectiveMain: null, openingMode: 'normal', modeTeam: null, trick: null,
-  publicLastPlay: null, finishOrder: [], burstAnnounced: [], settlement: null,
+  currentTurn: null, effectiveMain: null, openingMode: 'normal', modeTeam: null, openingTurn: null, openingSkippedSeats: [], trick: null,
+  publicLastPlay: null, finishOrder: [], burstAnnounced: [], burstPendingSeat: null, differenceAvailable: false, settlement: null,
 };
 
 describe('大厅视图', () => {

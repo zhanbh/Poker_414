@@ -1,6 +1,6 @@
 import { Card } from './cards';
 import { HandKind } from './hand-types';
-import { Level, Seat, SettlementMode, Team } from './scoring';
+import { Level, Seat, SettlementMode, SettlementResult, Team } from './scoring';
 
 export const EVENTS = {
   login: 'auth:login',
@@ -19,14 +19,15 @@ export type CommandType =
   | 'burst'
   | 'restart'
   | 'end-room'
+  | 'ready'
   | 'activity'
   | 'remove-player';
 
 export type CommandPayload =
   | Record<string, never>
-  | { readonly kind: 'normal' | 'stand' | 'reverse'; readonly seat?: Seat }
+  | { readonly kind: 'pass' | 'stand' | 'reverse'; readonly seat?: Seat }
   | { readonly cardIds: readonly string[]; readonly declaration?: HandKind | 'difference' }
-  | { readonly kind: HandKind }
+  | { readonly kind: HandKind | 'skip' }
   | { readonly seat: Seat };
 
 export interface CommandEnvelope {
@@ -47,6 +48,8 @@ export interface PublicPlayerView {
   readonly finishedRank: number | null;
   readonly handCount: number;
   readonly burstAnnounced: boolean;
+  readonly ready: boolean;
+  readonly remainingHand: Card[];
   readonly isHost: boolean;
 }
 
@@ -72,11 +75,15 @@ export interface PublicSnapshot {
   readonly effectiveMain: Level | null;
   readonly openingMode: SettlementMode;
   readonly modeTeam: Team | null;
+  readonly openingTurn: Seat | null;
+  readonly openingSkippedSeats: Seat[];
   readonly trick: PublicTrickView | null;
   readonly publicLastPlay: { readonly seat: Seat; readonly cards: Card[]; readonly kind: HandKind; readonly isDifference: boolean } | null;
+  readonly burstPendingSeat: Seat | null;
+  readonly differenceAvailable: boolean;
   readonly finishOrder: Seat[];
   readonly burstAnnounced: Seat[];
-  readonly settlement: unknown;
+  readonly settlement: SettlementResult | null;
 }
 
 export interface PrivateSnapshot {
@@ -97,7 +104,7 @@ export const ERROR_CODES = {
 } as const;
 
 const COMMAND_TYPES = new Set<CommandType>([
-  'start-hand', 'opening', 'play', 'pass', 'burst', 'restart', 'end-room', 'activity', 'remove-player',
+  'start-hand', 'opening', 'play', 'pass', 'burst', 'restart', 'end-room', 'ready', 'activity', 'remove-player',
 ]);
 
 export function isCommandEnvelope(value: unknown): value is CommandEnvelope {

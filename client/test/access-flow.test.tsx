@@ -9,8 +9,8 @@ function snapshot(phase: string): RoomSnapshot {
     public: {
       roomId: '414', phase, handNumber: 0, version: 1, hostSeat: 'A', players: [],
       levels: { AC: '3', BD: '3' }, completedRounds: { AC: 0, BD: 0 }, candidateLeader: null,
-      currentTurn: null, effectiveMain: null, openingMode: 'normal', modeTeam: null, trick: null,
-      publicLastPlay: null, finishOrder: [], burstAnnounced: [], settlement: null,
+      currentTurn: null, effectiveMain: null, openingMode: 'normal', modeTeam: null, openingTurn: null, openingSkippedSeats: [], trick: null,
+      publicLastPlay: null, finishOrder: [], burstAnnounced: [], burstPendingSeat: null, differenceAvailable: false, settlement: null,
     },
     private: { seat: null, hand: [], burstLocked: false },
   };

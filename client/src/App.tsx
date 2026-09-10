@@ -57,5 +57,5 @@ export function App({ transport: providedTransport }: { readonly transport?: Cli
   if (snapshot.public.phase === 'lobby') {
     return <><LobbyView snapshot={snapshot.public} ownSeat={snapshot.private.seat} onStart={() => runCommand('start-hand', {})} onRemove={(seat) => runCommand('remove-player', { seat })} testMode={testMode} />{error ? <p role="alert">{error}</p> : null}</>;
   }
-  return <><GameView snapshot={snapshot} onCommand={runCommand} onActivity={() => transport.activity()} testMode={testMode} />{error ? <p role="alert">{error}</p> : null}</>;
+  return <><GameView snapshot={snapshot} onCommand={runCommand} onActivity={() => transport.activity()} onReady={() => runCommand('ready', {})} testMode={testMode} />{error ? <p role="alert">{error}</p> : null}</>;
 }

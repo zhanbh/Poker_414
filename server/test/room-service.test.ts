@@ -83,4 +83,27 @@ describe('单房间会话与命令服务', () => {
     expect(room.isConnectionOwner(auth.sessionToken, 'socket-a')).toBe(false);
     expect(room.isConnectionOwner(auth.sessionToken, 'socket-b')).toBe(true);
   });
+
+  it('结算后四人同时准备时，允许同一局内的旧版本准备命令合并', () => {
+    const room = service();
+    const auths = ['甲', '乙', '丙', '丁'].map((nickname) => {
+      const auth = room.login('inner-414');
+      room.join(auth.sessionToken, nickname, '414');
+      return auth;
+    });
+    const settled = { ...room.getState()!, phase: 'settled' as const, handNumber: 1, settlement: {
+      levels: { AC: '3' as const, BD: '3' as const }, completedRounds: { AC: 0, BD: 0 },
+      outcome: 'flat' as const, winnerTeam: 'AC' as const, nextLeader: 'A' as const,
+    } };
+    // Reachable through the service's authoritative state for this focused concurrency check.
+    Object.assign(room, { state: settled });
+    const version = room.getState()!.version;
+
+    const first = room.dispatch(auths[0].sessionToken, { type: 'ready', requestId: 'ready-a', handNumber: 1, stateVersion: version, payload: {} });
+    const second = room.dispatch(auths[1].sessionToken, { type: 'ready', requestId: 'ready-b', handNumber: 1, stateVersion: version, payload: {} });
+
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    expect(room.getState()!.readySeats).toEqual(['A', 'B']);
+  });
 });

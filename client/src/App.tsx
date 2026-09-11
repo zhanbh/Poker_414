@@ -6,6 +6,7 @@ import { LobbyView } from './views/LobbyView';
 import { ClientTransport, createSocketClient } from './transport/socket-client';
 
 const SESSION_KEY = '414.sessionToken';
+const NICKNAME_KEY = '414.nickname';
 
 function isTestModeEnabled(): boolean {
   return new URLSearchParams(window.location.search).get('test') === '1';
@@ -24,6 +25,26 @@ export function App({ transport: providedTransport }: { readonly transport?: Cli
 
   useEffect(() => transport.subscribe((next) => setSnapshot(next)), [transport]);
   useEffect(() => transport.onReplaced(() => setError('该会话已在其他页面接管')), [transport]);
+
+  // 页面加载时自动恢复会话
+  useEffect(() => {
+    const storage = testMode ? sessionStorage : localStorage;
+    const savedToken = storage.getItem(SESSION_KEY);
+    const savedNickname = storage.getItem(NICKNAME_KEY);
+    if (!savedToken || !savedNickname) return;
+    let cancelled = false;
+    setBusy(true);
+    transport.login('', savedToken)
+      .then(() => transport.join(savedNickname, '414'))
+      .then((snap) => { if (!cancelled) setSnapshot(snap); })
+      .catch(() => {
+        // 恢复失败，清除过期凭据，留在登录页
+        storage.removeItem(SESSION_KEY);
+        storage.removeItem(NICKNAME_KEY);
+      })
+      .finally(() => { if (!cancelled) setBusy(false); });
+    return () => { cancelled = true; };
+  }, [transport, testMode]);
 
   const runCommand = (type: CommandType, payload: CommandPayload) => {
     if (!snapshot) return;
@@ -45,6 +66,7 @@ export function App({ transport: providedTransport }: { readonly transport?: Cli
       const savedToken = storage.getItem(SESSION_KEY) ?? undefined;
       const auth = await transport.login(inviteCode, savedToken);
       storage.setItem(SESSION_KEY, auth.sessionToken);
+      storage.setItem(NICKNAME_KEY, nickname);
       setSnapshot(await transport.join(nickname, '414'));
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : '进入房间失败');

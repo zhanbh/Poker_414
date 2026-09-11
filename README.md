@@ -45,6 +45,106 @@ npm start
 
 打开 http://localhost:3000；单机测试地址为 http://localhost:3000/?test=1。健康检查地址为 /health，只返回进程可用性和房间是否占用。
 
+## pm2 部署
+
+项目支持 pm2 进程管理，生产模式下单进程同时托管前后端（Express 托管 `dist/client` 静态文件）。
+
+### 配置文件
+
+- `ecosystem.config.cjs` — pm2 应用配置，自动从 `.env` 文件加载环境变量
+- `scripts/pm2-start.cjs` — 一键启动脚本
+
+### npm scripts
+
+| 命令 | 说明 |
+|---|---|
+| `npm run pm2:start` | 构建 + pm2 启动 |
+| `npm run pm2:stop` | 停止服务 |
+| `npm run pm2:restart` | 重启服务 |
+| `npm run pm2:status` | 查看 pm2 运行状态 |
+
+### 本地 pm2 验证
+
+~~~powershell
+cp .env.example .env
+# 编辑 .env，设置 INVITE_CODE
+npm run pm2:start
+~~~
+
+启动后访问 http://localhost:3000，查看状态用 `npm run pm2:status`，查看日志用 `npx pm2 logs 414-server`。
+
+## 自动部署（GitHub Actions）
+
+每次推送到 `main` 分支会自动触发 GitHub Actions：构建项目 → SCP 上传到 ECS → SSH 解压 → pm2 重启。
+
+### 1. 服务器环境准备（一次性）
+
+在阿里云 ECS 上安装 Node.js 22 + pm2 + rsync：
+
+CentOS / Alibaba Cloud Linux：
+
+~~~bash
+curl -fsSL https://rpm.nodesource.com/setup_22.x | bash -
+yum install -y nodejs rsync
+npm install -g pm2
+~~~
+
+Ubuntu / Debian：
+
+~~~bash
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt-get install -y nodejs rsync
+sudo npm install -g pm2
+~~~
+
+验证：`node -v`（需 v22+）、`pm2 -v`、`rsync --version`
+
+### 2. 配置 SSH 密钥
+
+在 ECS 服务器上生成部署专用密钥对：
+
+~~~bash
+ssh-keygen -t ed25519 -C "github-actions-deploy" -f ~/.ssh/github_actions -N ""
+cat ~/.ssh/github_actions.pub >> ~/.ssh/authorized_keys
+# 输出私钥内容，复制全部
+cat ~/.ssh/github_actions
+~~~
+
+### 3. 配置 GitHub Secrets
+
+在仓库 Settings → Secrets and variables → Actions 中添加：
+
+| Secret | 说明 | 示例 |
+|---|---|---|
+| `ECS_HOST` | ECS 公网 IP | `47.92.x.x` |
+| `ECS_USER` | SSH 用户名 | `root` |
+| `ECS_SSH_KEY` | SSH 私钥（完整内容） | 上一步输出的私钥 |
+| `ECS_PORT` | SSH 端口 | `22` |
+| `ECS_DEPLOY_PATH` | 部署目录 | `/opt/Poker_414` |
+
+### 4. 触发部署
+
+- **自动触发**：push 代码到 `main` 分支
+- **手动触发**：GitHub 仓库 Actions 页面 → Deploy to ECS → Run workflow
+
+### 5. 首次部署后配置
+
+首次部署后 SSH 登录服务器，编辑 `.env` 设置邀请码：
+
+~~~bash
+cd /opt/Poker_414   # 替换为你的 ECS_DEPLOY_PATH
+nano .env           # 修改 INVITE_CODE
+pm2 restart ecosystem.config.cjs
+~~~
+
+### 6. pm2 开机自启
+
+~~~bash
+pm2 save
+pm2 startup
+# 按提示执行输出的命令
+~~~
+
 ## 玩法总览
 
 - 每局 4 人，固定座位为 A、B、C、D；A、C 组成 AC 队，B、D 组成 BD 队。

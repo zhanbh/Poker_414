@@ -1,0 +1,99 @@
+name: Deploy to ECS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # 支持手动触发
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+        env:
+          # 构建时不需要 INVITE_CODE，运行时在服务器 .env 中配置
+          NODE_ENV: production
+
+      - name: Create deploy package
+        run: |
+          mkdir -p deploy
+          # 复制构建产物
+          cp -r dist deploy/dist
+          # 复制运行所需文件
+          cp package.json deploy/
+          cp package-lock.json deploy/
+          cp ecosystem.config.cjs deploy/
+          # 打包
+          tar -czf deploy.tar.gz -C deploy .
+          echo "打包完成"
+          ls -lh deploy.tar.gz
+
+      - name: Copy to server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ECS_HOST }}
+          username: ${{ secrets.ECS_USER }}
+          key: ${{ secrets.ECS_SSH_KEY }}
+          port: ${{ secrets.ECS_PORT || 22 }}
+          script: |
+            # 创建应用目录（首次部署）
+            mkdir -p ${{ secrets.ECS_DEPLOY_PATH }}
+
+      - name: Upload files via scp
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.ECS_HOST }}
+          username: ${{ secrets.ECS_USER }}
+          key: ${{ secrets.ECS_SSH_KEY }}
+          port: ${{ secrets.ECS_PORT || 22 }}
+          source: deploy.tar.gz
+          target: ${{ secrets.ECS_DEPLOY_PATH }}
+
+      - name: Extract and restart
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ECS_HOST }}
+          username: ${{ secrets.ECS_USER }}
+          key: ${{ secrets.ECS_SSH_KEY }}
+          port: ${{ secrets.ECS_PORT || 22 }}
+          script: |
+            cd ${{ secrets.ECS_DEPLOY_PATH }}
+
+            # 解压新文件
+            tar -xzf deploy.tar.gz -C .
+            rm deploy.tar.gz
+
+            # 如果首次部署（无 node_modules），安装生产依赖
+            if [ ! -d "node_modules" ]; then
+              echo "首次部署，安装依赖..."
+              npm ci --omit=dev
+            else
+              echo "已有 node_modules，跳过安装"
+            fi
+
+            # 如果没有 .env，从 .env.example 创建（首次部署）
+            if [ ! -f ".env" ]; then
+              echo "首次部署，创建 .env"
+              cp .env.example .env
+              echo "请手动编辑 .env 设置 INVITE_CODE 后重新部署"
+            fi
+
+            # 用 pm2 重启（已存在则 reload，不存在则 start）
+            pm2 startOrReload ecosystem.config.cjs
+            pm2 save
+
+            echo "=== 部署完成 ==="
+            pm2 status

@@ -103,6 +103,16 @@ describe('对局视图', () => {
     expect(onCommand).toHaveBeenCalledWith('play', expect.objectContaining({ cardIds: ['a4'] }));
   });
 
+  it('选择合法手牌后点击桌面空白处直接出牌', () => {
+    const onCommand = vi.fn();
+    render(<GameView snapshot={playing} onCommand={onCommand} onActivity={vi.fn()} testMode={false} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '4♠' }));
+    fireEvent.click(screen.getByRole('main'));
+
+    expect(onCommand).toHaveBeenCalledWith('play', { cardIds: ['a4'] });
+  });
+
   it('不是自己的牌权时不能点击出牌，避免提交必然被服务端拒绝的命令', () => {
     render(<GameView snapshot={{ ...playing, public: { ...playing.public, currentTurn: 'B' } }} onCommand={vi.fn()} onActivity={vi.fn()} testMode={false} />);
 

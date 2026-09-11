@@ -75,36 +75,87 @@ function compareCards(left: Card, right: Card, main: Rank | null): number {
   return left.kind === 'standard' ? -1 : 1;
 }
 
-function takeFourOneFourGroups(cards: readonly Card[], main: Rank | null): { readonly groups: Card[][]; readonly remaining: Card[] } {
+function specialFourOneFourValue(card: Card): number {
+  if (card.kind === 'standard' && card.rank === '4') return 0;
+  if (card.kind === 'joker') return 1;
+  return 2;
+}
+
+function compareSpecialFourOneFourCards(left: Card, right: Card, main: Rank | null): number {
+  return specialFourOneFourValue(left) - specialFourOneFourValue(right) || compareCards(left, right, main);
+}
+
+function takeFlexibleFourOneFourGroup(cards: readonly Card[]): { readonly group: Card[]; readonly usedIds: ReadonlySet<string> } | null {
   const fours = cards.filter((card): card is StandardCard => card.kind === 'standard' && card.rank === '4');
   const aces = cards.filter((card): card is StandardCard => card.kind === 'standard' && card.rank === 'A');
   const jokers = cards.filter(isJoker);
-  const used = new Set<string>();
-  const groups: Card[][] = [];
+  const jokersNeeded = Math.max(0, 2 - fours.length);
+  if (aces.length === 0 || fours.length + jokers.length < 2) return null;
 
-  for (const ace of aces) {
-    const substitutes = [...fours, ...jokers].filter((card) => !used.has(card.id));
-    if (substitutes.length < 2) break;
-
-    const selected = substitutes.slice(0, 2).sort((left, right) => compareCards(left, right, main));
-    used.add(ace.id);
-    selected.forEach((card) => used.add(card.id));
-    groups.push([...selected, ace]);
-  }
-
-  return { groups, remaining: cards.filter((card) => !used.has(card.id)) };
+  const selectedJokers = jokers.slice(0, jokersNeeded);
+  const group = [...fours, ...selectedJokers, ...aces];
+  return { group, usedIds: new Set(group.map((card) => card.id)) };
 }
 
-/** Returns a display-only hand order: low to high, with the current main above 2. */
-export function sortCards(cards: readonly Card[], main: Rank | null = null): Card[] {
-  const { groups, remaining } = takeFourOneFourGroups(cards, main);
-  const orderedRemaining = [...remaining].sort((left, right) => compareCards(left, right, main));
-  const entries: Array<{ cards: Card[]; key: number; group: boolean; order: number }> = [
-    ...groups.map((group, order) => ({ cards: group, key: rankSortValue('4', main), group: true, order })),
-    ...orderedRemaining.map((card, order) => ({ cards: [card], key: cardSortValue(card, main), group: false, order })),
-  ];
+function displayGroupPriority(rank: Rank, count: number, main: Rank | null): number {
+  if (count === 1) return 10;
+  if (rank === main && count >= 2) return 40 + (count - 2) * 20;
+  if (count === 2) return 20;
+  if (count >= 3) return 30 + (count - 3) * 20;
+  return 200;
+}
 
-  return entries
-    .sort((left, right) => left.key - right.key || Number(right.group) - Number(left.group) || left.order - right.order)
-    .flatMap((entry) => entry.cards);
+interface DisplayGroup {
+  readonly cards: Card[];
+  readonly priority: number;
+  readonly rank: Rank | null;
+  readonly order: number;
+}
+
+/**
+ * Returns a display-only hand order grouped by the strongest useful hand shape.
+ * Singles come first, then pairs, bombs, flexible 414 candidates and jokers.
+ * The grouping never decides which cards the player must play.
+ */
+export function sortCards(cards: readonly Card[], main: Rank | null = null): Card[] {
+  const specialGroup = takeFlexibleFourOneFourGroup(cards);
+  const usedIds = specialGroup?.usedIds ?? new Set<string>();
+  const groups: DisplayGroup[] = [];
+  let order = 0;
+
+  if (specialGroup) {
+    groups.push({
+      cards: [...specialGroup.group].sort((left, right) => compareSpecialFourOneFourCards(left, right, main)),
+      priority: 200,
+      rank: null,
+      order: order++,
+    });
+  }
+
+  for (const rank of RANKS) {
+    const rankCards = cards.filter((card): card is StandardCard => card.kind === 'standard' && card.rank === rank && !usedIds.has(card.id));
+    if (rankCards.length === 0) continue;
+    groups.push({
+      cards: rankCards.sort((left, right) => compareCards(left, right, main)),
+      priority: displayGroupPriority(rank, rankCards.length, main),
+      rank,
+      order: order++,
+    });
+  }
+
+  const remainingJokers = cards.filter((card) => card.kind === 'joker' && !usedIds.has(card.id));
+  if (remainingJokers.length > 0) {
+    groups.push({
+      cards: remainingJokers.sort((left, right) => compareCards(left, right, main)),
+      priority: 210,
+      rank: null,
+      order: order++,
+    });
+  }
+
+  return groups
+    .sort((left, right) => left.priority - right.priority
+      || (left.rank && right.rank ? rankSortValue(left.rank, main) - rankSortValue(right.rank, main) : 0)
+      || left.order - right.order)
+    .flatMap((group) => group.cards);
 }

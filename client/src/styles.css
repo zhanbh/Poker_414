@@ -52,7 +52,14 @@ main { min-height: 100vh; padding: 32px; }
 .opening-draw { padding: 12px; border: 1px solid #ffd166; border-radius: 10px; animation: draw-pulse 1s ease-in-out infinite alternate; }
 @keyframes draw-pulse { from { opacity: .55; } to { opacity: 1; } }
 .card-hand { display: flex; gap: 8px; min-height: 100px; align-items: end; padding: 20px 0; overflow-x: auto; }
-.card { min-width: 58px; padding: 18px 8px; background: #f5f8fc; color: #132431; border: 2px solid #d6e2ea; border-radius: 8px; }
+.hand-panel { margin-top: 16px; }
+.hand-toolbar { display: flex; align-items: center; gap: 12px; color: #d1e4eb; }
+.hand-toolbar span { color: #9fc5ce; font-size: .9rem; }
+.hand-toolbar button { padding: 5px 9px; color: #102331; background: #ffd166; border: 1px solid #ffd166; border-radius: 6px; }
+.card { min-width: 58px; padding: 18px 8px; background: #f5f8fc; color: #132431; border: 2px solid #d6e2ea; border-radius: 8px; cursor: grab; user-select: none; }
+.card:active { cursor: grabbing; }
+.card.dragging { opacity: .45; }
+.card.drag-over { transform: translateY(-5px); border-color: #06d6a0; box-shadow: 0 0 0 3px rgba(6, 214, 160, .25); }
 .card.red { color: #c62828; }
 .card.black { color: #132431; }
 .card.joker.small { color: #c62828; border-color: #ef9a9a; }
@@ -61,6 +68,7 @@ main { min-height: 100vh; padding: 32px; }
 .presence-badge.away { color: #ffcf66; }
 .host-label { color: #ffd166; }
 .public-play { min-height: 80px; padding: 16px; margin: 12px 0; border: 1px dashed #397a8b; }
+.play-hint { margin: 0 0 12px; color: #ffd166; text-align: center; }
 .played-cards { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 .played-card { display: inline-flex; align-items: center; justify-content: center; min-width: 42px; padding: 8px 6px; background: #f5f8fc; border: 1px solid #d6e2ea; border-radius: 6px; font-weight: 700; }
 .played-card.red { color: #c62828; }

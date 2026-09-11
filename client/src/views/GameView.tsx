@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { type MouseEvent, useEffect, useMemo, useState } from 'react';
 import { findBurstCandidates } from '../../../shared/src/rule-engine';
 import { Card } from '../../../shared/src/cards';
 import { CommandPayload, CommandType, RoomSnapshot } from '../../../shared/src/protocol';
@@ -79,6 +79,7 @@ export function GameView({ snapshot, onCommand, onActivity, onReady, testMode }:
   }
   const uniqueDeclarations = Array.from(new Set(declarations));
   const plainPlayIsLegal = Boolean(snapshot.public.effectiveMain && validatePlay(selectedCards, lead, snapshot.public.effectiveMain).legal);
+  const canClickBlankToPlay = isMyTurn && selected.length > 0 && plainPlayIsLegal;
   const canDifference = snapshot.public.phase === 'playing'
     && !snapshot.public.burstPendingSeat
     && Boolean(ownPlayer?.activeInHand)
@@ -95,8 +96,15 @@ export function GameView({ snapshot, onCommand, onActivity, onReady, testMode }:
     if (!ownPlayer?.ready) onReady?.();
   };
 
+  const handleBoardClick = (event: MouseEvent<HTMLElement>) => {
+    if (!canClickBlankToPlay) return;
+    const target = event.target;
+    if (!(target instanceof Element) || target.closest('button, a, input, select, textarea, .hand-panel, .action-bar, .burst-prompt, .stand-dialog, .settlement-dialog, .player-seat, .public-play, .main-status, .team-scoreboard')) return;
+    onCommand('play', { cardIds: selected });
+  };
+
   return (
-    <main className="game-view">
+    <main className="game-view" onClick={handleBoardClick}>
       {testMode ? <div className="test-mode-banner" role="status">单机四人测试模式 · 每个标签页都是独立玩家</div> : null}
       {snapshot.public.phase === 'opening' ? <><div className="opening-draw">{snapshot.public.openingMode === 'normal' ? '随机首牌权候选' : '当前立棍首牌权'}：{snapshot.public.candidateLeader ?? '抽取中'}</div><StandDialog mode={snapshot.public.openingMode} ownSeat={snapshot.private.seat} modeTeam={snapshot.public.modeTeam} openingTurn={snapshot.public.openingTurn} onChoose={(choice) => onCommand('opening', choice)} /></> : null}
       <div className="table-layout">
@@ -144,7 +152,8 @@ export function GameView({ snapshot, onCommand, onActivity, onReady, testMode }:
           </div> : null}
         </div>)}
       </div>
-      <CardHand cards={ownHand} main={handSortMain} selectedIds={selected} onToggle={onToggle} dimmed={ownHandIsDiscarded} />
+      <CardHand cards={ownHand} main={handSortMain} selectedIds={selected} onToggle={onToggle} dimmed={ownHandIsDiscarded} resetKey={snapshot.public.handNumber} />
+      {canClickBlankToPlay ? <p className="play-hint">已选牌合法，点击桌面空白处即可出牌</p> : null}
       {snapshot.public.burstPendingSeat && !burstPendingForMe ? <p className="burst-waiting">等待{playersBySeat.get(snapshot.public.burstPendingSeat)?.nickname ?? snapshot.public.burstPendingSeat}选择是否报爆</p> : null}
       <BurstPrompt kinds={burstKinds} onChoose={(kind) => onCommand('burst', { kind })} onSkip={() => onCommand('burst', { kind: 'skip' })} />
       {showSettlement && snapshot.public.phase === 'settled' && snapshot.public.settlement ? <SettlementDialog

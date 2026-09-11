@@ -11,7 +11,11 @@
     "test": "vitest",
     "test:e2e": "node scripts/run-e2e.cjs",
     "build": "vite build && tsc -p tsconfig.server.json",
-    "start": "node dist/server/server/src/index.js"
+    "start": "node dist/server/server/src/index.js",
+    "pm2:start": "node scripts/pm2-start.cjs",
+    "pm2:stop": "node scripts/pm2-start.cjs --stop",
+    "pm2:restart": "node scripts/pm2-start.cjs --restart",
+    "pm2:status": "node scripts/pm2-start.cjs --status"
   },
   "dependencies": {
     "express": "^5.1.0",

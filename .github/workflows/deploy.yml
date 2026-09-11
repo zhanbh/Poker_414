@@ -36,6 +36,7 @@ jobs:
           cp package.json deploy/
           cp package-lock.json deploy/
           cp ecosystem.config.cjs deploy/
+          cp .env.example deploy/
           # 打包
           tar -czf deploy.tar.gz -C deploy .
           echo "打包完成"

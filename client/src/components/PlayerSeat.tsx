@@ -27,7 +27,7 @@ export function PlayerSeat({ seat, player, isCurrentTurn = false, showRemainingH
           <span>{player.team}</span>
           {player.isHost ? <span className="host-label">房主</span> : null}
           {player.ready ? <span className="ready-label">已准备</span> : null}
-          <PresenceBadge away={player.away} />
+          <PresenceBadge away={player.away} connected={player.connected} />
         </div>
       </div>
       {showRemainingHand && player.remainingHand.length > 0 ? <div className={`remaining-hand${isDiscarded ? ' discarded-hand' : ''}`} aria-label={`${seat}剩余手牌`}>

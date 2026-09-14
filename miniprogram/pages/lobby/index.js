@@ -9,6 +9,7 @@ Page({
     ac: [],
     bd: [],
     roomId: '414',
+    playerCount: 0,
     isHost: false,
     full: false,
     error: '',
@@ -42,6 +43,7 @@ Page({
       ac: players.filter((player) => player.seat === 'A' || player.seat === 'C'),
       bd: players.filter((player) => player.seat === 'B' || player.seat === 'D'),
       roomId: snapshot.public.roomId,
+      playerCount: snapshot.public.players.length,
       isHost: Boolean(own && own.isHost),
       full: players.every((player) => player.nickname),
     });

@@ -3,6 +3,7 @@
     <view class="title">414 对局</view>
     <view class="muted">第 {{handNumber}} 局 · {{phaseLabel}}</view>
   </view>
+  <view wx:if="{{connectionNotice}}" class="connection-notice">{{connectionNotice}}</view>
 
   <view class="score-row">
     <view class="score-card">AC 主 <text>{{levels.AC}}</text></view>
@@ -17,6 +18,7 @@
       <text class="muted">剩 {{item.handCount}} 张</text>
       <text wx:if="{{item.finishedRank}}" class="finished">第 {{item.finishedRank}} 名</text>
       <text wx:if="{{item.burstAnnounced}}" class="burst-tag">爆</text>
+      <text wx:if="{{!item.connected && item.nickname !== '空位'}}" class="disconnected-tag">已断开</text>
       <text wx:if="{{item.away}}" class="away-tag">暂离</text>
     </view>
   </view>

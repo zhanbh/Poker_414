@@ -1,5 +1,5 @@
 const { commandFor } = require('../../utils/commands');
-const { displayCards } = require('../../utils/cards');
+const { displayCards, displayHand } = require('../../utils/cards');
 
 const SEATS = ['A', 'B', 'C', 'D'];
 
@@ -35,6 +35,7 @@ Page({
     burstPendingWaiting: false,
     burstPendingSeat: null,
     settlementText: '',
+    connectionNotice: '',
     error: '',
   },
 
@@ -49,17 +50,32 @@ Page({
   onUnload() {
     if (this.unsubscribe) this.unsubscribe();
     if (this.unsubscribeReplaced) this.unsubscribeReplaced();
+    if (this.noticeTimer) clearTimeout(this.noticeTimer);
   },
 
   updateSnapshot(snapshot) {
     if (!snapshot) return;
+    const previous = this.data.snapshot;
+    if (previous && previous.public.phase !== 'lobby' && snapshot.public.phase !== 'lobby') {
+      const disconnectedNames = snapshot.public.players
+        .filter((player) => {
+          const oldPlayer = previous.public.players.find((candidate) => candidate.seat === player.seat);
+          return oldPlayer?.connected && !player.connected;
+        })
+        .map((player) => player.nickname);
+      if (disconnectedNames.length > 0) {
+        if (this.noticeTimer) clearTimeout(this.noticeTimer);
+        this.setData({ connectionNotice: disconnectedNames.join('、') + ' 已退出房间' });
+        this.noticeTimer = setTimeout(() => this.setData({ connectionNotice: '' }), 6_000);
+      }
+    }
     if (snapshot.public.phase === 'lobby') {
       this.app.setSnapshot(snapshot);
       wx.reLaunch({ url: '/pages/lobby/index' });
       return;
     }
     const selected = new Set(this.data.selectedIds);
-    const hand = displayCards(snapshot.private.hand).map((card) => ({ ...card, selected: selected.has(card.id) }));
+    const hand = displayHand(snapshot.private.hand, snapshot.public.effectiveMain).map((card) => ({ ...card, selected: selected.has(card.id) }));
     const ownSeat = snapshot.private.seat;
     const ownPlayer = snapshot.public.players.find((player) => player.seat === ownSeat);
     const isMyTurn = snapshot.public.phase === 'playing'

@@ -100,8 +100,8 @@ describe('414 权威牌局状态机', () => {
     expect(split.burstPending).toBeNull();
     expect(split.players.A?.burstLocked).toBe(true);
 
-    const awayState = scanPresence(announced, 60_000);
-    const afterAction = markActivity(awayState, 'A', 60_001);
+    const awayState = scanPresence(announced, 30_000);
+    const afterAction = markActivity(awayState, 'A', 30_001);
     expect(afterAction.players.A?.away).toBe(false);
     expect(afterAction.players.A?.hand).toHaveLength(2);
     expect(afterAction.version).toBe(awayState.version);

@@ -2,6 +2,15 @@
   margin-bottom: 20rpx;
 }
 
+.connection-notice {
+  background: #7e3942;
+  border: 1rpx solid #d56f79;
+  border-radius: 12rpx;
+  color: #ffe5e7;
+  margin-bottom: 20rpx;
+  padding: 18rpx;
+}
+
 .score-row {
   display: flex;
   gap: 12rpx;
@@ -53,6 +62,7 @@
 
 .finished,
 .burst-tag,
+.disconnected-tag,
 .away-tag {
   border-radius: 8rpx;
   font-size: 20rpx;
@@ -65,6 +75,10 @@
 
 .burst-tag {
   background: #a8792f;
+}
+
+.disconnected-tag {
+  background: #7e3942;
 }
 
 .away-tag {

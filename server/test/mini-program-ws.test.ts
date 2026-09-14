@@ -136,4 +136,32 @@ describe('微信小程序原生 WebSocket 通道', () => {
     expect(result).toEqual({ ok: false, error: '邀请码错误' });
     expect(running.roomService.hasRoom()).toBe(false);
   });
+
+  it('游戏中连接断开后向仍在线客户端广播断开状态', async () => {
+    const { url } = await startServer();
+    const sockets = await Promise.all([1, 2, 3, 4].map(() => connect(url)));
+    const snapshots: RoomSnapshot[] = [];
+
+    for (const [index, socket] of sockets.entries()) {
+      await request(socket, EVENTS.login, { inviteCode: 'inner-414' });
+      const joined = await request(socket, EVENTS.join, { nickname: '玩家' + (index + 1), roomId: '414' });
+      snapshots.push(joined.snapshot!);
+    }
+
+    const start = snapshots[3];
+    const update = waitForMessage(sockets[1], (message) => {
+      const payload = message.payload;
+      if (message.event !== EVENTS.snapshot || !payload || !('public' in payload)) return false;
+      return payload.public.players.find((player) => player.seat === 'A')?.connected === false;
+    });
+    await request(sockets[0], EVENTS.command, {
+      type: 'start-hand', requestId: randomUUID(), handNumber: start.public.handNumber,
+      stateVersion: start.public.version, payload: {},
+    });
+    await closeSocket(sockets[0]);
+
+    const disconnected = await update;
+    const payload = disconnected.payload;
+    expect(payload && 'public' in payload ? payload.public.players.find((player) => player.seat === 'A')?.connected : null).toBe(false);
+  });
 });

@@ -17,7 +17,7 @@ import {
 
 export const SEATS = ['A', 'B', 'C', 'D'] as const;
 export type GamePhase = 'lobby' | 'opening' | 'playing' | 'settled' | 'ended';
-export const AWAY_TIMEOUT_MS = 60_000;
+export const AWAY_TIMEOUT_MS = 30_000;
 
 export interface PlayerState {
   id: string;

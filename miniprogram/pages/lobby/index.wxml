@@ -30,7 +30,7 @@
   </view>
 
   <view class="panel status-panel">
-    <view>当前人数：{{players.length}} / 4</view>
+    <view>当前人数：{{playerCount}} / 4</view>
     <button wx:if="{{isHost}}" class="primary-button" disabled="{{!full}}" bindtap="onStart">开始游戏</button>
     <view wx:if="{{isHost && !full}}" class="muted hint">还需要等待其他玩家加入</view>
     <view wx:if="{{!isHost}}" class="muted hint">等待房主开始</view>

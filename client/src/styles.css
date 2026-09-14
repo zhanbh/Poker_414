@@ -12,6 +12,7 @@ main { min-height: 100vh; padding: 32px; }
 .test-mode-link { color: #ffd166; text-align: center; }
 .test-mode-hint, .test-mode-banner { padding: 10px 14px; color: #102331; background: #ffd166; border-radius: 8px; }
 .test-mode-banner { margin-bottom: 16px; }
+.room-notice { max-width: 1180px; margin: 12px auto; padding: 10px 14px; color: #ffe5e7; background: #7e3942; border: 1px solid #d56f79; border-radius: 8px; }
 .team-grid { display: grid; grid-template-columns: repeat(2, minmax(280px, 1fr)); gap: 16px; }
 .team-grid section { padding: 16px; background: #18384b; border-radius: 12px; }
 .game-view { max-width: 1180px; margin: 0 auto; }
@@ -66,6 +67,7 @@ main { min-height: 100vh; padding: 32px; }
 .card.joker.big { color: #7b1fa2; border-color: #ce93d8; }
 .card.selected { transform: translateY(-10px); border-color: #ffd166; }
 .presence-badge.away { color: #ffcf66; }
+.presence-badge.disconnected { color: #ff9aa4; }
 .host-label { color: #ffd166; }
 .public-play { min-height: 80px; padding: 16px; margin: 12px 0; border: 1px dashed #397a8b; }
 .play-hint { margin: 0 0 12px; color: #ffd166; text-align: center; }

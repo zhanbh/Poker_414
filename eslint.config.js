@@ -34,4 +34,15 @@ module.exports = tseslint.config(
       'react-refresh/only-export-components': 'off',
     },
   },
+  {
+    files: ['miniprogram/**/*.js'],
+    languageOptions: {
+      globals: {
+        App: 'readonly',
+        Page: 'readonly',
+        getApp: 'readonly',
+        wx: 'readonly',
+      },
+    },
+  },
 );

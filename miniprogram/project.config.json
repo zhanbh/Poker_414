@@ -1,0 +1,19 @@
+{
+  "description": "414 微信小程序内测",
+  "packOptions": {
+    "ignore": []
+  },
+  "setting": {
+    "urlCheck": true,
+    "es6": true,
+    "enhance": true,
+    "minified": false,
+    "postcss": true,
+    "compileHotReLoad": true
+  },
+  "compileType": "miniprogram",
+  "libVersion": "3.8.8",
+  "appid": "touristappid",
+  "projectname": "414-miniprogram",
+  "miniprogramRoot": "./"
+}

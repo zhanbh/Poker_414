@@ -24,6 +24,12 @@ npm run dev
 
 打开 http://localhost:5173。四名玩家输入同一个邀请码和不同昵称；第一个入房玩家是房主，四人到齐后房主可以开始游戏。
 
+## 微信小程序内测端
+
+仓库新增了独立的原生微信小程序前端，代码位于 miniprogram/，不会替换电脑网页版。小程序和网页版共用同一个 Node.js 房间服务与 shared/ 规则模型；网页版继续使用 Socket.IO，小程序使用服务端新增的 /414-ws WebSocket 兼容通道，因此两端可以进入同一房间混合测试。
+
+使用微信开发者工具导入 miniprogram/ 目录即可查看页面。详细导入、AppID、服务地址和 HTTPS/WSS 配置说明见 miniprogram/README.md。当前默认地址为 http://localhost:3000，真机测试前需要改成可访问的 HTTPS 地址，并在微信后台配置合法 socket 域名。
+
 ### 单机四人测试模式
 
 如果只有一个 Chrome，可以使用同一个浏览器的 4 个标签页：

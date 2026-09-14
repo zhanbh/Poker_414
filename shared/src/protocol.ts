@@ -11,6 +11,8 @@ export const EVENTS = {
   replaced: 'session:replaced',
 } as const;
 
+export const MINI_PROGRAM_SOCKET_PATH = '/414-ws';
+
 export type CommandType =
   | 'start-hand'
   | 'opening'
@@ -90,6 +92,7 @@ export interface PrivateSnapshot {
   readonly seat: Seat | null;
   readonly hand: Card[];
   readonly burstLocked: boolean;
+  readonly burstKinds?: HandKind[];
 }
 
 export interface RoomSnapshot {

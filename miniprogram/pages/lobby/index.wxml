@@ -1,0 +1,40 @@
+<view class="page lobby-page">
+  <view class="title">414 房间 {{roomId}}</view>
+  <view class="muted">等待四名玩家到齐后，由房主开始游戏</view>
+
+  <view class="team-grid">
+    <view class="panel team-panel">
+      <view class="team-title">AC 队</view>
+      <view wx:for="{{ac}}" wx:key="seat" class="player-row">
+        <view>
+          <text class="seat">{{item.seat}}</text>
+          <text class="nickname">{{item.nickname || '空位'}}</text>
+          <text wx:if="{{item.isHost}}" class="host">房主</text>
+          <text wx:if="{{!item.connected && item.nickname}}" class="muted"> · 已断开</text>
+        </view>
+        <button wx:if="{{isHost && item.nickname}}" class="danger-button" data-seat="{{item.seat}}" bindtap="onRemove">移除</button>
+      </view>
+    </view>
+    <view class="panel team-panel">
+      <view class="team-title">BD 队</view>
+      <view wx:for="{{bd}}" wx:key="seat" class="player-row">
+        <view>
+          <text class="seat">{{item.seat}}</text>
+          <text class="nickname">{{item.nickname || '空位'}}</text>
+          <text wx:if="{{item.isHost}}" class="host">房主</text>
+          <text wx:if="{{!item.connected && item.nickname}}" class="muted"> · 已断开</text>
+        </view>
+        <button wx:if="{{isHost && item.nickname}}" class="danger-button" data-seat="{{item.seat}}" bindtap="onRemove">移除</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="panel status-panel">
+    <view>当前人数：{{players.length}} / 4</view>
+    <button wx:if="{{isHost}}" class="primary-button" disabled="{{!full}}" bindtap="onStart">开始游戏</button>
+    <view wx:if="{{isHost && !full}}" class="muted hint">还需要等待其他玩家加入</view>
+    <view wx:if="{{!isHost}}" class="muted hint">等待房主开始</view>
+  </view>
+
+  <view wx:if="{{error}}" class="error">{{error}}</view>
+</view>

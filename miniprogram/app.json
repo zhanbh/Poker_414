@@ -1,0 +1,16 @@
+{
+  "pages": [
+    "pages/access/index",
+    "pages/lobby/index",
+    "pages/game/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "414 内测",
+    "navigationBarBackgroundColor": "#0e2535",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#0e2535",
+    "backgroundTextStyle": "light"
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

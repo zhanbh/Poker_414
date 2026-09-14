@@ -1,0 +1,56 @@
+.lobby-page .title {
+  margin-bottom: 8rpx;
+}
+
+.team-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+  margin-top: 28rpx;
+}
+
+.team-title {
+  color: #f0b44d;
+  font-size: 34rpx;
+  font-weight: 700;
+  margin-bottom: 18rpx;
+}
+
+.player-row {
+  align-items: center;
+  background: #1e5368;
+  border: 1rpx solid #3b8298;
+  border-radius: 14rpx;
+  display: flex;
+  justify-content: space-between;
+  margin-top: 12rpx;
+  min-height: 76rpx;
+  padding: 12rpx 16rpx;
+}
+
+.seat {
+  color: #f0b44d;
+  font-weight: 700;
+  margin-right: 18rpx;
+}
+
+.nickname {
+  margin-right: 12rpx;
+}
+
+.host {
+  color: #f0b44d;
+  display: block;
+  font-size: 22rpx;
+  margin-left: 42rpx;
+  margin-top: 4rpx;
+}
+
+.status-panel {
+  margin-top: 20rpx;
+}
+
+.hint {
+  font-size: 24rpx;
+  margin-top: 18rpx;
+}

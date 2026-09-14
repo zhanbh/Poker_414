@@ -1,0 +1,15 @@
+<view class="page access-page">
+  <view class="title">414 内测</view>
+  <view class="muted subtitle">4 人私房扑克 · 邀请制</view>
+
+  <view class="panel access-panel">
+    <view class="field-label">邀请码</view>
+    <input class="field-input" placeholder="请输入固定邀请码" value="{{inviteCode}}" bindinput="onInviteCodeInput" />
+    <view class="field-label">昵称</view>
+    <input class="field-input" maxlength="12" placeholder="请输入本局昵称" value="{{nickname}}" bindinput="onNicknameInput" />
+    <view wx:if="{{error}}" class="error">{{error}}</view>
+    <button class="primary-button" loading="{{busy}}" disabled="{{busy}}" bindtap="onSubmit">进入房间</button>
+  </view>
+
+  <view class="server-tip muted">当前服务地址：{{serverOrigin}}</view>
+</view>

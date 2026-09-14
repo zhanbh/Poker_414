@@ -1,0 +1,9 @@
+{
+  "desc": "414 内测小程序不开放搜索",
+  "rules": [
+    {
+      "action": "disallow",
+      "page": "*"
+    }
+  ]
+}

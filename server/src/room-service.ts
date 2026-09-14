@@ -25,6 +25,7 @@ import {
   startHand,
 } from '../../shared/src/game-state';
 import { HandKind } from '../../shared/src/hand-types';
+import { findBurstCandidates } from '../../shared/src/rule-engine';
 import { Session, SessionService } from './session-service';
 
 export interface RoomServiceOptions {
@@ -108,7 +109,10 @@ export class RoomService {
 
   getSnapshot(sessionToken: string): RoomSnapshot {
     const session = this.sessions.get(sessionToken);
-    if (!this.state) return { public: this.emptyPublicSnapshot(), private: { seat: session.seat, hand: [], burstLocked: false } };
+    if (!this.state) return {
+      public: this.emptyPublicSnapshot(),
+      private: { seat: session.seat, hand: [], burstLocked: false, burstKinds: [] },
+    };
     const state = this.state;
     const players = Object.values(state.players)
       .filter((player): player is NonNullable<typeof player> => player !== null)
@@ -157,12 +161,16 @@ export class RoomService {
       settlement: state.settlement,
     };
     const ownPlayer = session.seat ? state.players[session.seat] : null;
+    const burstKinds = ownPlayer && state.burstPending?.seat === ownPlayer.seat && state.effectiveMain
+      ? Array.from(new Set(findBurstCandidates(ownPlayer.hand, state.effectiveMain).map((candidate) => candidate.kind)))
+      : [];
     return {
       public: publicState,
       private: {
         seat: session.seat,
         hand: ownPlayer ? [...ownPlayer.hand] : [],
         burstLocked: ownPlayer?.burstLocked ?? false,
+        burstKinds,
       },
     };
   }

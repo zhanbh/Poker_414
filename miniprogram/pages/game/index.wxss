@@ -1,0 +1,151 @@
+.game-header {
+  margin-bottom: 20rpx;
+}
+
+.score-row {
+  display: flex;
+  gap: 12rpx;
+  margin-bottom: 20rpx;
+}
+
+.score-card {
+  background: #1b4c61;
+  border: 1rpx solid #3b8298;
+  border-radius: 12rpx;
+  flex: 1;
+  font-size: 22rpx;
+  padding: 16rpx 10rpx;
+  text-align: center;
+}
+
+.score-card text {
+  color: #f0b44d;
+  display: block;
+  font-size: 34rpx;
+  font-weight: 700;
+  margin-top: 4rpx;
+}
+
+.players-panel {
+  display: grid;
+  gap: 12rpx;
+  grid-template-columns: 1fr 1fr;
+}
+
+.mini-player {
+  align-items: center;
+  background: #1e5368;
+  border-radius: 12rpx;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8rpx;
+  padding: 14rpx;
+}
+
+.turn-player {
+  border: 2rpx solid #f0b44d;
+}
+
+.seat {
+  color: #f0b44d;
+  font-weight: 700;
+}
+
+.finished,
+.burst-tag,
+.away-tag {
+  border-radius: 8rpx;
+  font-size: 20rpx;
+  padding: 4rpx 8rpx;
+}
+
+.finished {
+  background: #30755e;
+}
+
+.burst-tag {
+  background: #a8792f;
+}
+
+.away-tag {
+  background: #6c4b55;
+}
+
+.table-panel {
+  margin-top: 20rpx;
+  min-height: 180rpx;
+}
+
+.play-title,
+.section-title {
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.played-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+  margin-top: 18rpx;
+}
+
+.played-card {
+  background: #f5f8fb;
+  border-radius: 8rpx;
+  color: #1d2830;
+  padding: 16rpx 18rpx;
+}
+
+.play-hint {
+  color: #f0d283;
+  font-size: 22rpx;
+  margin-top: 24rpx;
+}
+
+.opening-panel,
+.burst-panel,
+.settlement-panel {
+  margin-top: 20rpx;
+}
+
+.hand-panel {
+  margin-top: 24rpx;
+}
+
+.hand-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+  margin-top: 16rpx;
+}
+
+.card {
+  align-items: center;
+  background: #f5f8fb;
+  border: 3rpx solid transparent;
+  border-radius: 12rpx;
+  color: #1d2830;
+  display: flex;
+  height: 92rpx;
+  justify-content: center;
+  width: 70rpx;
+}
+
+.card.selected {
+  border-color: #f0b44d;
+  transform: translateY(-12rpx);
+}
+
+.action-row {
+  display: flex;
+  gap: 14rpx;
+  margin-top: 24rpx;
+}
+
+.action-row button {
+  flex: 1;
+}
+
+.waiting {
+  margin-top: 18rpx;
+}

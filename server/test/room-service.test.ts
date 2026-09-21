@@ -10,7 +10,7 @@ function service(): RoomService {
 }
 
 describe('单房间会话与命令服务', () => {
-  it('固定邀请码登录后只允许四人进入唯一房间，并返回私密手牌视图', () => {
+  it('固定邀请码登录后前四人入座，满员后自动进入观战，并返回私密手牌视图', () => {
     const room = service();
     expect(() => room.login('wrong')).toThrow(/邀请码/);
     const players = ['甲', '乙', '丙', '丁'].map((nickname) => {
@@ -19,7 +19,9 @@ describe('单房间会话与命令服务', () => {
       return auth;
     });
 
-    expect(() => room.join(room.login('inner-414').sessionToken, '戊', '414')).toThrow(/已满/);
+    const spectator = room.login('inner-414');
+    const spectatorView = room.join(spectator.sessionToken, '戊', '414');
+    expect(spectatorView.private.spectator).toBe(true);
     const snapshot = room.getSnapshot(players[0].sessionToken);
     expect(snapshot.public.players).toHaveLength(4);
     expect(snapshot.private.hand).toHaveLength(0);
@@ -114,7 +116,7 @@ describe('单房间会话与命令服务', () => {
       return auth;
     });
     const spectator = room.login('inner-414');
-    room.join(spectator.sessionToken, '观众', '414', 'spectator');
+    room.join(spectator.sessionToken, '观众', '414');
 
     const state = room.getState()!;
     room.dispatch(players[0].sessionToken, {
@@ -130,5 +132,44 @@ describe('单房间会话与命令服务', () => {
     expect(() => room.dispatch(spectator.sessionToken, {
       type: 'pass', requestId: 'spectator-pass', handNumber: room.getState()!.handNumber, stateVersion: room.getState()!.version, payload: {},
     })).toThrow(/尚未入座/);
+  });
+
+  it('大厅中的玩家退出后释放座位，观战者退出后释放观战位', () => {
+    const room = service();
+    const players = ['甲', '乙', '丙', '丁'].map((nickname) => {
+      const auth = room.login('inner-414');
+      room.join(auth.sessionToken, nickname, '414');
+      return auth;
+    });
+
+    const spectator = room.login('inner-414');
+    room.join(spectator.sessionToken, '观众1', '414');
+    room.leave(players[3].sessionToken);
+
+    const replacement = room.login('inner-414');
+    const replacementView = room.join(replacement.sessionToken, '戊', '414');
+    expect(replacementView.private.spectator).not.toBe(true);
+    expect(replacementView.private.seat).toBe('D');
+
+    room.leave(spectator.sessionToken);
+    const nextSpectator = room.login('inner-414');
+    const nextSpectatorView = room.join(nextSpectator.sessionToken, '观众2', '414');
+    expect(nextSpectatorView.private.spectator).toBe(true);
+  });
+
+  it('牌局进行中玩家不能退出并破坏当前牌局', () => {
+    const room = service();
+    const auths = ['甲', '乙', '丙', '丁'].map((nickname) => {
+      const auth = room.login('inner-414');
+      room.join(auth.sessionToken, nickname, '414');
+      return auth;
+    });
+    const state = room.getState()!;
+    room.dispatch(auths[0].sessionToken, {
+      type: 'start-hand', requestId: 'start-before-leave', handNumber: state.handNumber, stateVersion: state.version, payload: {},
+    });
+
+    expect(() => room.leave(auths[1].sessionToken)).toThrow(/牌局进行中/);
+    expect(room.getState()!.players.B?.nickname).toBe('乙');
   });
 });

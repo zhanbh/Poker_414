@@ -42,6 +42,13 @@ export class SessionService {
     session.nickname = nickname;
   }
 
+  clearIdentity(sessionToken: string): void {
+    const session = this.get(sessionToken);
+    session.role = null;
+    session.nickname = null;
+    session.seat = null;
+  }
+
   attach(sessionToken: string, connectionId: string): { previousConnectionId: string | null } {
     const session = this.get(sessionToken);
     const previousConnectionId = session.connectionId;

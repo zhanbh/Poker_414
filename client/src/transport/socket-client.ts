@@ -1,5 +1,5 @@
 import { io, Socket } from 'socket.io-client';
-import { EVENTS, CommandEnvelope, RoomRole, RoomSnapshot } from '../../../shared/src/protocol';
+import { EVENTS, CommandEnvelope, RoomSnapshot } from '../../../shared/src/protocol';
 
 export interface AuthResult {
   readonly sessionToken: string;
@@ -8,7 +8,8 @@ export interface AuthResult {
 
 export interface ClientTransport {
   login(inviteCode: string, sessionToken?: string): Promise<AuthResult>;
-  join(nickname: string, roomId: string, role?: RoomRole): Promise<RoomSnapshot>;
+  join(nickname: string, roomId: string): Promise<RoomSnapshot>;
+  leave(): Promise<void>;
   command(command: CommandEnvelope): Promise<{ readonly ok: true; readonly snapshot: RoomSnapshot }>;
   activity(): void;
   subscribe(listener: (snapshot: RoomSnapshot) => void): () => void;
@@ -37,11 +38,24 @@ export class SocketClientTransport implements ClientTransport {
     });
   }
 
-  join(nickname: string, roomId: string, role: RoomRole = 'player'): Promise<RoomSnapshot> {
+  join(nickname: string, roomId: string): Promise<RoomSnapshot> {
     return new Promise((resolve, reject) => {
-      this.socket.emit(EVENTS.join, { nickname, roomId, role }, (result: AcknowledgeResult) => {
+      this.socket.emit(EVENTS.join, { nickname, roomId }, (result: AcknowledgeResult) => {
         if (result?.ok && result.snapshot) resolve(result.snapshot);
         else reject(new Error(result?.error ?? '入房失败'));
+      });
+    });
+  }
+
+  leave(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.socket.emit(EVENTS.leave, (result: { ok: boolean; error?: string }) => {
+        if (result?.ok) {
+          this.socket.disconnect();
+          resolve();
+        } else {
+          reject(new Error(result?.error ?? '退出失败'));
+        }
       });
     });
   }

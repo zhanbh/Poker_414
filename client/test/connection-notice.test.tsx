@@ -37,6 +37,7 @@ describe('断线提示', () => {
       onReplaced: () => () => undefined,
       activity: () => undefined,
       command: async () => ({ ok: true as const, snapshot: snapshot(true) }),
+      leave: async () => undefined,
     };
     render(<App transport={transport} />);
     await waitFor(() => expect(listener).toBeDefined());

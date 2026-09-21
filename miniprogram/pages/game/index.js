@@ -192,4 +192,17 @@ Page({
   onReady() {
     this.runCommand('ready', {});
   },
+
+  onLeave() {
+    wx.showModal({
+      title: '退出房间',
+      content: '观战者可以随时退出；进行中的玩家牌局需要等本局结束。确定退出吗？',
+      success: (result) => {
+        if (!result.confirm) return;
+        this.app.leaveRoom()
+          .then(() => wx.reLaunch({ url: '/pages/access/index' }))
+          .catch((error) => this.setData({ error: error.message || '退出失败' }));
+      },
+    });
+  },
 });

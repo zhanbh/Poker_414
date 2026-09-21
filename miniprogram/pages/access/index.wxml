@@ -7,11 +7,7 @@
     <input class="field-input" placeholder="请输入固定邀请码" value="{{inviteCode}}" bindinput="onInviteCodeInput" />
     <view class="field-label">昵称</view>
     <input class="field-input" maxlength="12" placeholder="请输入本局昵称" value="{{nickname}}" bindinput="onNicknameInput" />
-    <view class="field-label">进入方式</view>
-    <radio-group class="role-group" bindchange="onRoleChange">
-      <label><radio value="player" checked="{{role === 'player'}}" />玩家</label>
-      <label><radio value="spectator" checked="{{role === 'spectator'}}" />观战</label>
-    </radio-group>
+    <view class="join-mode-hint">有空位自动成为玩家，满员后自动观战</view>
     <view wx:if="{{error}}" class="error">{{error}}</view>
     <button class="primary-button" loading="{{busy}}" disabled="{{busy}}" bindtap="onSubmit">进入房间</button>
   </view>

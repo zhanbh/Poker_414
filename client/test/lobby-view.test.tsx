@@ -18,7 +18,7 @@ const lobby: PublicSnapshot = {
 describe('大厅视图', () => {
   it('显示四个固定座位、AC/BD组队和房主，四人未到齐不能开始', () => {
     const onStart = vi.fn();
-    render(<LobbyView snapshot={lobby} ownSeat="A" onStart={onStart} onRemove={vi.fn()} testMode={false} />);
+    render(<LobbyView snapshot={lobby} ownSeat="A" onStart={onStart} onRemove={vi.fn()} onLeave={vi.fn()} testMode={false} />);
 
     expect(screen.getByText('AC 队')).toBeInTheDocument();
     expect(screen.getByText('BD 队')).toBeInTheDocument();

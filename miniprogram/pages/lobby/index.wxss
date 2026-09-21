@@ -58,3 +58,9 @@
 .spectator-banner { background: #9dd9e5; border-radius: 12rpx; color: #102331; font-weight: 700; margin-top: 20rpx; padding: 18rpx; }
 .spectator-panel { margin-top: 20rpx; }
 .spectator-row { background: #1e5368; border-radius: 10rpx; margin-top: 10rpx; padding: 14rpx; }
+
+.leave-button {
+  border: 1rpx solid #d56f79;
+  color: #ffe5e7;
+  margin-top: 18rpx;
+}

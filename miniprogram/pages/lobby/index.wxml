@@ -40,6 +40,7 @@
     <button wx:if="{{isHost}}" class="primary-button" disabled="{{!full}}" bindtap="onStart">开始游戏</button>
     <view wx:if="{{isHost && !full}}" class="muted hint">还需要等待其他玩家加入</view>
     <view wx:if="{{!isHost}}" class="muted hint">等待房主开始</view>
+    <button class="leave-button" bindtap="onLeave">退出房间</button>
   </view>
 
   <view wx:if="{{error}}" class="error">{{error}}</view>

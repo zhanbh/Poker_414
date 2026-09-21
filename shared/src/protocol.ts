@@ -5,6 +5,7 @@ import { Level, Seat, SettlementMode, SettlementResult, Team } from './scoring';
 export const EVENTS = {
   login: 'auth:login',
   join: 'room:join',
+  leave: 'room:leave',
   snapshot: 'room:snapshot',
   command: 'command',
   activity: 'room:activity',

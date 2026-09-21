@@ -107,8 +107,12 @@ class MiniProgramTransport {
     return this.send(EVENTS.login, sessionToken ? { sessionToken } : { inviteCode });
   }
 
-  join(nickname, roomId, role = 'player') {
-    return this.send(EVENTS.join, { nickname, roomId, role }).then((result) => result.snapshot);
+  join(nickname, roomId) {
+    return this.send(EVENTS.join, { nickname, roomId }).then((result) => result.snapshot);
+  }
+
+  leave() {
+    return this.send(EVENTS.leave, {}).then(() => this.close());
   }
 
   command(command) {

@@ -4,6 +4,7 @@
     <view class="muted">第 {{handNumber}} 局 · {{phaseLabel}}</view>
   </view>
   <view wx:if="{{spectator}}" class="spectator-banner">观战模式 · 上帝视角 · 不参与出牌</view>
+  <button class="leave-button" bindtap="onLeave">退出房间</button>
   <view wx:if="{{connectionNotice}}" class="connection-notice">{{connectionNotice}}</view>
 
   <view class="score-row">

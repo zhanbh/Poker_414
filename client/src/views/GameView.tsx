@@ -27,11 +27,12 @@ function tableSeatsFor(ownSeat: Seat | null) {
   });
 }
 
-export function GameView({ snapshot, onCommand, onActivity, onReady, testMode }: {
+export function GameView({ snapshot, onCommand, onActivity, onReady, onLeave, testMode }: {
   readonly snapshot: RoomSnapshot;
   readonly onCommand: GameCommand;
   readonly onActivity: () => void;
   readonly onReady?: () => void;
+  readonly onLeave: () => void;
   readonly testMode: boolean;
 }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -109,6 +110,7 @@ export function GameView({ snapshot, onCommand, onActivity, onReady, testMode }:
     <main className="game-view" onClick={handleBoardClick}>
       {testMode ? <div className="test-mode-banner" role="status">单机四人测试模式 · 每个标签页都是独立玩家</div> : null}
       {isSpectator ? <div className="spectator-banner" role="status">观战模式 · 上帝视角 · 不参与出牌</div> : null}
+      <button type="button" className="leave-room-button" onClick={onLeave}>退出房间</button>
       {snapshot.public.phase === 'opening' && !isSpectator ? <><div className="opening-draw">{snapshot.public.openingMode === 'normal' ? '随机首牌权候选' : '当前立棍首牌权'}：{snapshot.public.candidateLeader ?? '抽取中'}</div><StandDialog mode={snapshot.public.openingMode} ownSeat={snapshot.private.seat} modeTeam={snapshot.public.modeTeam} openingTurn={snapshot.public.openingTurn} onChoose={(choice) => onCommand('opening', choice)} /></> : null}
       <div className="table-layout">
         <MainStatus snapshot={snapshot.public} />

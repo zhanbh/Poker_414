@@ -66,6 +66,19 @@ Page({
     this.runCommand('start-hand', {});
   },
 
+  onLeave() {
+    wx.showModal({
+      title: '退出房间',
+      content: '退出后将释放当前身份，确定退出吗？',
+      success: (result) => {
+        if (!result.confirm) return;
+        this.app.leaveRoom()
+          .then(() => wx.reLaunch({ url: '/pages/access/index' }))
+          .catch((error) => this.setData({ error: error.message || '退出失败' }));
+      },
+    });
+  },
+
   onRemove(event) {
     const seat = event.currentTarget.dataset.seat;
     wx.showModal({

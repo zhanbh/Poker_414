@@ -25,7 +25,7 @@ const playing: RoomSnapshot = {
 
 describe('对局视图', () => {
   it('显示有效主和四人剩余牌数，但不渲染他人手牌', () => {
-    render(<GameView snapshot={playing} onCommand={vi.fn()} onActivity={vi.fn()} testMode={false} />);
+    render(<GameView snapshot={playing} onCommand={vi.fn()} onActivity={vi.fn()} onLeave={vi.fn()} testMode={false} />);
 
     expect(screen.getByText('本手主：5')).toBeInTheDocument();
     expect(screen.queryByText('当前牌权：甲')).not.toBeInTheDocument();
@@ -41,7 +41,7 @@ describe('对局视图', () => {
       ...playing,
       private: { ...playing.private, seat: 'B' },
     };
-    const { container } = render(<GameView snapshot={snapshot} onCommand={vi.fn()} onActivity={vi.fn()} testMode={false} />);
+    const { container } = render(<GameView snapshot={snapshot} onCommand={vi.fn()} onActivity={vi.fn()} onLeave={vi.fn()} testMode={false} />);
 
     expect(container.querySelector('.table-seat.seat-bottom')).toHaveTextContent('乙 · 4张');
     expect(container.querySelector('.table-seat.seat-top')).toHaveTextContent('丁 · 6张');
@@ -63,7 +63,7 @@ describe('对局视图', () => {
       },
       private: { ...playing.private, seat: 'B', hand: [] },
     };
-    render(<GameView snapshot={snapshot} onCommand={vi.fn()} onActivity={vi.fn()} testMode={false} />);
+    render(<GameView snapshot={snapshot} onCommand={vi.fn()} onActivity={vi.fn()} onLeave={vi.fn()} testMode={false} />);
 
     expect(screen.getByRole('button', { name: '立棍' })).toBeDisabled();
     expect(screen.getByRole('button', { name: '跳过' })).toBeDisabled();
@@ -86,7 +86,7 @@ describe('对局视图', () => {
       },
       private: { ...playing.private, seat: 'A', hand: [] },
     };
-    render(<GameView snapshot={snapshot} onCommand={vi.fn()} onActivity={vi.fn()} testMode={false} />);
+    render(<GameView snapshot={snapshot} onCommand={vi.fn()} onActivity={vi.fn()} onLeave={vi.fn()} testMode={false} />);
 
     expect(screen.queryByRole('button', { name: '反立' })).not.toBeInTheDocument();
     expect(screen.getByText('等待 D 选择')).toBeInTheDocument();
@@ -95,7 +95,7 @@ describe('对局视图', () => {
   it('选择自己的牌会触发用户活动，提交操作交给协议命令', () => {
     const onCommand = vi.fn();
     const onActivity = vi.fn();
-    render(<GameView snapshot={playing} onCommand={onCommand} onActivity={onActivity} testMode={false} />);
+    render(<GameView snapshot={playing} onCommand={onCommand} onActivity={onActivity} onLeave={vi.fn()} testMode={false} />);
 
     fireEvent.click(screen.getByRole('button', { name: '4♠' }));
     expect(onActivity).toHaveBeenCalledTimes(1);
@@ -105,7 +105,7 @@ describe('对局视图', () => {
 
   it('选择合法手牌后点击桌面空白处直接出牌', () => {
     const onCommand = vi.fn();
-    render(<GameView snapshot={playing} onCommand={onCommand} onActivity={vi.fn()} testMode={false} />);
+    render(<GameView snapshot={playing} onCommand={onCommand} onActivity={vi.fn()} onLeave={vi.fn()} testMode={false} />);
 
     fireEvent.click(screen.getByRole('button', { name: '4♠' }));
     fireEvent.click(screen.getByRole('main'));
@@ -114,7 +114,7 @@ describe('对局视图', () => {
   });
 
   it('不是自己的牌权时不能点击出牌，避免提交必然被服务端拒绝的命令', () => {
-    render(<GameView snapshot={{ ...playing, public: { ...playing.public, currentTurn: 'B' } }} onCommand={vi.fn()} onActivity={vi.fn()} testMode={false} />);
+    render(<GameView snapshot={{ ...playing, public: { ...playing.public, currentTurn: 'B' } }} onCommand={vi.fn()} onActivity={vi.fn()} onLeave={vi.fn()} testMode={false} />);
 
     fireEvent.click(screen.getByRole('button', { name: '4♠' }));
     expect(screen.getByRole('button', { name: '出牌' })).toBeDisabled();
@@ -128,7 +128,7 @@ describe('对局视图', () => {
         publicLastPlay: { seat: 'A', cards: [standardCard('A', 'hearts', 'played-ace')], kind: 'single', isDifference: false },
       },
     };
-    render(<GameView snapshot={snapshot} onCommand={vi.fn()} onActivity={vi.fn()} testMode={false} />);
+    render(<GameView snapshot={snapshot} onCommand={vi.fn()} onActivity={vi.fn()} onLeave={vi.fn()} testMode={false} />);
 
     expect(screen.getByText('A♥')).toHaveClass('played-card', 'red');
     expect(document.querySelector('.player-avatar.current-turn')).toBeInTheDocument();
@@ -144,7 +144,7 @@ describe('对局视图', () => {
       public: { ...playing.public, burstPendingSeat: 'A' },
     };
     const onCommand = vi.fn();
-    render(<GameView snapshot={snapshot} onCommand={onCommand} onActivity={vi.fn()} testMode={false} />);
+    render(<GameView snapshot={snapshot} onCommand={onCommand} onActivity={vi.fn()} onLeave={vi.fn()} testMode={false} />);
 
     expect(screen.getByText('剩余手牌可以一次出完，请选择是否爆牌')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '不爆，继续出牌' }));
@@ -174,7 +174,7 @@ describe('对局视图', () => {
       },
     };
     const onCommand = vi.fn();
-    render(<GameView snapshot={snapshot} onCommand={onCommand} onActivity={vi.fn()} testMode={false} />);
+    render(<GameView snapshot={snapshot} onCommand={onCommand} onActivity={vi.fn()} onLeave={vi.fn()} testMode={false} />);
 
     fireEvent.click(screen.getByRole('button', { name: '4♠' }));
     fireEvent.click(screen.getByRole('button', { name: '4♥' }));
@@ -202,7 +202,7 @@ describe('对局视图', () => {
       },
     };
     const onCommand = vi.fn();
-    render(<GameView snapshot={snapshot} onCommand={onCommand} onActivity={vi.fn()} testMode={false} />);
+    render(<GameView snapshot={snapshot} onCommand={onCommand} onActivity={vi.fn()} onLeave={vi.fn()} testMode={false} />);
 
     fireEvent.click(screen.getByRole('button', { name: '2♠' }));
     expect(screen.queryByRole('button', { name: '差牌' })).not.toBeInTheDocument();
@@ -228,7 +228,7 @@ describe('对局视图', () => {
       },
     };
     const onCommand = vi.fn();
-    render(<GameView snapshot={snapshot} onCommand={onCommand} onActivity={vi.fn()} testMode={false} />);
+    render(<GameView snapshot={snapshot} onCommand={onCommand} onActivity={vi.fn()} onLeave={vi.fn()} testMode={false} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'A♣' }));
     expect(screen.queryByRole('button', { name: '差牌' })).not.toBeInTheDocument();
@@ -240,14 +240,14 @@ describe('对局视图', () => {
       ...playing,
       public: { ...playing.public, differenceAvailable: true },
     };
-    render(<GameView snapshot={snapshot} onCommand={vi.fn()} onActivity={vi.fn()} testMode={false} />);
+    render(<GameView snapshot={snapshot} onCommand={vi.fn()} onActivity={vi.fn()} onLeave={vi.fn()} testMode={false} />);
 
     expect(document.querySelector('.player-avatar.current-turn')).not.toBeInTheDocument();
     expect(screen.queryByText(/按.+出牌/)).not.toBeInTheDocument();
   });
 
   it('进入下一局时清除上一局残留的选中牌', () => {
-    const { rerender } = render(<GameView snapshot={playing} onCommand={vi.fn()} onActivity={vi.fn()} testMode={false} />);
+    const { rerender } = render(<GameView snapshot={playing} onCommand={vi.fn()} onActivity={vi.fn()} onLeave={vi.fn()} testMode={false} />);
     fireEvent.click(screen.getByRole('button', { name: '4♠' }));
     expect(screen.getByRole('button', { name: '4♠' })).toHaveClass('selected');
 
@@ -255,7 +255,7 @@ describe('对局视图', () => {
       ...playing,
       public: { ...playing.public, handNumber: 2, phase: 'opening', currentTurn: null },
       private: { ...playing.private, hand: [standardCard('4', 'spades', 'a4')] },
-    }} onCommand={vi.fn()} onActivity={vi.fn()} testMode={false} />);
+    }} onCommand={vi.fn()} onActivity={vi.fn()} onLeave={vi.fn()} testMode={false} />);
     expect(screen.getByRole('button', { name: '4♠' })).not.toHaveClass('selected');
   });
 
@@ -272,7 +272,7 @@ describe('对局视图', () => {
       },
     };
     const onReady = vi.fn();
-    render(<GameView snapshot={snapshot} onCommand={vi.fn()} onActivity={vi.fn()} onReady={onReady} testMode={false} />);
+    render(<GameView snapshot={snapshot} onCommand={vi.fn()} onActivity={vi.fn()} onLeave={vi.fn()} onReady={onReady} testMode={false} />);
 
     expect(screen.getByRole('dialog', { name: '本局结算' })).toBeInTheDocument();
     expect(screen.queryByText(/"outcome"/)).not.toBeInTheDocument();
@@ -296,7 +296,7 @@ describe('对局视图', () => {
       },
       private: { seat: 'C', hand: [standardCard('4', 'spades', 'discarded-4')], burstLocked: false },
     };
-    render(<GameView snapshot={snapshot} onCommand={vi.fn()} onActivity={vi.fn()} testMode={false} />);
+    render(<GameView snapshot={snapshot} onCommand={vi.fn()} onActivity={vi.fn()} onLeave={vi.fn()} testMode={false} />);
 
     expect(document.querySelector('.player-seat.discarded-player')).toBeInTheDocument();
     expect(screen.getByText('弃牌')).toBeInTheDocument();

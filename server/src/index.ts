@@ -143,13 +143,25 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
       }
 
       if (event === EVENTS.join) {
-        const payload = (message.payload ?? {}) as { sessionToken?: string; nickname?: string; roomId?: string; role?: 'player' | 'spectator' };
+        const payload = (message.payload ?? {}) as { sessionToken?: string; nickname?: string; roomId?: string };
         const sessionToken = payload.sessionToken ?? state.sessionToken;
         if (!sessionToken) throw new Error('请先登录');
-        const snapshot = roomService.join(sessionToken, payload.nickname ?? '', payload.roomId ?? '', payload.role ?? 'player');
+        const snapshot = roomService.join(sessionToken, payload.nickname ?? '', payload.roomId ?? '');
         addMiniSocket(state, sessionToken);
         acknowledgeMini(state, requestId, { ok: true, snapshot });
         sendSnapshots();
+        return;
+      }
+
+      if (event === EVENTS.leave) {
+        const sessionToken = state.sessionToken;
+        if (!sessionToken || !roomService.isConnectionOwner(sessionToken, state.id)) {
+          throw new Error('当前连接已失去操作权');
+        }
+        roomService.leave(sessionToken);
+        acknowledgeMini(state, requestId, { ok: true });
+        sendSnapshots();
+        state.socket.close();
         return;
       }
 
@@ -200,16 +212,31 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
       }
     });
 
-    socket.on(EVENTS.join, (payload: { sessionToken?: string; nickname?: string; roomId?: string; role?: 'player' | 'spectator' }, ack: unknown) => {
+    socket.on(EVENTS.join, (payload: { sessionToken?: string; nickname?: string; roomId?: string }, ack: unknown) => {
       try {
         const sessionToken = payload?.sessionToken ?? socket.data.sessionToken;
-        const snapshot = roomService.join(sessionToken, payload?.nickname ?? '', payload?.roomId ?? '', payload?.role ?? 'player');
+        const snapshot = roomService.join(sessionToken, payload?.nickname ?? '', payload?.roomId ?? '');
         socket.data.sessionToken = sessionToken;
         addSocket(sessionToken, socket);
         acknowledge(ack, { ok: true, snapshot });
         sendSnapshots();
       } catch (error) {
         acknowledge(ack, { ok: false, error: error instanceof Error ? error.message : '入房失败' });
+      }
+    });
+
+    socket.on(EVENTS.leave, (ack: unknown) => {
+      try {
+        const sessionToken = socket.data.sessionToken;
+        if (typeof sessionToken !== 'string' || !roomService.isConnectionOwner(sessionToken, socket.id)) {
+          throw new Error('当前连接已失去操作权');
+        }
+        roomService.leave(sessionToken);
+        acknowledge(ack, { ok: true });
+        sendSnapshots();
+        socket.disconnect(true);
+      } catch (error) {
+        acknowledge(ack, { ok: false, error: error instanceof Error ? error.message : '退出失败' });
       }
     });
 

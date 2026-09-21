@@ -3,7 +3,6 @@ import {
   CommandPayload,
   RoomSnapshot,
   PublicSnapshot,
-  RoomRole,
   isCommandEnvelope,
 } from '../../shared/src/protocol';
 import {
@@ -84,21 +83,21 @@ export class RoomService {
     return { sessionToken: session.sessionToken, playerId: session.playerId };
   }
 
-  join(sessionToken: string, nickname: string, roomId: string, role: RoomRole = 'player'): RoomSnapshot {
+  join(sessionToken: string, nickname: string, roomId: string): RoomSnapshot {
     const session = this.sessions.get(sessionToken);
     if (roomId !== '414') throw new RoomServiceError('ROOM_NOT_FOUND', '房间号不存在');
     if (!nickname.trim()) throw new RoomServiceError('INVALID_NICKNAME', '昵称不能为空');
 
     if (session.seat || session.role === 'spectator') return this.getSnapshot(sessionToken);
-    if (role === 'spectator') {
-      if (!this.state) throw new RoomServiceError('ROOM_NOT_FOUND', '房间尚未创建，请先让玩家进入房间');
+    if (!this.state) this.state = createGameState(roomId, session.playerId);
+    const hasOpenPlayerSeat = Object.values(this.state.players).some((player) => player === null);
+    if (!hasOpenPlayerSeat) {
       if (this.sessions.listSpectators().length >= MAX_SPECTATORS) {
         throw new RoomServiceError('SPECTATORS_FULL', '观战位已满');
       }
       this.sessions.setIdentity(sessionToken, 'spectator', nickname.trim());
       return this.getSnapshot(sessionToken);
     }
-    if (!this.state) this.state = createGameState(roomId, session.playerId);
     try {
       this.state = joinPlayer(this.state, { id: session.playerId, nickname: nickname.trim() }, this.now());
     } catch (error) {
@@ -210,6 +209,19 @@ export class RoomService {
     if (!this.sessions.detach(sessionToken, connectionId)) return;
     const seat = this.sessions.get(sessionToken).seat;
     if (this.state && seat) this.state = setPlayerConnection(this.state, seat, false);
+  }
+
+  leave(sessionToken: string): void {
+    const session = this.sessions.get(sessionToken);
+    if (session.role === 'spectator' || !session.seat) {
+      this.sessions.clearIdentity(sessionToken);
+      return;
+    }
+    if (!this.state || this.state.phase !== 'lobby') {
+      throw new RoomServiceError('HAND_IN_PROGRESS', '牌局进行中不能退出玩家位，请等待本局结束');
+    }
+    this.state = removePlayer(this.state, session.seat);
+    this.sessions.clearIdentity(sessionToken);
   }
 
   scan(now = this.now()): boolean {

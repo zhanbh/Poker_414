@@ -34,6 +34,7 @@ describe('登录路径', () => {
       onReplaced: () => () => undefined,
       activity: () => undefined,
       command: async () => ({ ok: true as const, snapshot: snapshot('lobby') }),
+      leave: async () => undefined,
     };
     render(<App transport={transport} />);
 
@@ -62,6 +63,7 @@ describe('登录路径', () => {
       onReplaced: () => () => undefined,
       activity: () => undefined,
       command: async () => ({ ok: true as const, snapshot: snapshot('lobby') }),
+      leave: async () => undefined,
     };
     render(<App transport={transport} />);
 

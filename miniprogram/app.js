@@ -22,4 +22,12 @@ App({
   getSnapshot() {
     return this.globalData.snapshot;
   },
+
+  leaveRoom() {
+    return this.getTransport().leave().then(() => {
+      wx.removeStorageSync('414.sessionToken');
+      wx.removeStorageSync('414.nickname');
+      this.globalData.snapshot = null;
+    });
+  },
 });

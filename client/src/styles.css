@@ -191,3 +191,65 @@ main { min-height: 100svh; padding: clamp(16px, 4vw, 32px); }
   .table-center { inset-inline: 4px; }
   .card { min-width: 41px; padding-inline: 4px; }
 }
+
+/* Keep the mobile table in document flow so every seat remains visible on narrow screens. */
+@media (max-width: 760px) {
+  .table-layout {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      'score score'
+      'top top'
+      'left right'
+      'center center'
+      'bottom bottom';
+    gap: 8px;
+    min-height: 0;
+    padding: 8px;
+    overflow: hidden;
+  }
+  .table-layout::before { inset: 0; border-radius: 16px; }
+  .team-scoreboard {
+    position: relative;
+    top: auto;
+    right: auto;
+    left: auto;
+    width: 100%;
+    transform: none;
+    grid-area: score;
+  }
+  .table-center {
+    position: relative;
+    inset: auto;
+    width: 100%;
+    min-width: 0;
+    grid-area: center;
+  }
+  .table-seat {
+    position: relative;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    left: auto;
+    width: auto;
+    max-width: none;
+    min-width: 0;
+    transform: none;
+  }
+  .table-seat.seat-top { grid-area: top; }
+  .table-seat.seat-left { grid-area: left; }
+  .table-seat.seat-right { grid-area: right; }
+  .table-seat.seat-bottom { grid-area: bottom; }
+}
+@media (max-width: 760px) {
+  .table-seat.seat-top,
+  .table-seat.seat-left,
+  .table-seat.seat-right,
+  .table-seat.seat-bottom {
+    top: auto;
+    right: auto;
+    bottom: auto;
+    left: auto;
+    transform: none;
+  }
+}

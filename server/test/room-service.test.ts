@@ -172,4 +172,20 @@ describe('单房间会话与命令服务', () => {
     expect(() => room.leave(auths[1].sessionToken)).toThrow(/牌局进行中/);
     expect(room.getState()!.players.B?.nickname).toBe('乙');
   });
+
+  it('房主不能移除自己，避免房间清空后会话仍停留在房间', () => {
+    const room = service();
+    const auth = room.login('inner-414');
+    room.join(auth.sessionToken, '甲', '414');
+    const state = room.getState()!;
+
+    expect(() => room.dispatch(auth.sessionToken, {
+      type: 'remove-player',
+      requestId: 'remove-self',
+      handNumber: state.handNumber,
+      stateVersion: state.version,
+      payload: { seat: 'A' },
+    })).toThrow(/不能移除自己/);
+    expect(room.getSnapshot(auth.sessionToken).private.seat).toBe('A');
+  });
 });

@@ -25,6 +25,8 @@ describe('大厅视图', () => {
     expect(screen.getByText('房主')).toBeInTheDocument();
     expect(screen.getByText('等待开局')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '开始游戏' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: '移除甲' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '移除乙' })).toBeInTheDocument();
     expect(screen.getAllByText(/空位/)).toHaveLength(2);
     expect(onStart).not.toHaveBeenCalled();
   });

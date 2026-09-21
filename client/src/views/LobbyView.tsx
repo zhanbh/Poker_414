@@ -24,7 +24,7 @@ export function LobbyView({ snapshot, ownSeat, spectator = false, onStart, onRem
       {spectator ? <p className="spectator-banner">观战模式 · 等待四名玩家开局</p> : null}
       {spectators.length > 0 ? <section className="spectator-lobby"><h2>观战席（{spectators.length}/4）</h2><p>{spectators.map((viewer) => `${viewer.nickname}${viewer.connected ? '' : '（已断开）'}`).join('、')}</p></section> : null}
       {snapshot.players.find((player) => player.seat === ownSeat)?.isHost ? <button type="button" onClick={onStart} disabled={!full}>开始游戏</button> : null}
-      {snapshot.players.find((player) => player.seat === ownSeat)?.isHost ? <div className="remove-actions">{snapshot.players.map((player) => <button type="button" key={player.seat} onClick={() => onRemove(player.seat)}>移除{player.nickname}</button>)}</div> : null}
+      {snapshot.players.find((player) => player.seat === ownSeat)?.isHost ? <div className="remove-actions">{snapshot.players.filter((player) => player.seat !== ownSeat).map((player) => <button type="button" key={player.seat} onClick={() => onRemove(player.seat)}>移除{player.nickname}</button>)}</div> : null}
       <button type="button" className="leave-room-button" onClick={onLeave}>退出房间</button>
     </main>
   );

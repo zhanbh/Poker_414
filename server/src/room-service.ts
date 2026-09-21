@@ -304,6 +304,7 @@ export class RoomService {
       case 'remove-player': {
         if (session.playerId !== state.hostId) throw new RoomServiceError('NOT_HOST', '只有房主可以移除玩家');
         const target = payload as Extract<CommandPayload, { readonly seat: import('../../shared/src/scoring').Seat }>;
+        if (target.seat === session.seat) throw new RoomServiceError('CANNOT_REMOVE_SELF', '不能移除自己');
         const targetPlayer = state.players[target.seat];
         const next = removePlayer(state, target.seat);
         if (targetPlayer) this.sessions.clearSeatForPlayer(targetPlayer.id);

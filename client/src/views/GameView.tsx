@@ -11,6 +11,7 @@ import { CardHand, cardColorClass, cardLabel } from '../components/CardHand';
 import { MainStatus } from '../components/MainStatus';
 import { PlayerSeat } from '../components/PlayerSeat';
 import { SettlementDialog } from '../components/SettlementDialog';
+import { SpectatorHands } from '../components/SpectatorHands';
 import { StandDialog } from '../components/StandDialog';
 
 export type GameCommand = (type: CommandType, payload: CommandPayload) => void;
@@ -38,6 +39,7 @@ export function GameView({ snapshot, onCommand, onActivity, onReady, testMode }:
   useEffect(() => {
     setSelectedIds([]);
   }, [snapshot.public.handNumber]);
+  const isSpectator = Boolean(snapshot.private.spectator);
   const ownHand = snapshot.private.hand;
   const tableSeats = useMemo(() => tableSeatsFor(snapshot.private.seat), [snapshot.private.seat]);
   const ownPlayer = snapshot.public.players.find((player) => player.seat === snapshot.private.seat);
@@ -106,7 +108,8 @@ export function GameView({ snapshot, onCommand, onActivity, onReady, testMode }:
   return (
     <main className="game-view" onClick={handleBoardClick}>
       {testMode ? <div className="test-mode-banner" role="status">单机四人测试模式 · 每个标签页都是独立玩家</div> : null}
-      {snapshot.public.phase === 'opening' ? <><div className="opening-draw">{snapshot.public.openingMode === 'normal' ? '随机首牌权候选' : '当前立棍首牌权'}：{snapshot.public.candidateLeader ?? '抽取中'}</div><StandDialog mode={snapshot.public.openingMode} ownSeat={snapshot.private.seat} modeTeam={snapshot.public.modeTeam} openingTurn={snapshot.public.openingTurn} onChoose={(choice) => onCommand('opening', choice)} /></> : null}
+      {isSpectator ? <div className="spectator-banner" role="status">观战模式 · 上帝视角 · 不参与出牌</div> : null}
+      {snapshot.public.phase === 'opening' && !isSpectator ? <><div className="opening-draw">{snapshot.public.openingMode === 'normal' ? '随机首牌权候选' : '当前立棍首牌权'}：{snapshot.public.candidateLeader ?? '抽取中'}</div><StandDialog mode={snapshot.public.openingMode} ownSeat={snapshot.private.seat} modeTeam={snapshot.public.modeTeam} openingTurn={snapshot.public.openingTurn} onChoose={(choice) => onCommand('opening', choice)} /></> : null}
       <div className="table-layout">
         <MainStatus snapshot={snapshot.public} />
         <div className="team-scoreboard" aria-label="队伍主牌计分">
@@ -152,17 +155,19 @@ export function GameView({ snapshot, onCommand, onActivity, onReady, testMode }:
           </div> : null}
         </div>)}
       </div>
-      <CardHand cards={ownHand} main={handSortMain} selectedIds={selected} onToggle={onToggle} dimmed={ownHandIsDiscarded} resetKey={snapshot.public.handNumber} />
+      {isSpectator
+        ? <SpectatorHands hands={snapshot.private.spectatorHands ?? []} main={handSortMain} />
+        : <CardHand cards={ownHand} main={handSortMain} selectedIds={selected} onToggle={onToggle} dimmed={ownHandIsDiscarded} resetKey={snapshot.public.handNumber} />}
       {canClickBlankToPlay ? <p className="play-hint">已选牌合法，点击桌面空白处即可出牌</p> : null}
-      {snapshot.public.burstPendingSeat && !burstPendingForMe ? <p className="burst-waiting">等待{playersBySeat.get(snapshot.public.burstPendingSeat)?.nickname ?? snapshot.public.burstPendingSeat}选择是否报爆</p> : null}
-      <BurstPrompt kinds={burstKinds} onChoose={(kind) => onCommand('burst', { kind })} onSkip={() => onCommand('burst', { kind: 'skip' })} />
-      {showSettlement && snapshot.public.phase === 'settled' && snapshot.public.settlement ? <SettlementDialog
+      {snapshot.public.burstPendingSeat && !burstPendingForMe && !isSpectator ? <p className="burst-waiting">等待{playersBySeat.get(snapshot.public.burstPendingSeat)?.nickname ?? snapshot.public.burstPendingSeat}选择是否报爆</p> : null}
+      {!isSpectator ? <BurstPrompt kinds={burstKinds} onChoose={(kind) => onCommand('burst', { kind })} onSkip={() => onCommand('burst', { kind: 'skip' })} /> : null}
+      {showSettlement && !isSpectator && snapshot.public.phase === 'settled' && snapshot.public.settlement ? <SettlementDialog
         settlement={snapshot.public.settlement}
         mode={snapshot.public.openingMode}
         modeTeam={snapshot.public.modeTeam}
         onClose={closeSettlement}
       /> : null}
-      {snapshot.public.phase === 'settled' && ownPlayer?.ready ? <p className="ready-waiting">已准备，等待其他玩家</p> : null}
+      {snapshot.public.phase === 'settled' && !isSpectator && ownPlayer?.ready ? <p className="ready-waiting">已准备，等待其他玩家</p> : null}
     </main>
   );
 }

@@ -13,6 +13,8 @@ export const EVENTS = {
 
 export const MINI_PROGRAM_SOCKET_PATH = '/414-ws';
 
+export type RoomRole = 'player' | 'spectator';
+
 export type CommandType =
   | 'start-hand'
   | 'opening'
@@ -55,6 +57,11 @@ export interface PublicPlayerView {
   readonly isHost: boolean;
 }
 
+export interface PublicSpectatorView {
+  readonly nickname: string;
+  readonly connected: boolean;
+}
+
 export interface PublicTrickView {
   readonly leadSeat: Seat;
   readonly lastPlaySeat: Seat;
@@ -69,6 +76,7 @@ export interface PublicSnapshot {
   readonly handNumber: number;
   readonly version: number;
   readonly players: PublicPlayerView[];
+  readonly spectators?: PublicSpectatorView[];
   readonly hostSeat: Seat | null;
   readonly levels: { readonly AC: Level; readonly BD: Level };
   readonly completedRounds: { readonly AC: number; readonly BD: number };
@@ -93,6 +101,8 @@ export interface PrivateSnapshot {
   readonly hand: Card[];
   readonly burstLocked: boolean;
   readonly burstKinds?: HandKind[];
+  readonly spectator?: boolean;
+  readonly spectatorHands?: ReadonlyArray<{ readonly seat: Seat; readonly nickname: string; readonly hand: Card[] }>;
 }
 
 export interface RoomSnapshot {

@@ -22,6 +22,8 @@ Page({
     publicLastPlay: null,
     currentTurn: null,
     ownSeat: null,
+    spectator: false,
+    spectatorHands: [],
     isMyTurn: false,
     canPlay: false,
     canDifference: false,
@@ -76,6 +78,10 @@ Page({
     }
     const selected = new Set(this.data.selectedIds);
     const hand = displayHand(snapshot.private.hand, snapshot.public.effectiveMain).map((card) => ({ ...card, selected: selected.has(card.id) }));
+    const spectatorHands = (snapshot.private.spectatorHands || []).map((player) => ({
+      ...player,
+      hand: displayHand(player.hand, snapshot.public.effectiveMain),
+    }));
     const ownSeat = snapshot.private.seat;
     const ownPlayer = snapshot.public.players.find((player) => player.seat === ownSeat);
     const isMyTurn = snapshot.public.phase === 'playing'
@@ -111,6 +117,8 @@ Page({
       playedCards: displayCards(snapshot.public.publicLastPlay ? snapshot.public.publicLastPlay.cards : []),
       currentTurn: snapshot.public.currentTurn,
       ownSeat,
+      spectator: Boolean(snapshot.private.spectator),
+      spectatorHands,
       isMyTurn,
       canPlay: isMyTurn,
       canDifference,

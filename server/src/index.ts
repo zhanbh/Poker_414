@@ -143,10 +143,10 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
       }
 
       if (event === EVENTS.join) {
-        const payload = (message.payload ?? {}) as { sessionToken?: string; nickname?: string; roomId?: string };
+        const payload = (message.payload ?? {}) as { sessionToken?: string; nickname?: string; roomId?: string; role?: 'player' | 'spectator' };
         const sessionToken = payload.sessionToken ?? state.sessionToken;
         if (!sessionToken) throw new Error('请先登录');
-        const snapshot = roomService.join(sessionToken, payload.nickname ?? '', payload.roomId ?? '');
+        const snapshot = roomService.join(sessionToken, payload.nickname ?? '', payload.roomId ?? '', payload.role ?? 'player');
         addMiniSocket(state, sessionToken);
         acknowledgeMini(state, requestId, { ok: true, snapshot });
         sendSnapshots();
@@ -200,10 +200,10 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
       }
     });
 
-    socket.on(EVENTS.join, (payload: { sessionToken?: string; nickname?: string; roomId?: string }, ack: unknown) => {
+    socket.on(EVENTS.join, (payload: { sessionToken?: string; nickname?: string; roomId?: string; role?: 'player' | 'spectator' }, ack: unknown) => {
       try {
         const sessionToken = payload?.sessionToken ?? socket.data.sessionToken;
-        const snapshot = roomService.join(sessionToken, payload?.nickname ?? '', payload?.roomId ?? '');
+        const snapshot = roomService.join(sessionToken, payload?.nickname ?? '', payload?.roomId ?? '', payload?.role ?? 'player');
         socket.data.sessionToken = sessionToken;
         addSocket(sessionToken, socket);
         acknowledge(ack, { ok: true, snapshot });

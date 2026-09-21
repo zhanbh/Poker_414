@@ -3,6 +3,7 @@ import {
   CommandPayload,
   RoomSnapshot,
   PublicSnapshot,
+  RoomRole,
   isCommandEnvelope,
 } from '../../shared/src/protocol';
 import {
@@ -33,6 +34,8 @@ export interface RoomServiceOptions {
   readonly now?: () => number;
   readonly random?: () => number;
 }
+
+const MAX_SPECTATORS = 4;
 
 export interface AuthResult {
   readonly sessionToken: string;
@@ -81,12 +84,20 @@ export class RoomService {
     return { sessionToken: session.sessionToken, playerId: session.playerId };
   }
 
-  join(sessionToken: string, nickname: string, roomId: string): RoomSnapshot {
+  join(sessionToken: string, nickname: string, roomId: string, role: RoomRole = 'player'): RoomSnapshot {
     const session = this.sessions.get(sessionToken);
     if (roomId !== '414') throw new RoomServiceError('ROOM_NOT_FOUND', '房间号不存在');
     if (!nickname.trim()) throw new RoomServiceError('INVALID_NICKNAME', '昵称不能为空');
 
-    if (this.state && session.seat) return this.getSnapshot(sessionToken);
+    if (session.seat || session.role === 'spectator') return this.getSnapshot(sessionToken);
+    if (role === 'spectator') {
+      if (!this.state) throw new RoomServiceError('ROOM_NOT_FOUND', '房间尚未创建，请先让玩家进入房间');
+      if (this.sessions.listSpectators().length >= MAX_SPECTATORS) {
+        throw new RoomServiceError('SPECTATORS_FULL', '观战位已满');
+      }
+      this.sessions.setIdentity(sessionToken, 'spectator', nickname.trim());
+      return this.getSnapshot(sessionToken);
+    }
     if (!this.state) this.state = createGameState(roomId, session.playerId);
     try {
       this.state = joinPlayer(this.state, { id: session.playerId, nickname: nickname.trim() }, this.now());
@@ -96,6 +107,7 @@ export class RoomService {
     const seated = Object.values(this.state.players).find((player) => player?.id === session.playerId);
     if (!seated) throw new RoomServiceError('JOIN_FAILED', '入房失败');
     this.sessions.setSeat(sessionToken, seated.seat);
+    this.sessions.setIdentity(sessionToken, 'player', seated.nickname);
     return this.getSnapshot(sessionToken);
   }
 
@@ -130,12 +142,17 @@ export class RoomService {
         remainingHand: state.phase === 'settled' ? [...player.hand] : [],
         isHost: player.id === state.hostId,
       }));
+    const spectators = this.sessions.listSpectators().map((spectator) => ({
+      nickname: spectator.nickname ?? '观战者',
+      connected: spectator.connectionId !== null,
+    }));
     const publicState: PublicSnapshot = {
       roomId: state.roomId,
       phase: state.phase,
       handNumber: state.handNumber,
       version: state.version,
       players,
+      spectators,
       hostSeat: Object.values(state.players).find((player) => player?.id === state.hostId)?.seat ?? null,
       levels: state.levels,
       completedRounds: state.completedRounds,
@@ -171,6 +188,12 @@ export class RoomService {
         hand: ownPlayer ? [...ownPlayer.hand] : [],
         burstLocked: ownPlayer?.burstLocked ?? false,
         burstKinds,
+        spectator: session.role === 'spectator',
+        ...(session.role === 'spectator' ? {
+          spectatorHands: Object.values(state.players)
+            .filter((player): player is NonNullable<typeof player> => player !== null)
+            .map((player) => ({ seat: player.seat, nickname: player.nickname, hand: [...player.hand] })),
+        } : {}),
       },
     };
   }
@@ -286,6 +309,7 @@ export class RoomService {
       handNumber: 0,
       version: 0,
       players: [],
+      spectators: [],
       hostSeat: null,
       levels: { AC: '3', BD: '3' },
       completedRounds: { AC: 0, BD: 0 },

@@ -98,3 +98,96 @@ main { min-height: 100vh; padding: 32px; }
   .table-center { inset-inline: 24%; }
   .team-scoreboard { right: 2%; }
 }
+
+.spectator-banner { padding: 10px 14px; color: #102331; background: #9dd9e5; border-radius: 8px; font-weight: 700; }
+.spectator-lobby { margin-top: 16px; padding: 14px 16px; background: #18384b; border: 1px solid #397a8b; border-radius: 10px; }
+.spectator-lobby h2 { margin: 0 0 8px; }
+.spectator-hands { margin-top: 16px; padding: 16px; background: #18384b; border: 1px solid #397a8b; border-radius: 12px; }
+.spectator-hand-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+.spectator-hand { padding: 10px; background: rgba(29, 75, 94, .78); border-radius: 8px; }
+.spectator-hand h3 { margin: 0; font-size: 1rem; }
+
+
+/* H5 / mobile web adaptation */
+html, body, #root { min-height: 100%; }
+body { min-width: 0; overflow-x: hidden; }
+main { min-height: 100svh; padding: clamp(16px, 4vw, 32px); }
+.access-view { width: min(100%, 420px); }
+.access-view form { width: 100%; }
+.access-view input, .access-view select, .access-view button { min-height: 44px; }
+.lobby-view, .game-view { width: 100%; }
+.lobby-view header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.lobby-view header h1 { min-width: 0; overflow-wrap: anywhere; }
+.team-grid { min-width: 0; }
+
+@media (max-width: 760px) {
+  main { padding: 16px 12px 24px; }
+  .access-view { place-content: start center; padding-top: 8vh; }
+  .access-view h1 { margin-bottom: 0; font-size: clamp(1.8rem, 8vw, 2.4rem); }
+  .access-view form { padding: 18px; }
+  .team-grid { grid-template-columns: 1fr; gap: 12px; }
+  .team-grid section { padding: 12px; }
+  .lobby-view header { display: block; }
+  .lobby-view header h1 { margin-bottom: 6px; font-size: clamp(1.5rem, 7vw, 2rem); }
+  .lobby-view > button { width: 100%; min-height: 44px; margin-top: 14px; }
+  .remove-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .remove-actions button { min-height: 40px; padding: 8px; }
+
+  .game-view { overflow: hidden; }
+  .table-layout { min-height: 650px; margin: 16px auto; }
+  .table-layout::before {
+    inset: 104px 2% 92px;
+    border-radius: 28px;
+    box-shadow: inset 0 0 0 8px rgba(8, 34, 45, .2), 0 12px 28px rgba(0, 0, 0, .25);
+  }
+  .main-status { top: 0; }
+  .team-scoreboard {
+    top: 0;
+    right: auto;
+    left: 50%;
+    width: min(100% - 96px, 300px);
+    transform: translateX(-50%);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .team-main-tag { min-width: 0; grid-template-columns: 1fr auto; }
+  .table-center { inset: 190px 8px 174px; }
+  .table-center .public-play { width: 100%; max-height: 150px; overflow: auto; }
+  .table-seat { width: 44%; max-width: 190px; }
+  .table-seat.seat-top { top: 72px; }
+  .table-seat.seat-bottom { bottom: 8px; }
+  .table-seat.seat-left { top: 53%; left: 0; }
+  .table-seat.seat-right { top: 53%; right: 0; }
+  .player-seat { min-height: 68px; padding: 7px; gap: 4px; }
+  .player-identity { gap: 7px; }
+  .player-avatar { flex-basis: 44px; width: 44px; height: 44px; font-size: 1rem; }
+  .player-info { gap: 2px; font-size: .8rem; }
+  .player-info strong { font-size: .82rem; }
+  .seat-actions { margin-top: 5px; }
+  .seat-actions .action-bar { gap: 4px; padding: 5px; }
+  .seat-actions button { padding: 5px 6px; font-size: .78rem; }
+  .action-bar, .stand-dialog, .burst-prompt { gap: 8px; padding: 10px; }
+  .action-bar button, .stand-dialog button, .burst-prompt button { min-height: 40px; }
+  .hand-toolbar { flex-wrap: wrap; gap: 8px; }
+  .card-hand { gap: 5px; min-height: 88px; padding: 14px 0; overscroll-behavior-x: contain; }
+  .card { min-width: 44px; padding: 14px 5px; font-size: .9rem; }
+  .spectator-hand-grid { grid-template-columns: 1fr; gap: 8px; }
+  .spectator-hands { padding: 12px; }
+  .spectator-hand { padding: 9px; }
+  .spectator-hand .played-cards { gap: 4px; }
+  .spectator-hand .played-card { min-width: 36px; padding: 6px 4px; font-size: .82rem; }
+  .settlement-backdrop { padding: 12px; }
+  .settlement-dialog { padding: 22px 16px; }
+}
+
+@media (max-width: 380px) {
+  main { padding-inline: 8px; }
+  .table-layout { min-height: 620px; }
+  .table-layout::before { inset-inline: 0; }
+  .table-seat { width: 46%; }
+  .player-avatar { flex-basis: 38px; width: 38px; height: 38px; font-size: .9rem; }
+  .player-info { font-size: .74rem; }
+  .player-info strong { font-size: .76rem; }
+  .team-scoreboard { width: min(100% - 80px, 270px); }
+  .table-center { inset-inline: 4px; }
+  .card { min-width: 41px; padding-inline: 4px; }
+}

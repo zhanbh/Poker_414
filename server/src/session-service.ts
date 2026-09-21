@@ -4,6 +4,8 @@ import { Seat } from '../../shared/src/scoring';
 export interface Session {
   readonly sessionToken: string;
   readonly playerId: string;
+  role: 'player' | 'spectator' | null;
+  nickname: string | null;
   seat: Seat | null;
   connectionId: string | null;
 }
@@ -15,6 +17,8 @@ export class SessionService {
     const session: Session = {
       sessionToken: randomBytes(24).toString('hex'),
       playerId: randomBytes(12).toString('hex'),
+      role: null,
+      nickname: null,
       seat: null,
       connectionId: null,
     };
@@ -30,6 +34,12 @@ export class SessionService {
 
   setSeat(sessionToken: string, seat: Seat | null): void {
     this.get(sessionToken).seat = seat;
+  }
+
+  setIdentity(sessionToken: string, role: 'player' | 'spectator', nickname: string): void {
+    const session = this.get(sessionToken);
+    session.role = role;
+    session.nickname = nickname;
   }
 
   attach(sessionToken: string, connectionId: string): { previousConnectionId: string | null } {
@@ -52,6 +62,14 @@ export class SessionService {
 
   clearSeatForPlayer(playerId: string): void {
     const session = this.findByPlayerId(playerId);
-    if (session) session.seat = null;
+    if (session) {
+      session.seat = null;
+      session.role = null;
+      session.nickname = null;
+    }
+  }
+
+  listSpectators(): Session[] {
+    return [...this.sessions.values()].filter((session) => session.role === 'spectator');
   }
 }

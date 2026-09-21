@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CommandEnvelope, CommandPayload, CommandType, RoomSnapshot } from '../../shared/src/protocol';
+import { CommandEnvelope, CommandPayload, CommandType, RoomRole, RoomSnapshot } from '../../shared/src/protocol';
 import { AccessView } from './views/AccessView';
 import { GameView } from './views/GameView';
 import { LobbyView } from './views/LobbyView';
@@ -7,6 +7,7 @@ import { ClientTransport, createSocketClient } from './transport/socket-client';
 
 const SESSION_KEY = '414.sessionToken';
 const NICKNAME_KEY = '414.nickname';
+const ROLE_KEY = '414.role';
 
 function isTestModeEnabled(): boolean {
   return new URLSearchParams(window.location.search).get('test') === '1';
@@ -56,11 +57,12 @@ export function App({ transport: providedTransport }: { readonly transport?: Cli
     const storage = testMode ? sessionStorage : localStorage;
     const savedToken = storage.getItem(SESSION_KEY);
     const savedNickname = storage.getItem(NICKNAME_KEY);
+    const savedRole = storage.getItem(ROLE_KEY) === 'spectator' ? 'spectator' : 'player';
     if (!savedToken || !savedNickname) return;
     let cancelled = false;
     setBusy(true);
     transport.login('', savedToken)
-      .then(() => transport.join(savedNickname, '414'))
+      .then(() => transport.join(savedNickname, '414', savedRole))
       .then((snap) => { if (!cancelled) consumeSnapshot(snap); })
       .catch(() => {
         // 恢复失败，清除过期凭据，留在登录页
@@ -83,7 +85,7 @@ export function App({ transport: providedTransport }: { readonly transport?: Cli
     void transport.command(command).then((result) => consumeSnapshot(result.snapshot)).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : '操作失败'));
   };
 
-  const enterRoom = async (inviteCode: string, nickname: string) => {
+  const enterRoom = async (inviteCode: string, nickname: string, role: RoomRole) => {
     setBusy(true);
     setError('');
     try {
@@ -92,7 +94,8 @@ export function App({ transport: providedTransport }: { readonly transport?: Cli
       const auth = await transport.login(inviteCode, savedToken);
       storage.setItem(SESSION_KEY, auth.sessionToken);
       storage.setItem(NICKNAME_KEY, nickname);
-      consumeSnapshot(await transport.join(nickname, '414'));
+      storage.setItem(ROLE_KEY, role);
+      consumeSnapshot(await transport.join(nickname, '414', role));
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : '进入房间失败');
     } finally {
@@ -103,7 +106,7 @@ export function App({ transport: providedTransport }: { readonly transport?: Cli
   const roomNotice = connectionNotice ? <p className="room-notice" role="status">{connectionNotice}</p> : null;
   if (!snapshot) return <><AccessView onSubmit={enterRoom} error={error} busy={busy} testMode={testMode} />{roomNotice}</>;
   if (snapshot.public.phase === 'lobby') {
-    return <><LobbyView snapshot={snapshot.public} ownSeat={snapshot.private.seat} onStart={() => runCommand('start-hand', {})} onRemove={(seat) => runCommand('remove-player', { seat })} testMode={testMode} />{roomNotice}{error ? <p role="alert">{error}</p> : null}</>;
+    return <><LobbyView snapshot={snapshot.public} ownSeat={snapshot.private.seat} spectator={Boolean(snapshot.private.spectator)} onStart={() => runCommand('start-hand', {})} onRemove={(seat) => runCommand('remove-player', { seat })} testMode={testMode} />{roomNotice}{error ? <p role="alert">{error}</p> : null}</>;
   }
   return <><GameView snapshot={snapshot} onCommand={runCommand} onActivity={() => transport.activity()} onReady={() => runCommand('ready', {})} testMode={testMode} />{roomNotice}{error ? <p role="alert">{error}</p> : null}</>;
 }

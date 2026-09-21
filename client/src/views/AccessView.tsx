@@ -1,5 +1,5 @@
 export function AccessView({ onSubmit, error, busy, testMode }: {
-  readonly onSubmit: (inviteCode: string, nickname: string) => void;
+  readonly onSubmit: (inviteCode: string, nickname: string, role: 'player' | 'spectator') => void;
   readonly error: string;
   readonly busy: boolean;
   readonly testMode: boolean;
@@ -8,9 +8,10 @@ export function AccessView({ onSubmit, error, busy, testMode }: {
     <main className="access-view">
       <h1>414 内测</h1>
       <p>私房邀请制 · 4 人桌</p>
-      <form onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); onSubmit(String(form.get('inviteCode') ?? ''), String(form.get('nickname') ?? '')); }}>
+      <form onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); onSubmit(String(form.get('inviteCode') ?? ''), String(form.get('nickname') ?? ''), String(form.get('role') ?? 'player') as 'player' | 'spectator'); }}>
         <label>邀请码<input name="inviteCode" aria-label="邀请码" autoComplete="off" required /></label>
         <label>昵称<input name="nickname" aria-label="昵称" maxLength={12} required /></label>
+        <label>进入方式<select name="role" aria-label="进入方式" defaultValue="player"><option value="player">玩家</option><option value="spectator">观战</option></select></label>
         <button type="submit" disabled={busy}>进入房间</button>
       </form>
       {testMode

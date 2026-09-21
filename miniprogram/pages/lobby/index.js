@@ -12,6 +12,8 @@ Page({
     playerCount: 0,
     isHost: false,
     full: false,
+    spectator: false,
+    spectators: [],
     error: '',
   },
 
@@ -46,6 +48,8 @@ Page({
       playerCount: snapshot.public.players.length,
       isHost: Boolean(own && own.isHost),
       full: players.every((player) => player.nickname),
+      spectator: Boolean(snapshot.private.spectator),
+      spectators: snapshot.public.spectators || [],
     });
   },
 

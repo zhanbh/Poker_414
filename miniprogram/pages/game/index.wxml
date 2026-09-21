@@ -3,6 +3,7 @@
     <view class="title">414 对局</view>
     <view class="muted">第 {{handNumber}} 局 · {{phaseLabel}}</view>
   </view>
+  <view wx:if="{{spectator}}" class="spectator-banner">观战模式 · 上帝视角 · 不参与出牌</view>
   <view wx:if="{{connectionNotice}}" class="connection-notice">{{connectionNotice}}</view>
 
   <view class="score-row">
@@ -32,18 +33,28 @@
     <view wx:if="{{phase === 'playing' && canClickBlank}}" class="play-hint">已选牌合法，点击桌面空白处即可出牌</view>
   </view>
 
-  <view wx:if="{{phase === 'opening'}}" class="panel opening-panel">
+  <view wx:if="{{phase === 'opening' && !spectator}}" class="panel opening-panel">
     <view class="section-title">{{openingTitle}}</view>
     <button wx:if="{{canOpeningAct && openingMode === 'stand'}}" class="primary-button" data-kind="stand" bindtap="onOpening">立棍</button>
     <button wx:if="{{canOpeningAct && openingMode === 'reverse'}}" class="primary-button" data-kind="reverse" bindtap="onOpening">反立</button>
     <button wx:if="{{canOpeningAct}}" class="secondary-button" data-kind="pass" bindtap="onOpening">跳过</button>
   </view>
 
-  <view class="hand-panel">
+  <view wx:if="{{!spectator}}" class="hand-panel">
     <view class="section-title">我的手牌（{{hand.length}}）</view>
     <view class="hand-grid">
       <view wx:for="{{hand}}" wx:key="id" class="card {{item.selected ? 'selected' : ''}}" data-id="{{item.id}}" bindtap="onCardTap">
         <text>{{item.label}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{spectator}}" class="panel spectator-hands">
+    <view class="section-title">上帝视角 · 全部手牌</view>
+    <view wx:for="{{spectatorHands}}" wx:for-item="player" wx:key="seat" class="spectator-hand">
+      <view class="spectator-hand-title">{{player.seat}} · {{player.nickname}}（{{player.hand.length}}张）</view>
+      <view class="hand-grid">
+        <view wx:for="{{player.hand}}" wx:for-item="card" wx:key="id" class="card"><text>{{card.label}}</text></view>
       </view>
     </view>
   </view>
@@ -54,17 +65,17 @@
     <button wx:if="{{canPass}}" class="secondary-button" bindtap="onPass">过牌</button>
   </view>
 
-  <view wx:if="{{burstPendingForMe}}" class="panel burst-panel">
+  <view wx:if="{{burstPendingForMe && !spectator}}" class="panel burst-panel">
     <view class="section-title">剩余手牌可以一次出完，是否报爆？</view>
     <button wx:for="{{burstKinds}}" wx:key="*" class="primary-button" data-kind="{{item}}" bindtap="onBurst">爆：{{item}}</button>
     <button class="secondary-button" data-kind="skip" bindtap="onBurst">不爆，继续出牌</button>
   </view>
-  <view wx:if="{{burstPendingWaiting}}" class="muted waiting">等待 {{burstPendingSeat}} 选择是否爆牌</view>
+  <view wx:if="{{burstPendingWaiting && !spectator}}" class="muted waiting">等待 {{burstPendingSeat}} 选择是否爆牌</view>
 
   <view wx:if="{{phase === 'settled'}}" class="panel settlement-panel">
     <view class="section-title">本局已结算</view>
     <view>{{settlementText}}</view>
-    <button class="primary-button" bindtap="onReady">准备下一局</button>
+    <button wx:if="{{!spectator}}" class="primary-button" bindtap="onReady">准备下一局</button>
   </view>
 
   <view wx:if="{{error}}" class="error">{{error}}</view>

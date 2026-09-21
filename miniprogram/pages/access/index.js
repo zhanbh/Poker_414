@@ -7,6 +7,7 @@ Page({
   data: {
     inviteCode: '',
     nickname: '',
+    role: 'player',
     busy: false,
     error: '',
     serverOrigin: '',
@@ -20,6 +21,7 @@ Page({
     this.restoreSession();
   },
 
+
   onUnload() {
     if (this.unsubscribe) this.unsubscribe();
   },
@@ -32,6 +34,10 @@ Page({
     this.setData({ nickname: event.detail.value });
   },
 
+  onRoleChange(event) {
+    this.setData({ role: event.detail.value });
+  },
+
   async restoreSession() {
     const sessionToken = wx.getStorageSync(SESSION_KEY);
     const nickname = wx.getStorageSync(NICKNAME_KEY);
@@ -39,7 +45,7 @@ Page({
     this.setData({ nickname, busy: true });
     try {
       await this.transport.login('', sessionToken);
-      const snapshot = await this.transport.join(nickname, '414');
+      const snapshot = await this.transport.join(nickname, '414', this.data.role);
       this.enterSnapshot(snapshot);
     } catch {
       wx.removeStorageSync(SESSION_KEY);
@@ -61,7 +67,7 @@ Page({
       const auth = await this.transport.login(inviteCode);
       wx.setStorageSync(SESSION_KEY, auth.sessionToken);
       wx.setStorageSync(NICKNAME_KEY, nickname);
-      const snapshot = await this.transport.join(nickname, '414');
+      const snapshot = await this.transport.join(nickname, '414', this.data.role);
       this.enterSnapshot(snapshot);
     } catch (error) {
       this.setData({ error: error.message || '进入房间失败' });

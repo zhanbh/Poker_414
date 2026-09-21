@@ -106,4 +106,29 @@ describe('单房间会话与命令服务', () => {
     expect(second.ok).toBe(true);
     expect(room.getState()!.readySeats).toEqual(['A', 'B']);
   });
+  it('观战者可以进入但不能操作，并获得四名玩家的完整手牌视图', () => {
+    const room = service();
+    const players = ['甲', '乙', '丙', '丁'].map((nickname) => {
+      const auth = room.login('inner-414');
+      room.join(auth.sessionToken, nickname, '414');
+      return auth;
+    });
+    const spectator = room.login('inner-414');
+    room.join(spectator.sessionToken, '观众', '414', 'spectator');
+
+    const state = room.getState()!;
+    room.dispatch(players[0].sessionToken, {
+      type: 'start-hand', requestId: 'start-spectator', handNumber: state.handNumber, stateVersion: state.version, payload: {},
+    });
+
+    const spectatorView = room.getSnapshot(spectator.sessionToken);
+    const playerView = room.getSnapshot(players[0].sessionToken);
+    expect(spectatorView.private.spectator).toBe(true);
+    expect(spectatorView.private.spectatorHands).toHaveLength(4);
+    expect(spectatorView.private.spectatorHands?.reduce((total, player) => total + player.hand.length, 0)).toBe(54);
+    expect(playerView.private.spectatorHands).toBeUndefined();
+    expect(() => room.dispatch(spectator.sessionToken, {
+      type: 'pass', requestId: 'spectator-pass', handNumber: room.getState()!.handNumber, stateVersion: room.getState()!.version, payload: {},
+    })).toThrow(/尚未入座/);
+  });
 });

@@ -1,4 +1,4 @@
-const DEFAULT_SERVER_ORIGIN = 'http://localhost:3000';
+const DEFAULT_SERVER_ORIGIN = 'https://308.company';
 const SOCKET_PATH = '/414-ws';
 
 function normalizeOrigin(origin) {

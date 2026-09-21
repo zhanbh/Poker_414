@@ -29,6 +29,12 @@
     </view>
   </view>
 
+  <view wx:if="{{spectator}}" class="spectator-banner">观战模式 · 等待四名玩家开局</view>
+  <view wx:if="{{spectators.length}}" class="panel spectator-panel">
+    <view class="section-title">观战席（{{spectators.length}}/4）</view>
+    <view wx:for="{{spectators}}" wx:key="nickname" class="spectator-row">{{item.nickname}}<text wx:if="{{!item.connected}}"> · 已断开</text></view>
+  </view>
+
   <view class="panel status-panel">
     <view>当前人数：{{playerCount}} / 4</view>
     <button wx:if="{{isHost}}" class="primary-button" disabled="{{!full}}" bindtap="onStart">开始游戏</button>

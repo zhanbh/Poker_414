@@ -157,6 +157,29 @@ describe('单房间会话与命令服务', () => {
     expect(nextSpectatorView.private.spectator).toBe(true);
   });
 
+  it('房主退出大厅后自动移交房主，避免重新入房后房间没有开始按钮', () => {
+    const room = service();
+    const players = ['甲', '乙', '丙', '丁'].map((nickname) => {
+      const auth = room.login('inner-414');
+      room.join(auth.sessionToken, nickname, '414');
+      return auth;
+    });
+
+    room.leave(players[0].sessionToken);
+    expect(room.getSnapshot(players[1].sessionToken).public.hostSeat).toBe('B');
+    expect(room.getSnapshot(players[1].sessionToken).public.players.find((player) => player.seat === 'B')?.isHost).toBe(true);
+
+    const replacement = room.login('inner-414');
+    const replacementView = room.join(replacement.sessionToken, '甲', '414');
+    expect(replacementView.private.seat).toBe('A');
+    expect(replacementView.public.hostSeat).toBe('B');
+
+    const state = room.getState()!;
+    expect(() => room.dispatch(players[1].sessionToken, {
+      type: 'start-hand', requestId: 'start-after-host-leave', handNumber: state.handNumber, stateVersion: state.version, payload: {},
+    })).not.toThrow();
+  });
+
   it('牌局进行中玩家不能退出并破坏当前牌局', () => {
     const room = service();
     const auths = ['甲', '乙', '丙', '丁'].map((nickname) => {

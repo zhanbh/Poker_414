@@ -39,6 +39,10 @@ export function teamOf(seat: Seat): Team {
   return seat === 'A' || seat === 'C' ? 'AC' : 'BD';
 }
 
+export function teamLabel(team: Team): string {
+  return team === 'AC' ? '1队' : '2队';
+}
+
 function otherTeam(team: Team): Team {
   return team === 'AC' ? 'BD' : 'AC';
 }

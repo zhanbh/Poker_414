@@ -4,7 +4,7 @@ import { Card } from '../../../shared/src/cards';
 import { CommandPayload, CommandType, RoomSnapshot } from '../../../shared/src/protocol';
 import { analyzeHand, getHandOptions } from '../../../shared/src/hand-types';
 import { PlayDeclaration, validatePlay } from '../../../shared/src/rules';
-import { Seat, teamOf } from '../../../shared/src/scoring';
+import { Seat, teamLabel, teamOf } from '../../../shared/src/scoring';
 import { ActionBar } from '../components/ActionBar';
 import { BurstPrompt } from '../components/BurstPrompt';
 import { CardHand, cardColorClass, cardLabel } from '../components/CardHand';
@@ -115,8 +115,8 @@ export function GameView({ snapshot, onCommand, onActivity, onReady, onLeave, te
       <div className="table-layout">
         <MainStatus snapshot={snapshot.public} />
         <div className="team-scoreboard" aria-label="队伍主牌计分">
-          <div className="team-main-tag team-main-ac" aria-label={`AC主：${snapshot.public.levels.AC}`}><span>AC主</span><strong>{snapshot.public.levels.AC}</strong></div>
-          <div className="team-main-tag team-main-bd" aria-label={`BD主：${snapshot.public.levels.BD}`}><span>BD主</span><strong>{snapshot.public.levels.BD}</strong></div>
+          <div className="team-main-tag team-main-ac" aria-label={`${teamLabel('AC')}主：${snapshot.public.levels.AC}`}><span>{teamLabel('AC')}主</span><strong>{snapshot.public.levels.AC}</strong></div>
+          <div className="team-main-tag team-main-bd" aria-label={`${teamLabel('BD')}主：${snapshot.public.levels.BD}`}><span>{teamLabel('BD')}主</span><strong>{snapshot.public.levels.BD}</strong></div>
         </div>
         <div className="table-center">
           <section className="public-play" aria-label="公开出牌">

@@ -4,7 +4,7 @@
 
   <view class="team-grid">
     <view class="panel team-panel">
-      <view class="team-title">AC 队</view>
+      <view class="team-title">1队</view>
       <view wx:for="{{ac}}" wx:key="seat" class="player-row">
         <view>
           <text class="seat">{{item.seat}}</text>
@@ -16,7 +16,7 @@
       </view>
     </view>
     <view class="panel team-panel">
-      <view class="team-title">BD 队</view>
+      <view class="team-title">2队</view>
       <view wx:for="{{bd}}" wx:key="seat" class="player-row">
         <view>
           <text class="seat">{{item.seat}}</text>

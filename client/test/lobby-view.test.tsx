@@ -16,12 +16,12 @@ const lobby: PublicSnapshot = {
 };
 
 describe('大厅视图', () => {
-  it('显示四个固定座位、AC/BD组队和房主，四人未到齐不能开始', () => {
+  it('显示四个固定座位、1队/2队组队和房主，四人未到齐不能开始', () => {
     const onStart = vi.fn();
     render(<LobbyView snapshot={lobby} ownSeat="A" onStart={onStart} onRemove={vi.fn()} onLeave={vi.fn()} testMode={false} />);
 
-    expect(screen.getByText('AC 队')).toBeInTheDocument();
-    expect(screen.getByText('BD 队')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '1队' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '2队' })).toBeInTheDocument();
     expect(screen.getByText('房主')).toBeInTheDocument();
     expect(screen.getByText('等待开局')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '开始游戏' })).toBeDisabled();

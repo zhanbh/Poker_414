@@ -8,8 +8,8 @@
   <view wx:if="{{connectionNotice}}" class="connection-notice">{{connectionNotice}}</view>
 
   <view class="score-row">
-    <view class="score-card">AC 主 <text>{{levels.AC}}</text></view>
-    <view class="score-card">BD 主 <text>{{levels.BD}}</text></view>
+    <view class="score-card">1队主 <text>{{levels.AC}}</text></view>
+    <view class="score-card">2队主 <text>{{levels.BD}}</text></view>
     <view class="score-card">本局主 <text>{{effectiveMain || '等待'}}</text></view>
   </view>
 

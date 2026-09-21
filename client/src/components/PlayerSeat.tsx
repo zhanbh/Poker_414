@@ -1,5 +1,6 @@
 import { Rank, sortCards } from '../../../shared/src/cards';
 import { PublicPlayerView } from '../../../shared/src/protocol';
+import { teamLabel } from '../../../shared/src/scoring';
 import { PresenceBadge } from './PresenceBadge';
 import { cardColorClass, cardLabel } from './CardHand';
 
@@ -24,7 +25,7 @@ export function PlayerSeat({ seat, player, isCurrentTurn = false, showRemainingH
         </div>
         <div className="player-info">
           <strong>{player.nickname} · {player.handCount}张</strong>
-          <span>{player.team}</span>
+          <span>{teamLabel(player.team)}</span>
           {player.isHost ? <span className="host-label">房主</span> : null}
           {player.ready ? <span className="ready-label">已准备</span> : null}
           <PresenceBadge away={player.away} connected={player.connected} />

@@ -12,7 +12,7 @@
           <text wx:if="{{item.isHost}}" class="host">房主</text>
           <text wx:if="{{!item.connected && item.nickname}}" class="muted"> · 已断开</text>
         </view>
-        <button wx:if="{{isHost && item.nickname}}" class="danger-button" data-seat="{{item.seat}}" bindtap="onRemove">移除</button>
+        <button wx:if="{{isHost && item.nickname && item.seat !== ownSeat}}" class="danger-button" data-seat="{{item.seat}}" bindtap="onRemove">移除</button>
       </view>
     </view>
     <view class="panel team-panel">
@@ -24,7 +24,7 @@
           <text wx:if="{{item.isHost}}" class="host">房主</text>
           <text wx:if="{{!item.connected && item.nickname}}" class="muted"> · 已断开</text>
         </view>
-        <button wx:if="{{isHost && item.nickname}}" class="danger-button" data-seat="{{item.seat}}" bindtap="onRemove">移除</button>
+        <button wx:if="{{isHost && item.nickname && item.seat !== ownSeat}}" class="danger-button" data-seat="{{item.seat}}" bindtap="onRemove">移除</button>
       </view>
     </view>
   </view>

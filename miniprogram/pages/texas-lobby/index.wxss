@@ -183,3 +183,65 @@
 .hint {
   margin-top: 18rpx;
 }
+
+/* 大厅和牌局保持同一套横屏牌桌比例。 */
+@media (orientation: landscape) {
+  .texas-lobby-page {
+    padding: 20rpx 28rpx 28rpx;
+  }
+
+  .game-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 12rpx;
+  }
+
+  .texas-lobby-table {
+    height: 66vh;
+    min-height: 0;
+    max-height: 720rpx;
+    margin: 14rpx 0;
+    border-radius: 42%;
+  }
+
+  .texas-table-felt {
+    width: 52%;
+    gap: 6rpx;
+    font-size: 22rpx;
+  }
+
+  .texas-table-title {
+    font-size: 28rpx;
+  }
+
+  .texas-seat-position {
+    width: 170rpx;
+    min-height: 92rpx;
+    gap: 4rpx;
+    padding: 9rpx;
+    border-radius: 11rpx;
+  }
+
+  .texas-seat-position .seat-title {
+    font-size: 20rpx;
+  }
+
+  .seat-name {
+    font-size: 24rpx;
+  }
+
+  .texas-seat-position .muted {
+    font-size: 18rpx;
+  }
+
+  .texas-seat-remove {
+    min-height: 36rpx;
+    font-size: 20rpx;
+  }
+
+  .status-panel,
+  .spectator-panel {
+    margin-top: 12rpx;
+  }
+}

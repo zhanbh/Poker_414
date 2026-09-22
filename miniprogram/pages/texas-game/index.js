@@ -16,6 +16,7 @@ Page({
     ownSeat: null,
     ownPlayer: null,
     currentTurn: null,
+    currentTurnLabel: '',
     pot: 0,
     currentBet: 0,
     minRaise: 20,
@@ -57,7 +58,8 @@ Page({
     const bySeat = new Map(snapshot.public.players.map((player) => [player.seat, player]));
     const players = SEATS.map((seat) => bySeat.get(seat) || {
       seat,
-      nickname: '空位',
+      nickname: '',
+      positionLabel: '空位',
       connected: false,
       stack: 0,
       totalBet: 0,
@@ -69,6 +71,7 @@ Page({
     const ownPlayer = snapshot.public.players.find((player) => player.seat === snapshot.private.seat) || null;
     const spectator = Boolean(snapshot.private.spectator);
     const isMyTurn = !spectator && Boolean(ownPlayer && snapshot.public.currentTurn === ownPlayer.seat);
+    const currentPlayer = snapshot.public.players.find((player) => player.seat === snapshot.public.currentTurn) || null;
     const maxAmount = ownPlayer ? ownPlayer.roundBet + ownPlayer.stack : 0;
     const requiredAmount = snapshot.public.currentBet === 0
       ? snapshot.public.minRaise
@@ -84,7 +87,14 @@ Page({
       hand: decorateCards(player.hand),
     }));
     const settlement = snapshot.public.settlement
-      ? { ...snapshot.public.settlement, winnerText: snapshot.public.settlement.winners.join('、') }
+      ? {
+        ...snapshot.public.settlement,
+        winnerText: snapshot.public.settlement.winners.map((seat) => bySeat.get(seat)?.positionLabel || '玩家').join('、'),
+        payoutRows: Object.entries(snapshot.public.settlement.payouts).map(([seat, payout]) => ({
+          label: bySeat.get(seat)?.positionLabel || '玩家',
+          payout,
+        })),
+      }
       : null;
     this.app.setSnapshot(snapshot);
     this.setData({
@@ -99,6 +109,7 @@ Page({
       ownSeat: snapshot.private.seat,
       ownPlayer,
       currentTurn: snapshot.public.currentTurn,
+      currentTurnLabel: currentPlayer ? `${currentPlayer.nickname} · ${currentPlayer.positionLabel || '当前行动位'}` : '',
       pot: snapshot.public.pot,
       currentBet: snapshot.public.currentBet,
       minRaise: snapshot.public.minRaise,

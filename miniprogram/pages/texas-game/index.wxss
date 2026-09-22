@@ -193,3 +193,104 @@
 .settlement-panel .primary-button {
   margin-top: 22rpx;
 }
+
+/* 手机端按横屏牌桌设计，避免牌桌和操作区纵向堆叠。 */
+@media (orientation: landscape) {
+  .texas-game-page {
+    padding: 20rpx 28rpx 28rpx;
+  }
+
+  .game-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 12rpx;
+  }
+
+  .texas-game-table {
+    height: 66vh;
+    min-height: 0;
+    max-height: 720rpx;
+    margin: 14rpx 0;
+    border-radius: 42%;
+  }
+
+  .texas-table-center {
+    width: 52%;
+    gap: 6rpx;
+  }
+
+  .texas-meta {
+    gap: 8rpx;
+    font-size: 20rpx;
+  }
+
+  .community-panel {
+    margin-top: 8rpx;
+  }
+
+  .card-row {
+    gap: 5rpx;
+    margin-top: 8rpx;
+  }
+
+  .texas-card {
+    min-width: 48rpx;
+    height: 68rpx;
+    padding: 4rpx;
+    font-size: 24rpx;
+  }
+
+  .texas-seat-position {
+    width: 170rpx;
+    min-height: 92rpx;
+    gap: 4rpx;
+    padding: 9rpx;
+    border-radius: 11rpx;
+    font-size: 20rpx;
+  }
+
+  .texas-player {
+    gap: 4rpx;
+    padding: 9rpx;
+  }
+
+  .texas-player .seat {
+    max-width: 62%;
+    margin-right: 4rpx;
+    line-height: 1.15;
+  }
+
+  .texas-player .muted {
+    font-size: 18rpx;
+  }
+
+  .hand-panel,
+  .action-panel,
+  .settlement-panel {
+    margin-top: 12rpx;
+  }
+
+  .hand-panel,
+  .action-panel,
+  .settlement-panel {
+    padding: 12rpx 16rpx;
+  }
+
+  .action-panel .section-title {
+    display: inline-block;
+    margin-right: 12rpx;
+  }
+
+  .bet-slider {
+    margin: 8rpx 0;
+  }
+
+  .action-row {
+    gap: 8rpx;
+  }
+
+  .action-row button {
+    min-width: 140rpx;
+  }
+}

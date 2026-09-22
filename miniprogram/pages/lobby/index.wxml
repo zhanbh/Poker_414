@@ -1,6 +1,10 @@
 <view class="page lobby-page">
   <view class="title">414 房间 {{roomId}}</view>
   <view class="muted">等待四名玩家到齐后，由房主开始游戏</view>
+  <view class="room-purpose-notice" role="note">
+    <text class="room-purpose-title">测试学习交流声明</text>
+    <text>本房间仅用于游戏测试、学习与交流；虚拟筹码不具有现金或财产价值，不涉及充值、提现、现金输赢或奖励兑换，请勿用于赌博或其他违法活动。</text>
+  </view>
 
   <view class="team-grid">
     <view class="panel team-panel">

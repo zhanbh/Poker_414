@@ -155,10 +155,12 @@ export class TexasRoomService {
         private: { seat: session.texasSeat, holeCards: [] },
       };
     }
+    const positionLabels = this.positionLabels();
     const players = Object.values(state.players)
       .filter((player): player is TexasPlayer => player !== null)
       .map((player): TexasPlayerView => ({
         seat: player.seat,
+        positionLabel: positionLabels.get(player.seat) ?? '等待入座',
         nickname: player.nickname,
         connected: player.connected,
         stack: player.stack,
@@ -195,7 +197,12 @@ export class TexasRoomService {
     const ownPlayer = session.texasSeat ? state.players[session.texasSeat] : null;
     const spectatorHands = Object.values(state.players)
       .filter((player): player is TexasPlayer => player !== null && !this.isWaitingPlayer(player.id))
-      .map((player) => ({ seat: player.seat, nickname: player.nickname, hand: [...player.holeCards] }));
+      .map((player) => ({
+        seat: player.seat,
+        positionLabel: positionLabels.get(player.seat) ?? '等待入座',
+        nickname: player.nickname,
+        hand: [...player.holeCards],
+      }));
     return {
       public: publicSnapshot,
       private: {
@@ -510,6 +517,37 @@ export class TexasRoomService {
   private orderedPlayers(): TexasPlayer[] {
     if (!this.state) return [];
     return TEXAS_SEATS.map((seat) => this.state!.players[seat]).filter((player): player is TexasPlayer => player !== null);
+  }
+
+  private positionLabels(): ReadonlyMap<TexasSeat, string> {
+    if (!this.state) return new Map();
+    const state = this.state;
+    const seatedPlayers = this.orderedPlayers().filter((player) => !this.isWaitingPlayer(player.id));
+
+    if (state.phase === 'lobby' || !state.dealerSeat) {
+      return new Map(seatedPlayers.map((player, index) => [player.seat, `座位 ${index + 1}`] as const));
+    }
+
+    // A player who joined during a hand has a seat, but no hole cards yet and
+    // must not affect the position names for the current hand.
+    const handPlayers = seatedPlayers.filter((player) => player.holeCards.length > 0);
+    if (handPlayers.length === 0) return new Map();
+
+    const dealerIndex = handPlayers.findIndex((player) => player.seat === state.dealerSeat);
+    const rotated = dealerIndex < 0
+      ? handPlayers
+      : [...handPlayers.slice(dealerIndex), ...handPlayers.slice(0, dealerIndex)];
+    const namesByCount: Readonly<Record<number, readonly string[]>> = {
+      2: ['庄位/小盲', '大盲 BB'],
+      3: ['庄位 BTN', '小盲 SB', '大盲 BB'],
+      4: ['庄位 BTN', '小盲 SB', '大盲 BB', '枪口位 UTG'],
+      5: ['庄位 BTN', '小盲 SB', '大盲 BB', '枪口位 UTG', '关煞位 CO'],
+      6: ['庄位 BTN', '小盲 SB', '大盲 BB', '枪口位 UTG', '劫持位 HJ', '关煞位 CO'],
+      7: ['庄位 BTN', '小盲 SB', '大盲 BB', '枪口位 UTG', '中位 MP', '劫持位 HJ', '关煞位 CO'],
+      8: ['庄位 BTN', '小盲 SB', '大盲 BB', '枪口位 UTG', '枪口+1 UTG+1', '中位 MP', '劫持位 HJ', '关煞位 CO'],
+    };
+    const names = namesByCount[rotated.length] ?? namesByCount[8];
+    return new Map(rotated.map((player, index) => [player.seat, names[index] ?? `座位 ${index + 1}`] as const));
   }
 
   private nextSeat(seat: TexasSeat): TexasSeat {

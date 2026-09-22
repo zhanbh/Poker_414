@@ -22,6 +22,7 @@ describe('TexasRoomService', () => {
     expect(started.snapshot.public.pot).toBe(30);
     expect(started.snapshot.private.holeCards).toHaveLength(2);
     expect(started.snapshot.public.currentTurn).toBeTruthy();
+    expect(started.snapshot.public.players.map((player) => player.positionLabel)).toEqual(expect.arrayContaining(['庄位/小盲', '大盲 BB']));
   });
 
   it('随机从八个空闲座位中分配入座位置', () => {

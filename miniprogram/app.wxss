@@ -39,6 +39,26 @@ button {
   color: #a9c4d1;
 }
 
+.room-purpose-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10rpx;
+  margin: 16rpx 0;
+  padding: 14rpx 18rpx;
+  color: #d9edf2;
+  background: rgba(18, 61, 76, .96);
+  border: 1rpx solid #4a9caf;
+  border-radius: 12rpx;
+  font-size: 20rpx;
+  line-height: 1.45;
+}
+
+.room-purpose-title {
+  flex: 0 0 auto;
+  color: #ffd166;
+  font-weight: 700;
+}
+
 .error {
   background: #5a2930;
   border: 1rpx solid #d56f79;

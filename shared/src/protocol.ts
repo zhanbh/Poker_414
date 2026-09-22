@@ -154,6 +154,8 @@ export interface TexasCommandEnvelope {
 
 export interface TexasPlayerView {
   readonly seat: TexasSeat;
+  /** 面向玩家展示的德州位置，内部 seat 只用于协议和状态同步。 */
+  readonly positionLabel?: string;
   readonly nickname: string;
   readonly connected: boolean;
   readonly stack: number;
@@ -202,7 +204,7 @@ export interface TexasPrivateSnapshot {
   readonly holeCards: import('./texas').TexasCard[];
   readonly waiting?: boolean;
   readonly spectator?: boolean;
-  readonly spectatorHands?: ReadonlyArray<{ readonly seat: TexasSeat; readonly nickname: string; readonly hand: import('./texas').TexasCard[] }>;
+  readonly spectatorHands?: ReadonlyArray<{ readonly seat: TexasSeat; readonly positionLabel?: string; readonly nickname: string; readonly hand: import('./texas').TexasCard[] }>;
 }
 
 export interface TexasSnapshot {

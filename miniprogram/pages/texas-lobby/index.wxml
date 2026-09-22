@@ -3,6 +3,10 @@
     <view class="title">德州扑克房间</view>
     <view class="muted">两人以上即可开始 · 1000 筹码 · 盲注 10/20</view>
   </view>
+  <view class="room-purpose-notice" role="note">
+    <text class="room-purpose-title">测试学习交流声明</text>
+    <text>本房间仅用于游戏测试、学习与交流；虚拟筹码不具有现金或财产价值，不涉及充值、提现、现金输赢或奖励兑换，请勿用于赌博或其他违法活动。</text>
+  </view>
 
   <view class="texas-lobby-table" aria-label="德州扑克座位">
     <view class="texas-table-felt">
@@ -13,8 +17,8 @@
     </view>
 
     <view wx:for="{{players}}" wx:key="seat" class="texas-seat texas-seat-position texas-seat-{{item.seat}} {{item.nickname ? 'occupied' : ''}}">
-      <view class="seat-title"><text class="seat">{{item.seat}} 位</text></view>
-      <view class="seat-name">{{item.nickname || '空位'}}</view>
+      <view class="seat-title"><text class="seat">{{item.positionLabel}}</text></view>
+      <view wx:if="{{item.nickname}}" class="seat-name">{{item.nickname}}</view>
       <view wx:if="{{item.nickname}}" class="muted">筹码 {{item.stack}}</view>
       <view wx:if="{{item.isHost}}" class="host">房主</view>
       <view wx:if="{{item.waiting}}" class="waiting">等待下一局</view>

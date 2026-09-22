@@ -35,6 +35,7 @@ Page({
     const bySeat = new Map(snapshot.public.players.map((player) => [player.seat, player]));
     const players = SEATS.map((seat) => bySeat.get(seat) || {
       seat,
+      positionLabel: '空位',
       nickname: '',
       connected: false,
       stack: 1000,
@@ -74,7 +75,7 @@ Page({
     const seat = event.currentTarget.dataset.seat;
     wx.showModal({
       title: '移除玩家',
-      content: '确定移除 ' + seat + ' 位玩家吗？',
+      content: '确定移除这名玩家吗？',
       success: (result) => { if (result.confirm) this.runCommand('remove-player', { seat }); },
     });
   },

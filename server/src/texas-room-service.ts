@@ -1,0 +1,630 @@
+import {
+  TexasCommandEnvelope,
+  TexasCommandType,
+  TexasSnapshot,
+  TexasPublicSnapshot,
+  TexasSettlement,
+  TexasPlayerView,
+} from '../../shared/src/protocol';
+import {
+  compareTexasHands,
+  createTexasDeck,
+  evaluateTexasHand,
+  TEXAS_BIG_BLIND,
+  TEXAS_SEATS,
+  TEXAS_SMALL_BLIND,
+  TEXAS_STARTING_STACK,
+  TexasCard,
+  TexasHandValue,
+} from '../../shared/src/texas';
+import { Seat } from '../../shared/src/scoring';
+import { Session, SessionService } from './session-service';
+
+export interface TexasRoomServiceOptions {
+  readonly inviteCode: string;
+  readonly now?: () => number;
+  readonly random?: () => number;
+}
+
+export interface TexasAuthResult {
+  readonly sessionToken: string;
+  readonly playerId: string;
+}
+
+export interface TexasCommandSuccess {
+  readonly ok: true;
+  readonly snapshot: TexasSnapshot;
+}
+
+export class TexasRoomServiceError extends Error {
+  readonly code: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = 'TexasRoomServiceError';
+    this.code = code;
+  }
+}
+
+type TexasPhase = TexasPublicSnapshot['phase'];
+
+interface TexasPlayer {
+  readonly id: string;
+  readonly seat: Seat;
+  nickname: string;
+  connected: boolean;
+  stack: number;
+  totalBet: number;
+  roundBet: number;
+  holeCards: TexasCard[];
+  folded: boolean;
+  allIn: boolean;
+}
+
+interface TexasState {
+  roomId: string;
+  hostId: string;
+  phase: TexasPhase;
+  handNumber: number;
+  version: number;
+  players: Record<Seat, TexasPlayer | null>;
+  dealerSeat: Seat | null;
+  smallBlindSeat: Seat | null;
+  bigBlindSeat: Seat | null;
+  currentTurn: Seat | null;
+  community: TexasCard[];
+  deck: TexasCard[];
+  pot: number;
+  currentBet: number;
+  minRaise: number;
+  actedSeats: Seat[];
+  settlement: TexasSettlement | null;
+}
+
+const MAX_SPECTATORS = 4;
+
+export class TexasRoomService {
+  readonly sessions = new SessionService();
+  private readonly inviteCode: string;
+  private readonly random: () => number;
+  private state: TexasState | null = null;
+  private readonly requestResults = new Map<string, Map<string, TexasCommandSuccess>>();
+  private readonly waitingSessionTokens = new Set<string>();
+
+  constructor(options: TexasRoomServiceOptions) {
+    this.inviteCode = options.inviteCode;
+    this.random = options.random ?? Math.random;
+  }
+
+  login(inviteCode: string): TexasAuthResult {
+    if (inviteCode !== this.inviteCode) throw new TexasRoomServiceError('INVALID_INVITE', '邀请码错误');
+    const session = this.sessions.create();
+    return { sessionToken: session.sessionToken, playerId: session.playerId };
+  }
+
+  resume(sessionToken: string): TexasAuthResult {
+    const session = this.sessions.get(sessionToken);
+    return { sessionToken: session.sessionToken, playerId: session.playerId };
+  }
+
+  join(sessionToken: string, nickname: string, roomId: string): TexasSnapshot {
+    const session = this.sessions.get(sessionToken);
+    if (roomId !== 'texas') throw new TexasRoomServiceError('ROOM_NOT_FOUND', '德州扑克房间不存在');
+    if (!nickname.trim()) throw new TexasRoomServiceError('INVALID_NICKNAME', '昵称不能为空');
+    if (session.seat || session.role === 'spectator') return this.getSnapshot(sessionToken);
+
+    if (!this.state) {
+      this.state = this.emptyState(roomId, session.playerId);
+    }
+    if (this.state.phase !== 'lobby') {
+      if (!this.waitingSessionTokens.has(sessionToken) && this.sessions.listSpectators().length >= MAX_SPECTATORS) {
+        throw new TexasRoomServiceError('SPECTATORS_FULL', '等待位已满');
+      }
+      this.waitingSessionTokens.add(sessionToken);
+      this.sessions.setIdentity(sessionToken, 'spectator', nickname.trim());
+      return this.getSnapshot(sessionToken);
+    }
+    const seat = TEXAS_SEATS.find((candidate) => this.state?.players[candidate] === null);
+    if (!seat) {
+      if (this.sessions.listSpectators().length >= MAX_SPECTATORS) {
+        throw new TexasRoomServiceError('SPECTATORS_FULL', '观战位已满');
+      }
+      this.sessions.setIdentity(sessionToken, 'spectator', nickname.trim());
+      return this.getSnapshot(sessionToken);
+    }
+    this.state.players[seat] = {
+      id: session.playerId,
+      seat,
+      nickname: nickname.trim(),
+      connected: true,
+      stack: TEXAS_STARTING_STACK,
+      totalBet: 0,
+      roundBet: 0,
+      holeCards: [],
+      folded: false,
+      allIn: false,
+    };
+    this.sessions.setSeat(sessionToken, seat);
+    this.sessions.setIdentity(sessionToken, 'player', nickname.trim());
+    this.state.version += 1;
+    return this.getSnapshot(sessionToken);
+  }
+
+  getSnapshot(sessionToken: string): TexasSnapshot {
+    const session = this.sessions.get(sessionToken);
+    const state = this.state;
+    if (!state) {
+      return {
+        public: this.emptyPublicSnapshot(),
+        private: { seat: session.seat, holeCards: [] },
+      };
+    }
+    const players = Object.values(state.players)
+      .filter((player): player is TexasPlayer => player !== null)
+      .map((player): TexasPlayerView => ({
+        seat: player.seat,
+        nickname: player.nickname,
+        connected: player.connected,
+        stack: player.stack,
+        totalBet: player.totalBet,
+        roundBet: player.roundBet,
+        folded: player.folded,
+        allIn: player.allIn,
+        isHost: player.id === state.hostId,
+      }));
+    const publicSnapshot: TexasPublicSnapshot = {
+      gameId: 'texas',
+      roomId: state.roomId,
+      phase: state.phase,
+      handNumber: state.handNumber,
+      version: state.version,
+      players,
+      spectators: this.sessions.listSpectators().map((viewer) => ({
+        nickname: viewer.nickname ?? '观战者',
+        connected: viewer.connectionId !== null,
+        waiting: this.waitingSessionTokens.has(viewer.sessionToken),
+      })),
+      hostSeat: Object.values(state.players).find((player) => player?.id === state.hostId)?.seat ?? null,
+      dealerSeat: state.dealerSeat,
+      smallBlindSeat: state.smallBlindSeat,
+      bigBlindSeat: state.bigBlindSeat,
+      currentTurn: state.currentTurn,
+      community: [...state.community],
+      pot: state.pot,
+      currentBet: state.currentBet,
+      minRaise: state.minRaise,
+      settlement: state.settlement,
+    };
+    const ownPlayer = session.seat ? state.players[session.seat] : null;
+    const spectatorHands = Object.values(state.players)
+      .filter((player): player is TexasPlayer => player !== null)
+      .map((player) => ({ seat: player.seat, nickname: player.nickname, hand: [...player.holeCards] }));
+    return {
+      public: publicSnapshot,
+      private: {
+        seat: session.seat,
+        holeCards: ownPlayer ? [...ownPlayer.holeCards] : [],
+        waiting: this.waitingSessionTokens.has(sessionToken),
+        spectator: session.role === 'spectator',
+        ...(session.role === 'spectator' || state.phase === 'showdown' || state.phase === 'settled' ? { spectatorHands } : {}),
+      },
+    };
+  }
+
+  attach(sessionToken: string, connectionId: string): { previousConnectionId: string | null } {
+    return this.sessions.attach(sessionToken, connectionId);
+  }
+
+  isConnectionOwner(sessionToken: string, connectionId: string): boolean {
+    return this.sessions.get(sessionToken).connectionId === connectionId;
+  }
+
+  disconnect(sessionToken: string, connectionId: string): void {
+    if (!this.sessions.detach(sessionToken, connectionId)) return;
+    const session = this.sessions.get(sessionToken);
+    if (this.state && session.seat && this.state.players[session.seat]) {
+      this.state.players[session.seat]!.connected = false;
+      this.state.version += 1;
+    }
+  }
+
+  leave(sessionToken: string): void {
+    const session = this.sessions.get(sessionToken);
+    if (session.role === 'spectator' || !session.seat) {
+      this.sessions.clearIdentity(sessionToken);
+      return;
+    }
+    if (!this.state || this.state.phase !== 'lobby') {
+      throw new TexasRoomServiceError('HAND_IN_PROGRESS', '牌局进行中不能退出玩家位，请等待本局结束');
+    }
+    this.removeSeat(session.seat);
+    this.sessions.clearIdentity(sessionToken);
+  }
+
+  scan(): boolean {
+    return false;
+  }
+
+  recordActivity(sessionToken: string): TexasSnapshot {
+    return this.getSnapshot(sessionToken);
+  }
+
+  dispatch(sessionToken: string, command: TexasCommandEnvelope): TexasCommandSuccess {
+    const session = this.sessions.get(sessionToken);
+    const previous = this.requestResults.get(sessionToken)?.get(command.requestId);
+    if (previous) return previous;
+    if (!this.state) throw new TexasRoomServiceError('ROOM_NOT_FOUND', '房间尚未创建');
+    if (command.handNumber !== this.state.handNumber) throw new TexasRoomServiceError('STALE_HAND', '牌局编号已过期，请刷新视图');
+    if (command.stateVersion !== this.state.version) throw new TexasRoomServiceError('STALE_VERSION', '状态版本已过期，请刷新视图');
+    if (!session.seat && command.type !== 'remove-player') throw new TexasRoomServiceError('NOT_SEATED', '玩家尚未入座');
+
+    this.applyCommand(session, command.type, command.payload);
+    const result: TexasCommandSuccess = { ok: true, snapshot: this.getSnapshot(sessionToken) };
+    if (!this.requestResults.has(sessionToken)) this.requestResults.set(sessionToken, new Map());
+    this.requestResults.get(sessionToken)!.set(command.requestId, result);
+    return result;
+  }
+
+  private applyCommand(session: Session, type: TexasCommandType, payload: TexasCommandEnvelope['payload']): void {
+    if (!this.state) throw new TexasRoomServiceError('ROOM_NOT_FOUND', '房间尚未创建');
+    const state = this.state;
+    if (type === 'start-hand') {
+      this.assertHost(session);
+      this.startHand();
+      return;
+    }
+    if (type === 'next-hand') {
+      this.assertHost(session);
+      if (state.phase !== 'settled') throw new TexasRoomServiceError('INVALID_PHASE', '本局尚未结算');
+      for (const player of Object.values(state.players)) {
+        if (player) {
+          player.holeCards = [];
+          player.totalBet = 0;
+          player.roundBet = 0;
+          player.folded = false;
+          player.allIn = false;
+        }
+      }
+      state.phase = 'lobby';
+      state.community = [];
+      state.pot = 0;
+      state.currentBet = 0;
+      state.currentTurn = null;
+      state.settlement = null;
+      this.promoteWaiting();
+      state.version += 1;
+      return;
+    }
+    if (type === 'remove-player') {
+      this.assertHost(session);
+      if (state.phase !== 'lobby') throw new TexasRoomServiceError('INVALID_PHASE', '牌局进行中不能移除玩家');
+      const target = (payload as { readonly seat: Seat }).seat;
+      if (target === session.seat) throw new TexasRoomServiceError('CANNOT_REMOVE_SELF', '不能移除自己');
+      this.removeSeat(target);
+      return;
+    }
+    if (state.phase !== 'preflop' && state.phase !== 'flop' && state.phase !== 'turn' && state.phase !== 'river') {
+      throw new TexasRoomServiceError('INVALID_PHASE', '当前不在下注阶段');
+    }
+    const player = session.seat ? state.players[session.seat] : null;
+    if (!player || state.currentTurn !== player.seat) throw new TexasRoomServiceError('NOT_YOUR_TURN', '还没轮到你操作');
+    switch (type) {
+      case 'fold':
+        player.folded = true;
+        state.actedSeats.push(player.seat);
+        break;
+      case 'check':
+        if (player.roundBet !== state.currentBet) throw new TexasRoomServiceError('CHECK_NOT_ALLOWED', '当前下注额不同时不能过牌');
+        state.actedSeats.push(player.seat);
+        break;
+      case 'call':
+        this.commit(player, Math.min(state.currentBet - player.roundBet, player.stack));
+        state.actedSeats.push(player.seat);
+        break;
+      case 'bet': {
+        const amount = this.amount(payload);
+        if (state.currentBet !== 0 || amount < TEXAS_BIG_BLIND) throw new TexasRoomServiceError('INVALID_BET', '下注金额无效');
+        this.commit(player, Math.min(amount, player.stack));
+        state.currentBet = player.roundBet;
+        state.minRaise = state.currentBet;
+        state.actedSeats = [player.seat];
+        break;
+      }
+      case 'raise': {
+        const requested = this.amount(payload);
+        const minimum = state.currentBet + state.minRaise;
+        if (requested < minimum && requested < player.roundBet + player.stack) {
+          throw new TexasRoomServiceError('INVALID_RAISE', '加注必须达到最小加注额');
+        }
+        const target = Math.min(requested, player.roundBet + player.stack);
+        if (target <= state.currentBet) throw new TexasRoomServiceError('INVALID_RAISE', '加注金额必须高于当前下注');
+        const previousBet = state.currentBet;
+        this.commit(player, target - player.roundBet);
+        state.currentBet = Math.max(state.currentBet, player.roundBet);
+        state.minRaise = Math.max(TEXAS_BIG_BLIND, state.currentBet - previousBet);
+        state.actedSeats = [player.seat];
+        break;
+      }
+      case 'all-in': {
+        const previousBet = state.currentBet;
+        this.commit(player, player.stack);
+        if (player.roundBet > state.currentBet) {
+          state.currentBet = player.roundBet;
+          state.minRaise = Math.max(state.minRaise, state.currentBet - previousBet);
+          state.actedSeats = [player.seat];
+        } else {
+          state.actedSeats.push(player.seat);
+        }
+        break;
+      }
+      default:
+        throw new TexasRoomServiceError('INVALID_COMMAND', '命令类型不支持');
+    }
+    this.syncPot(state);
+    this.advanceAfterAction();
+  }
+
+  private startHand(): void {
+    if (!this.state) throw new TexasRoomServiceError('ROOM_NOT_FOUND', '房间尚未创建');
+    const state = this.state;
+    const players = this.orderedPlayers();
+    if (players.length < 2) throw new TexasRoomServiceError('NOT_ENOUGH_PLAYERS', '至少需要两名玩家才能开始');
+    if (players.filter((player) => player.stack >= TEXAS_BIG_BLIND).length < 2) throw new TexasRoomServiceError('NO_CHIPS', '至少需要两名有筹码的玩家');
+    const dealer = state.dealerSeat ? this.nextSeat(state.dealerSeat) : players[0].seat;
+    const active = players.filter((player) => player.stack > 0);
+    const dealerPlayer = active.find((player) => player.seat === dealer) ?? active[0];
+    const dealerIndex = active.findIndex((player) => player.seat === dealerPlayer.seat);
+    const smallBlind = active.length === 2 ? dealerPlayer : active[(dealerIndex + 1) % active.length];
+    const bigBlind = active.length === 2 ? active[(dealerIndex + 1) % active.length] : active[(dealerIndex + 2) % active.length];
+    const deck = createTexasDeck(this.random);
+    for (const player of players) {
+      player.holeCards = [];
+      player.roundBet = 0;
+      player.totalBet = 0;
+      player.folded = false;
+      player.allIn = false;
+    }
+    for (let cardIndex = 0; cardIndex < 2; cardIndex += 1) {
+      for (const player of active) player.holeCards.push(deck.shift()!);
+    }
+    state.handNumber += 1;
+    state.phase = 'preflop';
+    state.dealerSeat = dealerPlayer.seat;
+    state.smallBlindSeat = smallBlind.seat;
+    state.bigBlindSeat = bigBlind.seat;
+    state.community = [];
+    state.deck = deck;
+    state.pot = 0;
+    state.currentBet = 0;
+    state.minRaise = TEXAS_BIG_BLIND;
+    state.actedSeats = [];
+    state.settlement = null;
+    this.commit(smallBlind, Math.min(TEXAS_SMALL_BLIND, smallBlind.stack));
+    this.commit(bigBlind, Math.min(TEXAS_BIG_BLIND, bigBlind.stack));
+    state.currentBet = Math.max(smallBlind.roundBet, bigBlind.roundBet);
+    state.actedSeats = [];
+    state.currentTurn = this.nextActionSeat(bigBlind.seat);
+    this.syncPot(state);
+    state.version += 1;
+  }
+
+  private advanceAfterAction(): void {
+    if (!this.state) return;
+    const state = this.state;
+    const live = this.livePlayers();
+    if (live.length === 1) {
+      this.settle(live);
+      return;
+    }
+    const actionable = live.filter((player) => !player.allIn);
+    const roundComplete = actionable.length === 0
+      || actionable.every((player) => player.roundBet === state.currentBet && state.actedSeats.includes(player.seat));
+    if (roundComplete) {
+      this.advanceStreet();
+      return;
+    }
+    state.currentTurn = this.nextActionSeat(state.currentTurn ?? live[0].seat);
+    state.version += 1;
+  }
+
+  private advanceStreet(): void {
+    if (!this.state) return;
+    const state = this.state;
+    if (this.livePlayers().filter((player) => !player.allIn).length === 0) {
+      while (state.community.length < 5) state.community.push(state.deck.shift()!);
+      this.settle(this.livePlayers());
+      return;
+    }
+    if (state.phase === 'preflop') {
+      state.community.push(state.deck.shift()!, state.deck.shift()!, state.deck.shift()!);
+      state.phase = 'flop';
+    } else if (state.phase === 'flop') {
+      state.community.push(state.deck.shift()!);
+      state.phase = 'turn';
+    } else if (state.phase === 'turn') {
+      state.community.push(state.deck.shift()!);
+      state.phase = 'river';
+    } else {
+      this.settle(this.livePlayers());
+      return;
+    }
+    for (const player of Object.values(state.players)) if (player) player.roundBet = 0;
+    state.currentBet = 0;
+    state.minRaise = TEXAS_BIG_BLIND;
+    state.actedSeats = [];
+    state.currentTurn = this.nextActionSeat(state.dealerSeat ?? 'A');
+    state.version += 1;
+  }
+
+  private settle(live: TexasPlayer[]): void {
+    if (!this.state) return;
+    const state = this.state;
+    while (state.community.length < 5 && state.deck.length > 0) state.community.push(state.deck.shift()!);
+    const values = new Map<Seat, TexasHandValue>();
+    for (const player of live) values.set(player.seat, evaluateTexasHand([...player.holeCards, ...state.community]));
+    const best = live.map((player) => values.get(player.seat)!).sort((left, right) => compareTexasHands(right, left))[0];
+    const winners = live.filter((player) => compareTexasHands(values.get(player.seat)!, best) === 0);
+    const pot = state.pot;
+    const share = Math.floor(pot / winners.length);
+    let remainder = pot - share * winners.length;
+    const payouts: Record<string, number> = {};
+    const hands: Record<string, string> = {};
+    for (const player of live) hands[player.seat] = values.get(player.seat)!.category;
+    for (const winner of winners) {
+      const payout = share + (remainder > 0 ? 1 : 0);
+      remainder -= payout > share ? 1 : 0;
+      winner.stack += payout;
+      payouts[winner.seat] = payout;
+    }
+    for (const player of Object.values(state.players)) if (player) {
+      player.totalBet = 0;
+      player.roundBet = 0;
+      player.allIn = false;
+    }
+    state.pot = 0;
+    state.currentTurn = null;
+    state.phase = 'settled';
+    state.settlement = { winners: winners.map((player) => player.seat), payouts, hands };
+    state.version += 1;
+  }
+
+  private commit(player: TexasPlayer, amount: number): void {
+    const safeAmount = Math.max(0, Math.min(Math.floor(amount), player.stack));
+    player.stack -= safeAmount;
+    player.roundBet += safeAmount;
+    player.totalBet += safeAmount;
+    if (player.stack === 0) player.allIn = true;
+  }
+
+  private syncPot(state: TexasState): void {
+    state.pot = Object.values(state.players).reduce((sum, player) => sum + (player?.totalBet ?? 0), 0);
+  }
+
+  private livePlayers(): TexasPlayer[] {
+    return this.orderedPlayers().filter((player) => !player.folded);
+  }
+
+  private orderedPlayers(): TexasPlayer[] {
+    if (!this.state) return [];
+    return TEXAS_SEATS.map((seat) => this.state!.players[seat]).filter((player): player is TexasPlayer => player !== null);
+  }
+
+  private nextSeat(seat: Seat): Seat {
+    const index = TEXAS_SEATS.indexOf(seat);
+    for (let offset = 1; offset <= TEXAS_SEATS.length; offset += 1) {
+      const candidate = TEXAS_SEATS[(index + offset) % TEXAS_SEATS.length];
+      if (this.state?.players[candidate]) return candidate;
+    }
+    return seat;
+  }
+
+  private nextActionSeat(after: Seat): Seat | null {
+    const live = this.livePlayers().filter((player) => !player.allIn);
+    if (live.length === 0) return null;
+    let candidate = after;
+    for (let offset = 0; offset < TEXAS_SEATS.length; offset += 1) {
+      candidate = this.nextSeat(candidate);
+      const player = this.state?.players[candidate];
+      if (player && !player.folded && !player.allIn) return candidate;
+    }
+    return live[0].seat;
+  }
+
+  private amount(payload: TexasCommandEnvelope['payload']): number {
+    const amount = (payload as { readonly amount?: unknown }).amount;
+    if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
+      throw new TexasRoomServiceError('INVALID_AMOUNT', '下注金额无效');
+    }
+    return Math.floor(amount);
+  }
+
+  private assertHost(session: Session): void {
+    if (!this.state || session.playerId !== this.state.hostId) throw new TexasRoomServiceError('NOT_HOST', '只有房主可以操作');
+  }
+
+  private removeSeat(seat: Seat): void {
+    if (!this.state || !this.state.players[seat]) return;
+    const target = this.state.players[seat]!;
+    this.state.players[seat] = null;
+    this.sessions.clearSeatForPlayer(target.id);
+    if (target.id === this.state.hostId) {
+      this.state.hostId = this.orderedPlayers()[0]?.id ?? '';
+    }
+    if (this.orderedPlayers().length === 0) this.state = null;
+    else if (this.state) this.state.version += 1;
+  }
+
+  private promoteWaiting(): void {
+    if (!this.state) return;
+    for (const sessionToken of [...this.waitingSessionTokens]) {
+      const seat = TEXAS_SEATS.find((candidate) => this.state?.players[candidate] === null);
+      if (!seat) break;
+      const session = this.sessions.get(sessionToken);
+      const nickname = session.nickname?.trim();
+      if (!nickname) {
+        this.waitingSessionTokens.delete(sessionToken);
+        continue;
+      }
+      this.state.players[seat] = {
+        id: session.playerId,
+        seat,
+        nickname,
+        connected: session.connectionId !== null,
+        stack: TEXAS_STARTING_STACK,
+        totalBet: 0,
+        roundBet: 0,
+        holeCards: [],
+        folded: false,
+        allIn: false,
+      };
+      this.sessions.setSeat(sessionToken, seat);
+      this.sessions.setIdentity(sessionToken, 'player', nickname);
+      this.waitingSessionTokens.delete(sessionToken);
+      this.state.version += 1;
+    }
+  }
+
+  private emptyState(roomId: string, hostId: string): TexasState {
+    return {
+      roomId,
+      hostId,
+      phase: 'lobby',
+      handNumber: 0,
+      version: 0,
+      players: { A: null, B: null, C: null, D: null },
+      dealerSeat: null,
+      smallBlindSeat: null,
+      bigBlindSeat: null,
+      currentTurn: null,
+      community: [],
+      deck: [],
+      pot: 0,
+      currentBet: 0,
+      minRaise: TEXAS_BIG_BLIND,
+      actedSeats: [],
+      settlement: null,
+    };
+  }
+
+  private emptyPublicSnapshot(): TexasPublicSnapshot {
+    return {
+      gameId: 'texas',
+      roomId: 'texas',
+      phase: 'lobby',
+      handNumber: 0,
+      version: 0,
+      players: [],
+      spectators: [],
+      hostSeat: null,
+      dealerSeat: null,
+      smallBlindSeat: null,
+      bigBlindSeat: null,
+      currentTurn: null,
+      community: [],
+      pot: 0,
+      currentBet: 0,
+      minRaise: TEXAS_BIG_BLIND,
+      settlement: null,
+    };
+  }
+}

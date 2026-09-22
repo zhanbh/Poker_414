@@ -14,6 +14,21 @@ export const EVENTS = {
 
 export const MINI_PROGRAM_SOCKET_PATH = '/414-ws';
 
+export type GameId = '414' | 'texas';
+
+export interface GameSelection {
+  readonly id: GameId;
+  readonly name: string;
+  readonly description: string;
+  readonly maxPlayers: number;
+}
+
+export const GAME_SELECTIONS: readonly GameSelection[] = [
+  { id: '414', name: '414', description: '四人私房扑克牌', maxPlayers: 4 },
+  { id: 'texas', name: '德州扑克', description: '四人无限注德州扑克', maxPlayers: 4 },
+];
+
+
 export type RoomRole = 'player' | 'spectator';
 
 export type CommandType =
@@ -109,6 +124,116 @@ export interface PrivateSnapshot {
 export interface RoomSnapshot {
   readonly public: PublicSnapshot;
   readonly private: PrivateSnapshot;
+}
+
+
+export type TexasCommandType =
+  | 'start-hand'
+  | 'fold'
+  | 'check'
+  | 'call'
+  | 'bet'
+  | 'raise'
+  | 'all-in'
+  | 'next-hand'
+  | 'remove-player';
+
+export type TexasCommandPayload =
+  | Record<string, never>
+  | { readonly amount: number }
+  | { readonly seat: Seat };
+
+export interface TexasCommandEnvelope {
+  readonly type: TexasCommandType;
+  readonly requestId: string;
+  readonly handNumber: number;
+  readonly stateVersion: number;
+  readonly payload: TexasCommandPayload;
+}
+
+export interface TexasPlayerView {
+  readonly seat: Seat;
+  readonly nickname: string;
+  readonly connected: boolean;
+  readonly stack: number;
+  readonly totalBet: number;
+  readonly roundBet: number;
+  readonly folded: boolean;
+  readonly allIn: boolean;
+  readonly isHost: boolean;
+}
+
+export interface TexasSpectatorView {
+  readonly nickname: string;
+  readonly connected: boolean;
+  readonly waiting?: boolean;
+}
+
+export interface TexasSettlement {
+  readonly winners: readonly Seat[];
+  readonly payouts: Readonly<Record<string, number>>;
+  readonly hands: Readonly<Record<string, string>>;
+}
+
+export interface TexasPublicSnapshot {
+  readonly gameId: 'texas';
+  readonly roomId: string;
+  readonly phase: 'lobby' | 'preflop' | 'flop' | 'turn' | 'river' | 'showdown' | 'settled';
+  readonly handNumber: number;
+  readonly version: number;
+  readonly players: TexasPlayerView[];
+  readonly spectators: TexasSpectatorView[];
+  readonly hostSeat: Seat | null;
+  readonly dealerSeat: Seat | null;
+  readonly smallBlindSeat: Seat | null;
+  readonly bigBlindSeat: Seat | null;
+  readonly currentTurn: Seat | null;
+  readonly community: import('./texas').TexasCard[];
+  readonly pot: number;
+  readonly currentBet: number;
+  readonly minRaise: number;
+  readonly settlement: TexasSettlement | null;
+}
+
+export interface TexasPrivateSnapshot {
+  readonly seat: Seat | null;
+  readonly holeCards: import('./texas').TexasCard[];
+  readonly waiting?: boolean;
+  readonly spectator?: boolean;
+  readonly spectatorHands?: ReadonlyArray<{ readonly seat: Seat; readonly nickname: string; readonly hand: import('./texas').TexasCard[] }>;
+}
+
+export interface TexasSnapshot {
+  readonly public: TexasPublicSnapshot;
+  readonly private: TexasPrivateSnapshot;
+}
+
+export type GameSnapshot = RoomSnapshot | TexasSnapshot;
+export type AnyCommandEnvelope = CommandEnvelope | TexasCommandEnvelope;
+
+export function isTexasSnapshot(snapshot: GameSnapshot): snapshot is TexasSnapshot {
+  return snapshot.public && 'gameId' in snapshot.public && snapshot.public.gameId === 'texas';
+}
+
+const TEXAS_COMMAND_TYPES = new Set<TexasCommandType>([
+  'start-hand', 'fold', 'check', 'call', 'bet', 'raise', 'all-in', 'next-hand', 'remove-player',
+]);
+
+export function isTexasCommandEnvelope(value: unknown): value is TexasCommandEnvelope {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<TexasCommandEnvelope>;
+  return typeof candidate.type === 'string'
+    && TEXAS_COMMAND_TYPES.has(candidate.type as TexasCommandType)
+    && typeof candidate.requestId === 'string'
+    && candidate.requestId.length > 0
+    && typeof candidate.handNumber === 'number'
+    && Number.isInteger(candidate.handNumber)
+    && candidate.handNumber >= 0
+    && typeof candidate.stateVersion === 'number'
+    && Number.isInteger(candidate.stateVersion)
+    && candidate.stateVersion >= 0
+    && Boolean(candidate.payload)
+    && typeof candidate.payload === 'object';
 }
 
 export const ERROR_CODES = {

@@ -266,3 +266,61 @@ main { min-height: 100svh; padding: clamp(16px, 4vw, 32px); }
   border: 1px solid #d56f79;
   border-radius: 8px;
 }
+
+.game-picker { display: grid; gap: 10px; }
+.game-card { display: grid; gap: 4px; padding: 14px 16px; color: #d1e4eb; text-align: left; background: #18384b; border: 1px solid #397a8b; border-radius: 10px; }
+.game-card strong { color: #ffd166; font-size: 1.1rem; }
+.game-card span { color: #eaf2ff; }
+.game-card small { color: #9fc5ce; }
+.game-card.selected { border-color: #ffd166; box-shadow: 0 0 0 2px rgba(255, 209, 102, .22); }
+.access-view h2 { margin: 4px 0 0; color: #ffd166; }
+.texas-lobby, .texas-game { width: min(100%, 980px); margin: 0 auto; }
+.texas-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.texas-header h1 { margin-bottom: 6px; }
+.texas-header p { margin-top: 0; color: #9fc5ce; }
+.texas-seats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 24px 0; }
+.texas-seat { display: grid; gap: 8px; min-height: 130px; padding: 18px; background: #18384b; border: 1px dashed #397a8b; border-radius: 14px; }
+.texas-seat.occupied { border-style: solid; border-color: #70a9b4; }
+.texas-seat strong { color: #ffd166; }
+.texas-seat b { font-size: 1.2rem; }
+.texas-seat span { color: #9fc5ce; }
+.texas-seat em { color: #8de6bd; font-style: normal; }
+.texas-table { margin: 18px 0; padding: 18px; background: radial-gradient(circle at center, #1d5662, #123844 70%); border: 2px solid #397a8b; border-radius: 24px; box-shadow: 0 18px 44px rgba(0, 0, 0, .25); }
+.texas-table-meta { display: flex; justify-content: center; gap: 18px; flex-wrap: wrap; color: #d1e4eb; }
+.texas-table-meta strong { color: #ffd166; }
+.texas-community { display: flex; justify-content: center; align-items: center; gap: 8px; min-height: 120px; margin: 20px 0; flex-wrap: wrap; }
+.texas-section-label { width: 100%; text-align: center; color: #9fc5ce; }
+.texas-card, .texas-card-back { display: inline-grid; place-items: center; min-width: 58px; min-height: 78px; padding: 8px 6px; color: #132431; background: #f5f8fc; border: 2px solid #d6e2ea; border-radius: 8px; font-size: 1.25rem; font-weight: 800; box-shadow: 0 4px 8px rgba(0, 0, 0, .18); }
+.texas-card.red { color: #c62828; }
+.texas-card-back { color: #d1e4eb; background: #244b5e; border-style: dashed; font-size: .9rem; }
+.texas-player-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.texas-player { display: grid; gap: 7px; padding: 12px; background: rgba(16, 35, 49, .62); border: 1px solid #397a8b; border-radius: 10px; }
+.texas-player.current { border-color: #ffd166; box-shadow: 0 0 0 2px rgba(255, 209, 102, .2); }
+.texas-player div { display: flex; justify-content: space-between; gap: 6px; }
+.texas-player small { color: #9fc5ce; }
+.texas-hand, .texas-settlement, .texas-actions { margin-top: 16px; padding: 16px; background: #18384b; border-radius: 12px; }
+.texas-hand h2, .texas-settlement h2 { margin-top: 0; }
+.texas-cards { display: flex; gap: 8px; flex-wrap: wrap; }
+.texas-all-hands { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.texas-all-hands > div { padding: 10px; background: rgba(29, 75, 94, .78); border-radius: 8px; }
+.texas-all-hands > div > div { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.texas-all-hands .texas-card { min-width: 42px; min-height: 58px; font-size: .95rem; }
+.texas-actions { display: flex; align-items: end; gap: 8px; flex-wrap: wrap; }
+.texas-actions label { display: grid; gap: 5px; color: #9fc5ce; }
+.texas-actions input { width: 120px; min-height: 40px; padding: 6px 8px; }
+.texas-actions .texas-bet-slider { flex: 1 1 220px; min-width: 180px; }
+.texas-actions input[type="range"] { width: min(100%, 360px); min-height: 34px; accent-color: #ffd166; }
+.texas-actions button, .texas-settlement button, .texas-lobby > button { min-height: 40px; padding: 8px 14px; color: #102331; background: #ffd166; border: 0; border-radius: 8px; }
+@media (max-width: 760px) {
+  .texas-header { display: block; }
+  .texas-header .leave-room-button { width: 100%; }
+  .texas-seats { gap: 8px; margin: 16px 0; }
+  .texas-seat { min-height: 112px; padding: 12px; }
+  .texas-table { padding: 12px 8px; border-radius: 16px; }
+  .texas-player-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .texas-all-hands { grid-template-columns: 1fr; }
+  .texas-actions { align-items: stretch; }
+  .texas-actions button, .texas-actions label { flex: 1 1 calc(50% - 8px); }
+  .texas-actions input[type="range"] { width: 100%; }
+  .texas-card { min-width: 48px; min-height: 66px; font-size: 1rem; }
+}

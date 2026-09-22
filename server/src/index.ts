@@ -3,15 +3,27 @@ import { randomUUID } from 'node:crypto';
 import { createServer as createHttpServer, Server as NodeHttpServer } from 'node:http';
 import { Server as SocketServer, Socket } from 'socket.io';
 import { WebSocket, WebSocketServer } from 'ws';
-import { EVENTS, isCommandEnvelope, MINI_PROGRAM_SOCKET_PATH } from '../../shared/src/protocol';
+import {
+  AnyCommandEnvelope,
+  CommandEnvelope,
+  EVENTS,
+  GameId,
+  GameSnapshot,
+  isCommandEnvelope,
+  isTexasCommandEnvelope,
+  MINI_PROGRAM_SOCKET_PATH,
+  TexasCommandEnvelope,
+} from '../../shared/src/protocol';
 import { createHttpApp } from './http';
 import { loadConfig, ServerConfig } from './config';
 import { RoomService } from './room-service';
+import { TexasRoomService } from './texas-room-service';
 
 interface MiniProgramSocketState {
   readonly id: string;
   readonly socket: WebSocket;
   sessionToken?: string;
+  gameId?: GameId;
 }
 
 interface MiniProgramMessage {
@@ -20,11 +32,14 @@ interface MiniProgramMessage {
   readonly payload?: unknown;
 }
 
+type GameService = RoomService | TexasRoomService;
+
 export interface RunningServer {
   readonly app: ReturnType<typeof createHttpApp>;
   readonly httpServer: NodeHttpServer;
   readonly io: SocketServer;
   readonly roomService: RoomService;
+  readonly texasRoomService: TexasRoomService;
   close(): Promise<void>;
 }
 
@@ -32,8 +47,18 @@ function acknowledge(ack: unknown, value: unknown): void {
   if (typeof ack === 'function') (ack as (result: unknown) => void)(value);
 }
 
+function commandFor(gameId: GameId, value: unknown): AnyCommandEnvelope {
+  if (gameId === 'texas') {
+    if (!isTexasCommandEnvelope(value)) throw new Error('德州扑克命令格式无效');
+    return value;
+  }
+  if (!isCommandEnvelope(value)) throw new Error('命令格式无效');
+  return value;
+}
+
 export function createServer(config: ServerConfig = loadConfig()): RunningServer {
   const roomService = new RoomService({ inviteCode: config.inviteCode });
+  const texasRoomService = new TexasRoomService({ inviteCode: config.inviteCode });
   const app = createHttpApp(roomService, config.clientDist);
   const httpServer = createHttpServer(app);
   const io = new SocketServer(httpServer, { cors: { origin: false } });
@@ -42,6 +67,10 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
   const socketsById = new Map<string, Socket>();
   const miniSocketsByToken = new Map<string, Set<MiniProgramSocketState>>();
   const miniSocketsById = new Map<string, MiniProgramSocketState>();
+  const gameByToken = new Map<string, GameId>();
+
+  const serviceFor = (gameId: GameId): GameService => gameId === 'texas' ? texasRoomService : roomService;
+  const gameIdForToken = (sessionToken: string): GameId => gameByToken.get(sessionToken) ?? '414';
 
   const sendMiniMessage = (socket: WebSocket, event: string, payload: unknown, requestId?: string) => {
     if (socket.readyState !== WebSocket.OPEN) return;
@@ -60,9 +89,11 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
     miniSocketsById.delete(state.id);
   };
 
-  const addMiniSocket = (state: MiniProgramSocketState, sessionToken: string) => {
+  const addMiniSocket = (state: MiniProgramSocketState, sessionToken: string, gameId: GameId) => {
     if (state.sessionToken && state.sessionToken !== sessionToken) removeMiniSocket(state);
     state.sessionToken = sessionToken;
+    state.gameId = gameId;
+    gameByToken.set(sessionToken, gameId);
     if (!miniSocketsByToken.has(sessionToken)) miniSocketsByToken.set(sessionToken, new Set());
     miniSocketsByToken.get(sessionToken)!.add(state);
     miniSocketsById.set(state.id, state);
@@ -71,7 +102,7 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
   const sendSnapshots = () => {
     for (const [sessionToken, sockets] of socketsByToken) {
       try {
-        const snapshot = roomService.getSnapshot(sessionToken);
+        const snapshot = serviceFor(gameIdForToken(sessionToken)).getSnapshot(sessionToken) as GameSnapshot;
         for (const socket of sockets) socket.emit(EVENTS.snapshot, snapshot);
       } catch {
         socketsByToken.delete(sessionToken);
@@ -79,7 +110,7 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
     }
     for (const [sessionToken, sockets] of miniSocketsByToken) {
       try {
-        const snapshot = roomService.getSnapshot(sessionToken);
+        const snapshot = serviceFor(gameIdForToken(sessionToken)).getSnapshot(sessionToken) as GameSnapshot;
         for (const state of sockets) sendMiniMessage(state.socket, EVENTS.snapshot, snapshot);
       } catch {
         for (const state of sockets) state.socket.close();
@@ -88,7 +119,8 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
     }
   };
 
-  const addSocket = (sessionToken: string, socket: Socket) => {
+  const addSocket = (sessionToken: string, socket: Socket, gameId: GameId) => {
+    gameByToken.set(sessionToken, gameId);
     if (!socketsByToken.has(sessionToken)) socketsByToken.set(sessionToken, new Set());
     socketsByToken.get(sessionToken)!.add(socket);
     socketsById.set(socket.id, socket);
@@ -131,34 +163,38 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
     const requestId = typeof message.requestId === 'string' ? message.requestId : undefined;
     try {
       if (event === EVENTS.login) {
-        const payload = (message.payload ?? {}) as { inviteCode?: string; sessionToken?: string };
-        const auth = payload.sessionToken
-          ? roomService.resume(payload.sessionToken)
-          : roomService.login(payload.inviteCode ?? '');
-        const attachment = roomService.attach(auth.sessionToken, state.id);
+        const payload = (message.payload ?? {}) as { inviteCode?: string; sessionToken?: string; gameId?: GameId };
+        const gameId = payload.gameId === 'texas' ? 'texas' : '414';
+        const service = serviceFor(gameId);
+        const auth = payload.sessionToken ? service.resume(payload.sessionToken) : service.login(payload.inviteCode ?? '');
+        const attachment = service.attach(auth.sessionToken, state.id);
         if (attachment.previousConnectionId) notifyReplaced(attachment.previousConnectionId);
-        addMiniSocket(state, auth.sessionToken);
+        addMiniSocket(state, auth.sessionToken, gameId);
         acknowledgeMini(state, requestId, { ok: true, ...auth });
         return;
       }
 
       if (event === EVENTS.join) {
-        const payload = (message.payload ?? {}) as { sessionToken?: string; nickname?: string; roomId?: string };
+        const payload = (message.payload ?? {}) as { sessionToken?: string; nickname?: string; roomId?: string; gameId?: GameId };
         const sessionToken = payload.sessionToken ?? state.sessionToken;
         if (!sessionToken) throw new Error('请先登录');
-        const snapshot = roomService.join(sessionToken, payload.nickname ?? '', payload.roomId ?? '');
-        addMiniSocket(state, sessionToken);
+        const gameId = payload.gameId === 'texas' || state.gameId === 'texas' ? 'texas' : gameIdForToken(sessionToken);
+        const service = serviceFor(gameId);
+        const snapshot = service.join(sessionToken, payload.nickname ?? '', payload.roomId ?? (gameId === 'texas' ? 'texas' : '414'));
+        addMiniSocket(state, sessionToken, gameId);
         acknowledgeMini(state, requestId, { ok: true, snapshot });
         sendSnapshots();
         return;
       }
 
+      const sessionToken = state.sessionToken;
+      if (!sessionToken) throw new Error('请先登录');
+      const gameId = state.gameId ?? gameIdForToken(sessionToken);
+      const service = serviceFor(gameId);
+      if (!service.isConnectionOwner(sessionToken, state.id)) throw new Error('当前连接已失去操作权');
+
       if (event === EVENTS.leave) {
-        const sessionToken = state.sessionToken;
-        if (!sessionToken || !roomService.isConnectionOwner(sessionToken, state.id)) {
-          throw new Error('当前连接已失去操作权');
-        }
-        roomService.leave(sessionToken);
+        service.leave(sessionToken);
         acknowledgeMini(state, requestId, { ok: true });
         sendSnapshots();
         state.socket.close();
@@ -166,23 +202,17 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
       }
 
       if (event === EVENTS.command) {
-        const sessionToken = state.sessionToken;
-        if (!sessionToken || !roomService.isConnectionOwner(sessionToken, state.id)) {
-          throw new Error('当前连接已失去操作权');
-        }
-        if (!isCommandEnvelope(message.payload)) throw new Error('命令格式无效');
-        const result = roomService.dispatch(sessionToken, message.payload);
+        const command = commandFor(gameId, message.payload);
+        const result = gameId === 'texas'
+          ? texasRoomService.dispatch(sessionToken, command as TexasCommandEnvelope)
+          : roomService.dispatch(sessionToken, command as CommandEnvelope);
         acknowledgeMini(state, requestId, result);
         sendSnapshots();
         return;
       }
 
       if (event === EVENTS.activity) {
-        const sessionToken = state.sessionToken;
-        if (!sessionToken || !roomService.isConnectionOwner(sessionToken, state.id)) {
-          throw new Error('当前连接已失去操作权');
-        }
-        const snapshot = roomService.recordActivity(sessionToken);
+        const snapshot = service.recordActivity(sessionToken);
         acknowledgeMini(state, requestId, { ok: true, snapshot });
         sendSnapshots();
         return;
@@ -195,29 +225,32 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
   };
 
   io.on('connection', (socket) => {
-    socket.on(EVENTS.login, (payload: { inviteCode?: string; sessionToken?: string }, ack: unknown) => {
+    socket.on(EVENTS.login, (payload: { inviteCode?: string; sessionToken?: string; gameId?: GameId }, ack: unknown) => {
       try {
-        const auth = payload?.sessionToken
-          ? roomService.resume(payload.sessionToken)
-          : roomService.login(payload?.inviteCode ?? '');
+        const gameId = payload?.gameId === 'texas' ? 'texas' : '414';
+        const service = serviceFor(gameId);
+        const auth = payload?.sessionToken ? service.resume(payload.sessionToken) : service.login(payload?.inviteCode ?? '');
         socket.data.sessionToken = auth.sessionToken;
-        const attachment = roomService.attach(auth.sessionToken, socket.id);
-        if (attachment.previousConnectionId) {
-          notifyReplaced(attachment.previousConnectionId);
-        }
-        addSocket(auth.sessionToken, socket);
+        socket.data.gameId = gameId;
+        const attachment = service.attach(auth.sessionToken, socket.id);
+        if (attachment.previousConnectionId) notifyReplaced(attachment.previousConnectionId);
+        addSocket(auth.sessionToken, socket, gameId);
         acknowledge(ack, { ok: true, ...auth });
       } catch (error) {
         acknowledge(ack, { ok: false, error: error instanceof Error ? error.message : '登录失败' });
       }
     });
 
-    socket.on(EVENTS.join, (payload: { sessionToken?: string; nickname?: string; roomId?: string }, ack: unknown) => {
+    socket.on(EVENTS.join, (payload: { sessionToken?: string; nickname?: string; roomId?: string; gameId?: GameId }, ack: unknown) => {
       try {
         const sessionToken = payload?.sessionToken ?? socket.data.sessionToken;
-        const snapshot = roomService.join(sessionToken, payload?.nickname ?? '', payload?.roomId ?? '');
+        if (typeof sessionToken !== 'string') throw new Error('请先登录');
+        const gameId = payload?.gameId === 'texas' || socket.data.gameId === 'texas' ? 'texas' : '414';
+        const service = serviceFor(gameId);
+        const snapshot = service.join(sessionToken, payload?.nickname ?? '', payload?.roomId ?? (gameId === 'texas' ? 'texas' : '414'));
         socket.data.sessionToken = sessionToken;
-        addSocket(sessionToken, socket);
+        socket.data.gameId = gameId;
+        addSocket(sessionToken, socket, gameId);
         acknowledge(ack, { ok: true, snapshot });
         sendSnapshots();
       } catch (error) {
@@ -228,10 +261,11 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
     socket.on(EVENTS.leave, (ack: unknown) => {
       try {
         const sessionToken = socket.data.sessionToken;
-        if (typeof sessionToken !== 'string' || !roomService.isConnectionOwner(sessionToken, socket.id)) {
-          throw new Error('当前连接已失去操作权');
-        }
-        roomService.leave(sessionToken);
+        if (typeof sessionToken !== 'string') throw new Error('请先登录');
+        const gameId = socket.data.gameId === 'texas' ? 'texas' : gameIdForToken(sessionToken);
+        const service = serviceFor(gameId);
+        if (!service.isConnectionOwner(sessionToken, socket.id)) throw new Error('当前连接已失去操作权');
+        service.leave(sessionToken);
         acknowledge(ack, { ok: true });
         sendSnapshots();
         socket.disconnect(true);
@@ -243,11 +277,14 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
     socket.on(EVENTS.command, (command: unknown, ack: unknown) => {
       try {
         const sessionToken = socket.data.sessionToken;
-        if (typeof sessionToken !== 'string' || !roomService.isConnectionOwner(sessionToken, socket.id)) {
-          throw new Error('当前连接已失去操作权');
-        }
-        if (!isCommandEnvelope(command)) throw new Error('命令格式无效');
-        const result = roomService.dispatch(sessionToken, command);
+        if (typeof sessionToken !== 'string') throw new Error('请先登录');
+        const gameId = socket.data.gameId === 'texas' ? 'texas' : gameIdForToken(sessionToken);
+        const service = serviceFor(gameId);
+        if (!service.isConnectionOwner(sessionToken, socket.id)) throw new Error('当前连接已失去操作权');
+        const validCommand = commandFor(gameId, command);
+        const result = gameId === 'texas'
+          ? texasRoomService.dispatch(sessionToken, validCommand as TexasCommandEnvelope)
+          : roomService.dispatch(sessionToken, validCommand as CommandEnvelope);
         acknowledge(ack, result);
         sendSnapshots();
       } catch (error) {
@@ -258,8 +295,11 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
     socket.on(EVENTS.activity, (ack: unknown) => {
       try {
         const sessionToken = socket.data.sessionToken;
-        if (typeof sessionToken !== 'string' || !roomService.isConnectionOwner(sessionToken, socket.id)) throw new Error('当前连接已失去操作权');
-        const snapshot = roomService.recordActivity(sessionToken);
+        if (typeof sessionToken !== 'string') throw new Error('请先登录');
+        const gameId = socket.data.gameId === 'texas' ? 'texas' : gameIdForToken(sessionToken);
+        const service = serviceFor(gameId);
+        if (!service.isConnectionOwner(sessionToken, socket.id)) throw new Error('当前连接已失去操作权');
+        const snapshot = service.recordActivity(sessionToken);
         acknowledge(ack, { ok: true, snapshot });
         sendSnapshots();
       } catch (error) {
@@ -270,7 +310,8 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
     socket.on('disconnect', () => {
       const sessionToken = socket.data.sessionToken;
       if (typeof sessionToken !== 'string') return;
-      roomService.disconnect(sessionToken, socket.id);
+      const gameId = socket.data.gameId === 'texas' ? 'texas' : gameIdForToken(sessionToken);
+      serviceFor(gameId).disconnect(sessionToken, socket.id);
       removeSocket(sessionToken, socket);
       sendSnapshots();
     });
@@ -281,7 +322,7 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
     miniSocketsById.set(state.id, state);
     socket.on('message', (data) => handleMiniMessage(state, data.toString()));
     socket.on('close', () => {
-      if (state.sessionToken) roomService.disconnect(state.sessionToken, state.id);
+      if (state.sessionToken) serviceFor(state.gameId ?? gameIdForToken(state.sessionToken)).disconnect(state.sessionToken, state.id);
       removeMiniSocket(state);
       sendSnapshots();
     });
@@ -298,7 +339,8 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
   });
 
   const presenceTimer = setInterval(() => {
-    if (roomService.scan()) sendSnapshots();
+    const changed = roomService.scan() || texasRoomService.scan();
+    if (changed) sendSnapshots();
   }, config.presenceScanMs);
   presenceTimer.unref();
 
@@ -307,6 +349,7 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
     httpServer,
     io,
     roomService,
+    texasRoomService,
     close: async () => {
       clearInterval(presenceTimer);
       await io.close();
@@ -327,6 +370,6 @@ if (require.main === module) {
   const config = loadConfig();
   const running = createServer(config);
   running.httpServer.listen(config.port, config.host, () => {
-    console.log(`414 server listening on ${config.host}:${config.port}`);
+    console.log('414 server listening on ' + config.host + ':' + config.port);
   });
 }

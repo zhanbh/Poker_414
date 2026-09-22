@@ -99,7 +99,9 @@ export class RoomService {
       return this.getSnapshot(sessionToken);
     }
     try {
-      this.state = joinPlayer(this.state, { id: session.playerId, nickname: nickname.trim() }, this.now());
+      const joined = joinPlayer(this.state, { id: session.playerId, nickname: nickname.trim() }, this.now());
+      const hasHost = Object.values(joined.players).some((player) => player?.id === joined.hostId);
+      this.state = hasHost ? joined : { ...joined, hostId: session.playerId };
     } catch (error) {
       throw this.wrapGameError(error);
     }
@@ -220,7 +222,14 @@ export class RoomService {
     if (!this.state || this.state.phase !== 'lobby') {
       throw new RoomServiceError('HAND_IN_PROGRESS', '牌局进行中不能退出玩家位，请等待本局结束');
     }
-    this.state = removePlayer(this.state, session.seat);
+    const leavingPlayer = this.state.players[session.seat];
+    const next = removePlayer(this.state, session.seat);
+    if (leavingPlayer?.id === this.state.hostId) {
+      const replacement = Object.values(next.players).find((player) => player !== null);
+      this.state = replacement ? { ...next, hostId: replacement.id } : next;
+    } else {
+      this.state = next;
+    }
     this.sessions.clearIdentity(sessionToken);
   }
 

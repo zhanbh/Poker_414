@@ -38,6 +38,7 @@ export class SocketClientTransport implements ClientTransport {
 
   login(inviteCode: string, sessionToken?: string): Promise<AuthResult> {
     return new Promise((resolve, reject) => {
+      if (!this.socket.connected) this.socket.connect();
       const payload = sessionToken ? { sessionToken, gameId: this.gameId } : { inviteCode, gameId: this.gameId };
       this.socket.emit(EVENTS.login, payload, (result: AcknowledgeResult) => {
         if (result?.ok && result.sessionToken && result.playerId) {

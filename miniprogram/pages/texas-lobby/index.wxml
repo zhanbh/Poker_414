@@ -8,7 +8,7 @@
     <view class="texas-table-felt">
       <view class="texas-table-title">德州扑克</view>
       <view>{{playerCount}} 人已入座 · 至少 2 人开局</view>
-      <view class="muted table-note">后加入者进入等待席，下一局自动入座</view>
+      <view class="muted table-note">后加入者优先占用空位，等待下一局</view>
       <button wx:if="{{isHost}}" class="primary-button table-start-button" disabled="{{playerCount < 2}}" bindtap="onStart">开始牌局</button>
     </view>
 
@@ -17,6 +17,7 @@
       <view class="seat-name">{{item.nickname || '空位'}}</view>
       <view wx:if="{{item.nickname}}" class="muted">筹码 {{item.stack}}</view>
       <view wx:if="{{item.isHost}}" class="host">房主</view>
+      <view wx:if="{{item.waiting}}" class="waiting">等待下一局</view>
       <view wx:if="{{item.nickname && !item.connected}}" class="muted">已断开</view>
       <button wx:if="{{isHost && item.nickname && item.seat !== ownSeat}}" class="danger-button texas-seat-remove" data-seat="{{item.seat}}" bindtap="onRemove">移除</button>
     </view>
@@ -29,7 +30,7 @@
   </view>
 
   <view class="panel status-panel">
-    <view>当前玩家：{{playerCount}} / 4</view>
+    <view>当前玩家：{{playerCount}} / 8</view>
     <view wx:if="{{isHost && playerCount < 2}}" class="muted hint">至少需要两名玩家</view>
     <view wx:if="{{!isHost}}" class="muted hint">等待房主开始，后加入者将在下一局入座</view>
     <button class="leave-button" bindtap="onLeave">退出房间</button>

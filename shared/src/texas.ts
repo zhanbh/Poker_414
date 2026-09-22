@@ -1,6 +1,6 @@
-import { Seat } from './scoring';
+export type TexasSeat = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H';
 
-export const TEXAS_SEATS: readonly Seat[] = ['A', 'B', 'C', 'D'];
+export const TEXAS_SEATS: readonly TexasSeat[] = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 export const TEXAS_STARTING_STACK = 1_000;
 export const TEXAS_SMALL_BLIND = 10;
 export const TEXAS_BIG_BLIND = 20;

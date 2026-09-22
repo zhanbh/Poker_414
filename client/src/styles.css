@@ -327,9 +327,13 @@ main { min-height: 100svh; padding: clamp(16px, 4vw, 32px); }
   transform: translate(-50%, -50%);
 }
 .texas-seat-A { top: 4%; left: 50%; }
-.texas-seat-B { top: 50%; left: 96%; transform: translate(-100%, -50%); }
-.texas-seat-C { top: 96%; left: 50%; transform: translate(-50%, -100%); }
-.texas-seat-D { top: 50%; left: 4%; transform: translate(0, -50%); }
+.texas-seat-B { top: 15%; left: 84%; }
+.texas-seat-C { top: 50%; left: 96%; transform: translate(-100%, -50%); }
+.texas-seat-D { top: 85%; left: 84%; }
+.texas-seat-E { top: 96%; left: 50%; transform: translate(-50%, -100%); }
+.texas-seat-F { top: 85%; left: 16%; }
+.texas-seat-G { top: 50%; left: 4%; transform: translate(0, -50%); }
+.texas-seat-H { top: 15%; left: 16%; }
 .texas-seat-position.occupied { border-style: solid; border-color: #70a9b4; }
 .texas-seat-position strong { color: #ffd166; }
 .texas-seat-position b { font-size: 1.1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -370,10 +374,14 @@ main { min-height: 100svh; padding: clamp(16px, 4vw, 32px); }
   .texas-table-felt strong { font-size: 1.05rem; }
   .texas-seat-position, .texas-player { width: 106px; min-height: 72px; padding: 9px; border-radius: 10px; font-size: .82rem; }
   .texas-seat-position b { font-size: .95rem; }
-  .texas-seat-A { top: 3%; }
-  .texas-seat-B { left: 98%; }
-  .texas-seat-C { top: 97%; }
-  .texas-seat-D { left: 2%; }
+  .texas-seat-A { top: 3%; left: 50%; }
+  .texas-seat-B { top: 17%; left: 83%; }
+  .texas-seat-C { top: 50%; left: 98%; }
+  .texas-seat-D { top: 83%; left: 83%; }
+  .texas-seat-E { top: 97%; left: 50%; }
+  .texas-seat-F { top: 83%; left: 17%; }
+  .texas-seat-G { top: 50%; left: 2%; }
+  .texas-seat-H { top: 17%; left: 17%; }
   .texas-table-meta { gap: 8px; font-size: .78rem; }
   .texas-community { gap: 4px; min-height: 90px; margin: 8px 0; }
   .texas-card { min-width: 42px; min-height: 60px; font-size: .95rem; }

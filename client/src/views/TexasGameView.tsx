@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { TexasCommandPayload, TexasCommandType, TexasSnapshot } from '../../../shared/src/protocol';
-import { Seat } from '../../../shared/src/scoring';
+import { TEXAS_SEATS, TexasSeat } from '../../../shared/src/texas';
 import { texasCardLabel, TexasCard } from '../../../shared/src/texas';
 
 function cardClass(card: TexasCard): string {
@@ -43,11 +43,11 @@ export function TexasGameView({ snapshot, onCommand, onLeave, testMode }: {
           <div className="texas-table-meta"><span>底池 <strong>{snapshot.public.pot}</strong></span><span>当前下注 <strong>{snapshot.public.currentBet}</strong></span><span>轮到 <strong>{snapshot.public.currentTurn ?? '—'}</strong></span></div>
           <div className="texas-community"><span className="texas-section-label">公共牌</span>{snapshot.public.community.length > 0 ? snapshot.public.community.map((card) => <Card card={card} key={card.id} />) : <span className="texas-card-back">等待发牌</span>}</div>
         </div>
-        {(['A', 'B', 'C', 'D'] as const).map((seat: Seat) => {
+        {TEXAS_SEATS.map((seat: TexasSeat) => {
           const player = playerBySeat.get(seat);
           return <article className={'texas-player texas-seat-position texas-seat-' + seat + (player?.seat === snapshot.public.currentTurn ? ' current' : '')} key={seat}>
             <div><strong>{seat} 位</strong>{player ? <span>{player.nickname}</span> : <span>空位</span>}</div>
-            {player ? <small>{player.stack} 筹码 · 已下注 {player.totalBet}{player.folded ? ' · 已弃牌' : ''}{player.allIn ? ' · All-in' : ''}</small> : null}
+            {player ? <small>{player.stack} 筹码 · 已下注 {player.totalBet}{player.waiting ? ' · 等待下一局' : ''}{player.folded ? ' · 已弃牌' : ''}{player.allIn ? ' · All-in' : ''}</small> : null}
           </article>;
         })}
       </section>

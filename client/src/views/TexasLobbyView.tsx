@@ -1,14 +1,14 @@
 import { TexasPublicSnapshot } from '../../../shared/src/protocol';
-import { Seat } from '../../../shared/src/scoring';
+import { TEXAS_SEATS, TexasSeat } from '../../../shared/src/texas';
 
-const SEATS: readonly Seat[] = ['A', 'B', 'C', 'D'];
+const SEATS = TEXAS_SEATS;
 
 export function TexasLobbyView({ snapshot, ownSeat, spectator = false, onStart, onRemove, onLeave, testMode }: {
   readonly snapshot: TexasPublicSnapshot;
-  readonly ownSeat: Seat | null;
+  readonly ownSeat: TexasSeat | null;
   readonly spectator?: boolean;
   readonly onStart: () => void;
-  readonly onRemove: (seat: Seat) => void;
+  readonly onRemove: (seat: TexasSeat) => void;
   readonly onLeave: () => void;
   readonly testMode: boolean;
 }) {
@@ -17,19 +17,19 @@ export function TexasLobbyView({ snapshot, ownSeat, spectator = false, onStart, 
   return (
     <main className="texas-lobby">
       {testMode ? <div className="test-mode-banner" role="status">单机多标签测试模式 · 每个标签页都是独立玩家</div> : null}
-      <header className="texas-header"><div><h1>德州扑克房间 {snapshot.roomId}</h1><p>2—4 人无限注 · 1000 筹码 · 盲注 10/20</p></div><span>等待开局</span></header>
+      <header className="texas-header"><div><h1>德州扑克房间 {snapshot.roomId}</h1><p>2—8 人无限注 · 1000 筹码 · 盲注 10/20</p></div><span>等待开局</span></header>
       <section className="texas-lobby-table" aria-label="德州扑克座位">
         <div className="texas-table-felt">
           <strong>德州扑克</strong>
           <span>{snapshot.players.length} 人已入座 · 至少 2 人开局</span>
-          <small>后加入者进入等待席，下一局自动入座</small>
+          <small>后加入者优先占用空位，等待下一局</small>
           {ownPlayer?.isHost ? <button type="button" onClick={onStart} disabled={snapshot.players.length < 2}>开始牌局</button> : null}
         </div>
         {SEATS.map((seat) => {
           const player = players.get(seat);
           return <article className={'texas-seat texas-seat-position texas-seat-' + seat + (player ? ' occupied' : '')} key={seat}>
             <strong>{seat} 位</strong>
-            {player ? <><b>{player.nickname}</b><span>{player.stack} 筹码</span>{player.isHost ? <em>房主</em> : null}</> : <span>空位</span>}
+            {player ? <><b>{player.nickname}</b><span>{player.stack} 筹码</span>{player.isHost ? <em>房主</em> : null}{player.waiting ? <em>等待下一局</em> : null}</> : <span>空位</span>}
             {ownPlayer?.isHost && player && player.seat !== ownSeat ? <button type="button" className="texas-seat-remove" onClick={() => onRemove(player.seat)}>移除</button> : null}
           </article>;
         })}

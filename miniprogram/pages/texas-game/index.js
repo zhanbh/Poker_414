@@ -1,7 +1,7 @@
 const { commandFor } = require('../../utils/commands');
 const { decorateCards, phaseLabel } = require('../../utils/texas');
 
-const SEATS = ['A', 'B', 'C', 'D'];
+const SEATS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 
 Page({
   data: {

@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { Seat } from '../../shared/src/scoring';
+import { TexasSeat } from '../../shared/src/texas';
 
 export interface Session {
   readonly sessionToken: string;
@@ -7,6 +8,7 @@ export interface Session {
   role: 'player' | 'spectator' | null;
   nickname: string | null;
   seat: Seat | null;
+  texasSeat: TexasSeat | null;
   connectionId: string | null;
 }
 
@@ -20,6 +22,7 @@ export class SessionService {
       role: null,
       nickname: null,
       seat: null,
+      texasSeat: null,
       connectionId: null,
     };
     this.sessions.set(session.sessionToken, session);
@@ -36,6 +39,10 @@ export class SessionService {
     this.get(sessionToken).seat = seat;
   }
 
+  setTexasSeat(sessionToken: string, seat: TexasSeat | null): void {
+    this.get(sessionToken).texasSeat = seat;
+  }
+
   setIdentity(sessionToken: string, role: 'player' | 'spectator', nickname: string): void {
     const session = this.get(sessionToken);
     session.role = role;
@@ -47,6 +54,7 @@ export class SessionService {
     session.role = null;
     session.nickname = null;
     session.seat = null;
+    session.texasSeat = null;
   }
 
   attach(sessionToken: string, connectionId: string): { previousConnectionId: string | null } {
@@ -71,6 +79,15 @@ export class SessionService {
     const session = this.findByPlayerId(playerId);
     if (session) {
       session.seat = null;
+      session.role = null;
+      session.nickname = null;
+    }
+  }
+
+  clearTexasSeatForPlayer(playerId: string): void {
+    const session = this.findByPlayerId(playerId);
+    if (session) {
+      session.texasSeat = null;
       session.role = null;
       session.nickname = null;
     }

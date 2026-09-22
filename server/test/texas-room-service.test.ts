@@ -24,7 +24,16 @@ describe('TexasRoomService', () => {
     expect(started.snapshot.public.currentTurn).toBeTruthy();
   });
 
-  it('开局后进入的玩家排队，并在下一局准备阶段自动入座', () => {
+  it('随机从八个空闲座位中分配入座位置', () => {
+    const room = new TexasRoomService({ inviteCode: 'inner-414', random: () => 0.99 });
+    const sessions = Array.from({ length: 4 }, () => room.login('inner-414'));
+    const seats = sessions.map((auth, index) => room.join(auth.sessionToken, '玩家' + index, 'texas').private.seat);
+
+    expect(new Set(seats).size).toBe(4);
+    expect(seats).toEqual(['H', 'G', 'F', 'E']);
+  });
+
+  it('牌局中进入的玩家占用空闲座位，但等待本局结束后自动参加下一局', () => {
     const room = new TexasRoomService({ inviteCode: 'inner-414', random: () => 0.42 });
     const first = room.login('inner-414');
     const second = room.login('inner-414');
@@ -35,36 +44,46 @@ describe('TexasRoomService', () => {
     room.dispatch(first.sessionToken, command('start-hand', lobby.public.handNumber, lobby.public.version));
 
     const queued = room.join(waiting.sessionToken, '丙', 'texas');
-    expect(queued.public.players).toHaveLength(2);
+    const waitingSeat = queued.private.seat;
+    expect(waitingSeat).toBeTruthy();
     expect(queued.private.waiting).toBe(true);
-    expect(queued.public.spectators[0]?.waiting).toBe(true);
+    expect(queued.private.spectator).toBe(true);
+    expect(queued.public.players).toHaveLength(3);
+    expect(queued.public.players.find((player) => player.seat === waitingSeat)?.waiting).toBe(true);
+    expect(queued.public.spectators).toHaveLength(0);
 
     const firstView = room.getSnapshot(first.sessionToken);
-    const firstAllIn = room.dispatch(first.sessionToken, command('all-in', firstView.public.handNumber, firstView.public.version));
-    const secondView = room.getSnapshot(second.sessionToken);
+    const firstActor = firstView.public.currentTurn === firstView.private.seat ? first : second;
+    const secondActor = firstActor === first ? second : first;
+    const firstActorView = room.getSnapshot(firstActor.sessionToken);
+    const firstAllIn = room.dispatch(firstActor.sessionToken, command('all-in', firstActorView.public.handNumber, firstActorView.public.version));
+    const secondView = room.getSnapshot(secondActor.sessionToken);
     expect(firstAllIn.snapshot.public.currentTurn).toBe(secondView.public.currentTurn);
-    room.dispatch(second.sessionToken, command('all-in', secondView.public.handNumber, secondView.public.version));
+    room.dispatch(secondActor.sessionToken, command('all-in', secondView.public.handNumber, secondView.public.version));
 
     const settled = room.getSnapshot(first.sessionToken);
     expect(settled.public.phase).toBe('settled');
     room.dispatch(first.sessionToken, command('next-hand', settled.public.handNumber, settled.public.version));
     const nextLobby = room.getSnapshot(waiting.sessionToken);
     expect(nextLobby.private.waiting).toBe(false);
-    expect(nextLobby.private.seat).toBe('C');
+    expect(nextLobby.private.spectator).toBe(false);
+    expect(nextLobby.private.seat).toBe(waitingSeat);
     expect(nextLobby.public.players).toHaveLength(3);
   });
-  it('满员后自动把后来者放入观战位', () => {
-    const room = new TexasRoomService({ inviteCode: 'inner-414' });
-    const sessions = Array.from({ length: 5 }, () => room.login('inner-414'));
-    sessions.slice(0, 4).forEach((auth, index) => room.join(auth.sessionToken, '玩家' + index, 'texas'));
-    const spectator = room.join(sessions[4].sessionToken, '观众', 'texas');
 
+  it('八个座位满员后，后来者进入纯观战位', () => {
+    const room = new TexasRoomService({ inviteCode: 'inner-414' });
+    const sessions = Array.from({ length: 9 }, () => room.login('inner-414'));
+    sessions.slice(0, 8).forEach((auth, index) => room.join(auth.sessionToken, '玩家' + index, 'texas'));
+    const spectator = room.join(sessions[8].sessionToken, '观众', 'texas');
+
+    expect(spectator.private.seat).toBeNull();
     expect(spectator.private.spectator).toBe(true);
-    expect(spectator.public.players).toHaveLength(4);
-    expect(spectator.private.spectatorHands).toHaveLength(4);
+    expect(spectator.public.players).toHaveLength(8);
+    expect(spectator.public.spectators).toHaveLength(1);
+    expect(spectator.private.spectatorHands).toHaveLength(8);
   });
 });
-
 describe('Texas hand evaluator', () => {
   const card = (rank: TexasCard['rank'], suit: TexasCard['suit'], id = rank + suit): TexasCard => ({ id, rank, suit });
 

@@ -28,6 +28,7 @@
       <view><text class="seat">{{item.seat}}</text><text>{{item.nickname}}</text></view>
       <view class="muted">筹码 {{item.stack}}</view>
       <view class="muted">本轮下注 {{item.roundBet}}</view>
+      <view wx:if="{{item.waiting}}" class="waiting">等待下一局</view>
       <view wx:if="{{item.folded}}" class="folded">已弃牌</view>
       <view wx:if="{{item.allIn}}" class="host">All-in</view>
       <view wx:if="{{item.isHost}}" class="host">房主</view>

@@ -1,6 +1,7 @@
 import { Card } from './cards';
 import { HandKind } from './hand-types';
 import { Level, Seat, SettlementMode, SettlementResult, Team } from './scoring';
+import type { TexasSeat } from './texas';
 
 export const EVENTS = {
   login: 'auth:login',
@@ -25,7 +26,7 @@ export interface GameSelection {
 
 export const GAME_SELECTIONS: readonly GameSelection[] = [
   { id: '414', name: '414', description: '四人私房扑克牌', maxPlayers: 4 },
-  { id: 'texas', name: '德州扑克', description: '两人以上即可开局的无限注德州扑克', maxPlayers: 4 },
+  { id: 'texas', name: '德州扑克', description: '两人以上即可开局的无限注德州扑克', maxPlayers: 8 },
 ];
 
 
@@ -141,7 +142,7 @@ export type TexasCommandType =
 export type TexasCommandPayload =
   | Record<string, never>
   | { readonly amount: number }
-  | { readonly seat: Seat };
+  | { readonly seat: TexasSeat };
 
 export interface TexasCommandEnvelope {
   readonly type: TexasCommandType;
@@ -152,7 +153,7 @@ export interface TexasCommandEnvelope {
 }
 
 export interface TexasPlayerView {
-  readonly seat: Seat;
+  readonly seat: TexasSeat;
   readonly nickname: string;
   readonly connected: boolean;
   readonly stack: number;
@@ -161,6 +162,7 @@ export interface TexasPlayerView {
   readonly folded: boolean;
   readonly allIn: boolean;
   readonly isHost: boolean;
+  readonly waiting?: boolean;
 }
 
 export interface TexasSpectatorView {
@@ -170,7 +172,7 @@ export interface TexasSpectatorView {
 }
 
 export interface TexasSettlement {
-  readonly winners: readonly Seat[];
+  readonly winners: readonly TexasSeat[];
   readonly payouts: Readonly<Record<string, number>>;
   readonly hands: Readonly<Record<string, string>>;
 }
@@ -183,11 +185,11 @@ export interface TexasPublicSnapshot {
   readonly version: number;
   readonly players: TexasPlayerView[];
   readonly spectators: TexasSpectatorView[];
-  readonly hostSeat: Seat | null;
-  readonly dealerSeat: Seat | null;
-  readonly smallBlindSeat: Seat | null;
-  readonly bigBlindSeat: Seat | null;
-  readonly currentTurn: Seat | null;
+  readonly hostSeat: TexasSeat | null;
+  readonly dealerSeat: TexasSeat | null;
+  readonly smallBlindSeat: TexasSeat | null;
+  readonly bigBlindSeat: TexasSeat | null;
+  readonly currentTurn: TexasSeat | null;
   readonly community: import('./texas').TexasCard[];
   readonly pot: number;
   readonly currentBet: number;
@@ -196,11 +198,11 @@ export interface TexasPublicSnapshot {
 }
 
 export interface TexasPrivateSnapshot {
-  readonly seat: Seat | null;
+  readonly seat: TexasSeat | null;
   readonly holeCards: import('./texas').TexasCard[];
   readonly waiting?: boolean;
   readonly spectator?: boolean;
-  readonly spectatorHands?: ReadonlyArray<{ readonly seat: Seat; readonly nickname: string; readonly hand: import('./texas').TexasCard[] }>;
+  readonly spectatorHands?: ReadonlyArray<{ readonly seat: TexasSeat; readonly nickname: string; readonly hand: import('./texas').TexasCard[] }>;
 }
 
 export interface TexasSnapshot {

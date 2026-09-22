@@ -16,8 +16,8 @@ import {
   TEXAS_STARTING_STACK,
   TexasCard,
   TexasHandValue,
+  TexasSeat,
 } from '../../shared/src/texas';
-import { Seat } from '../../shared/src/scoring';
 import { Session, SessionService } from './session-service';
 
 export interface TexasRoomServiceOptions {
@@ -50,7 +50,7 @@ type TexasPhase = TexasPublicSnapshot['phase'];
 
 interface TexasPlayer {
   readonly id: string;
-  readonly seat: Seat;
+  readonly seat: TexasSeat;
   nickname: string;
   connected: boolean;
   stack: number;
@@ -67,17 +67,17 @@ interface TexasState {
   phase: TexasPhase;
   handNumber: number;
   version: number;
-  players: Record<Seat, TexasPlayer | null>;
-  dealerSeat: Seat | null;
-  smallBlindSeat: Seat | null;
-  bigBlindSeat: Seat | null;
-  currentTurn: Seat | null;
+  players: Record<TexasSeat, TexasPlayer | null>;
+  dealerSeat: TexasSeat | null;
+  smallBlindSeat: TexasSeat | null;
+  bigBlindSeat: TexasSeat | null;
+  currentTurn: TexasSeat | null;
   community: TexasCard[];
   deck: TexasCard[];
   pot: number;
   currentBet: number;
   minRaise: number;
-  actedSeats: Seat[];
+  actedSeats: TexasSeat[];
   settlement: TexasSettlement | null;
 }
 
@@ -111,40 +111,36 @@ export class TexasRoomService {
     const session = this.sessions.get(sessionToken);
     if (roomId !== 'texas') throw new TexasRoomServiceError('ROOM_NOT_FOUND', '德州扑克房间不存在');
     if (!nickname.trim()) throw new TexasRoomServiceError('INVALID_NICKNAME', '昵称不能为空');
-    if (session.seat || session.role === 'spectator') return this.getSnapshot(sessionToken);
+    if (session.texasSeat || session.role === 'spectator') return this.getSnapshot(sessionToken);
 
     if (!this.state) {
       this.state = this.emptyState(roomId, session.playerId);
     }
     if (this.state.phase !== 'lobby') {
-      if (!this.waitingSessionTokens.has(sessionToken) && this.sessions.listSpectators().length >= MAX_SPECTATORS) {
-        throw new TexasRoomServiceError('SPECTATORS_FULL', '等待位已满');
+      const seat = this.randomOpenSeat();
+      if (seat) {
+        this.addPlayer(seat, session, nickname.trim());
+        this.waitingSessionTokens.add(sessionToken);
+        this.sessions.setIdentity(sessionToken, 'spectator', nickname.trim());
+        this.state.version += 1;
+        return this.getSnapshot(sessionToken);
+      }
+      if (!this.waitingSessionTokens.has(sessionToken) && this.sessions.listSpectators().filter((viewer) => !viewer.texasSeat).length >= MAX_SPECTATORS) {
+        throw new TexasRoomServiceError('SPECTATORS_FULL', '观战位已满');
       }
       this.waitingSessionTokens.add(sessionToken);
       this.sessions.setIdentity(sessionToken, 'spectator', nickname.trim());
       return this.getSnapshot(sessionToken);
     }
-    const seat = TEXAS_SEATS.find((candidate) => this.state?.players[candidate] === null);
+    const seat = this.randomOpenSeat();
     if (!seat) {
-      if (this.sessions.listSpectators().length >= MAX_SPECTATORS) {
+      if (this.sessions.listSpectators().filter((viewer) => !viewer.texasSeat).length >= MAX_SPECTATORS) {
         throw new TexasRoomServiceError('SPECTATORS_FULL', '观战位已满');
       }
       this.sessions.setIdentity(sessionToken, 'spectator', nickname.trim());
       return this.getSnapshot(sessionToken);
     }
-    this.state.players[seat] = {
-      id: session.playerId,
-      seat,
-      nickname: nickname.trim(),
-      connected: true,
-      stack: TEXAS_STARTING_STACK,
-      totalBet: 0,
-      roundBet: 0,
-      holeCards: [],
-      folded: false,
-      allIn: false,
-    };
-    this.sessions.setSeat(sessionToken, seat);
+    this.addPlayer(seat, session, nickname.trim());
     this.sessions.setIdentity(sessionToken, 'player', nickname.trim());
     this.state.version += 1;
     return this.getSnapshot(sessionToken);
@@ -156,7 +152,7 @@ export class TexasRoomService {
     if (!state) {
       return {
         public: this.emptyPublicSnapshot(),
-        private: { seat: session.seat, holeCards: [] },
+        private: { seat: session.texasSeat, holeCards: [] },
       };
     }
     const players = Object.values(state.players)
@@ -171,6 +167,7 @@ export class TexasRoomService {
         folded: player.folded,
         allIn: player.allIn,
         isHost: player.id === state.hostId,
+        waiting: this.isWaitingPlayer(player.id),
       }));
     const publicSnapshot: TexasPublicSnapshot = {
       gameId: 'texas',
@@ -179,7 +176,7 @@ export class TexasRoomService {
       handNumber: state.handNumber,
       version: state.version,
       players,
-      spectators: this.sessions.listSpectators().map((viewer) => ({
+      spectators: this.sessions.listSpectators().filter((viewer) => !viewer.texasSeat).map((viewer) => ({
         nickname: viewer.nickname ?? '观战者',
         connected: viewer.connectionId !== null,
         waiting: this.waitingSessionTokens.has(viewer.sessionToken),
@@ -195,14 +192,14 @@ export class TexasRoomService {
       minRaise: state.minRaise,
       settlement: state.settlement,
     };
-    const ownPlayer = session.seat ? state.players[session.seat] : null;
+    const ownPlayer = session.texasSeat ? state.players[session.texasSeat] : null;
     const spectatorHands = Object.values(state.players)
-      .filter((player): player is TexasPlayer => player !== null)
+      .filter((player): player is TexasPlayer => player !== null && !this.isWaitingPlayer(player.id))
       .map((player) => ({ seat: player.seat, nickname: player.nickname, hand: [...player.holeCards] }));
     return {
       public: publicSnapshot,
       private: {
-        seat: session.seat,
+        seat: session.texasSeat,
         holeCards: ownPlayer ? [...ownPlayer.holeCards] : [],
         waiting: this.waitingSessionTokens.has(sessionToken),
         spectator: session.role === 'spectator',
@@ -222,22 +219,28 @@ export class TexasRoomService {
   disconnect(sessionToken: string, connectionId: string): void {
     if (!this.sessions.detach(sessionToken, connectionId)) return;
     const session = this.sessions.get(sessionToken);
-    if (this.state && session.seat && this.state.players[session.seat]) {
-      this.state.players[session.seat]!.connected = false;
+    if (this.state && session.texasSeat && this.state.players[session.texasSeat]) {
+      this.state.players[session.texasSeat]!.connected = false;
       this.state.version += 1;
     }
   }
 
   leave(sessionToken: string): void {
     const session = this.sessions.get(sessionToken);
-    if (session.role === 'spectator' || !session.seat) {
+    if (session.role === 'spectator') {
+      this.waitingSessionTokens.delete(sessionToken);
+      if (session.texasSeat) this.removeSeat(session.texasSeat);
+      else this.sessions.clearIdentity(sessionToken);
+      return;
+    }
+    if (!session.texasSeat) {
       this.sessions.clearIdentity(sessionToken);
       return;
     }
     if (!this.state || this.state.phase !== 'lobby') {
       throw new TexasRoomServiceError('HAND_IN_PROGRESS', '牌局进行中不能退出玩家位，请等待本局结束');
     }
-    this.removeSeat(session.seat);
+    this.removeSeat(session.texasSeat);
     this.sessions.clearIdentity(sessionToken);
   }
 
@@ -256,7 +259,7 @@ export class TexasRoomService {
     if (!this.state) throw new TexasRoomServiceError('ROOM_NOT_FOUND', '房间尚未创建');
     if (command.handNumber !== this.state.handNumber) throw new TexasRoomServiceError('STALE_HAND', '牌局编号已过期，请刷新视图');
     if (command.stateVersion !== this.state.version) throw new TexasRoomServiceError('STALE_VERSION', '状态版本已过期，请刷新视图');
-    if (!session.seat && command.type !== 'remove-player') throw new TexasRoomServiceError('NOT_SEATED', '玩家尚未入座');
+    if ((!session.texasSeat || session.role === 'spectator') && command.type !== 'remove-player') throw new TexasRoomServiceError('NOT_SEATED', '玩家尚未入座或正在等待下一局');
 
     this.applyCommand(session, command.type, command.payload);
     const result: TexasCommandSuccess = { ok: true, snapshot: this.getSnapshot(sessionToken) };
@@ -298,15 +301,15 @@ export class TexasRoomService {
     if (type === 'remove-player') {
       this.assertHost(session);
       if (state.phase !== 'lobby') throw new TexasRoomServiceError('INVALID_PHASE', '牌局进行中不能移除玩家');
-      const target = (payload as { readonly seat: Seat }).seat;
-      if (target === session.seat) throw new TexasRoomServiceError('CANNOT_REMOVE_SELF', '不能移除自己');
+      const target = (payload as { readonly seat: TexasSeat }).seat;
+      if (target === session.texasSeat) throw new TexasRoomServiceError('CANNOT_REMOVE_SELF', '不能移除自己');
       this.removeSeat(target);
       return;
     }
     if (state.phase !== 'preflop' && state.phase !== 'flop' && state.phase !== 'turn' && state.phase !== 'river') {
       throw new TexasRoomServiceError('INVALID_PHASE', '当前不在下注阶段');
     }
-    const player = session.seat ? state.players[session.seat] : null;
+    const player = session.texasSeat ? state.players[session.texasSeat] : null;
     if (!player || state.currentTurn !== player.seat) throw new TexasRoomServiceError('NOT_YOUR_TURN', '还没轮到你操作');
     switch (type) {
       case 'fold':
@@ -460,7 +463,7 @@ export class TexasRoomService {
     if (!this.state) return;
     const state = this.state;
     while (state.community.length < 5 && state.deck.length > 0) state.community.push(state.deck.shift()!);
-    const values = new Map<Seat, TexasHandValue>();
+    const values = new Map<TexasSeat, TexasHandValue>();
     for (const player of live) values.set(player.seat, evaluateTexasHand([...player.holeCards, ...state.community]));
     const best = live.map((player) => values.get(player.seat)!).sort((left, right) => compareTexasHands(right, left))[0];
     const winners = live.filter((player) => compareTexasHands(values.get(player.seat)!, best) === 0);
@@ -501,7 +504,7 @@ export class TexasRoomService {
   }
 
   private livePlayers(): TexasPlayer[] {
-    return this.orderedPlayers().filter((player) => !player.folded);
+    return this.orderedPlayers().filter((player) => !this.isWaitingPlayer(player.id) && !player.folded);
   }
 
   private orderedPlayers(): TexasPlayer[] {
@@ -509,7 +512,7 @@ export class TexasRoomService {
     return TEXAS_SEATS.map((seat) => this.state!.players[seat]).filter((player): player is TexasPlayer => player !== null);
   }
 
-  private nextSeat(seat: Seat): Seat {
+  private nextSeat(seat: TexasSeat): TexasSeat {
     const index = TEXAS_SEATS.indexOf(seat);
     for (let offset = 1; offset <= TEXAS_SEATS.length; offset += 1) {
       const candidate = TEXAS_SEATS[(index + offset) % TEXAS_SEATS.length];
@@ -518,7 +521,7 @@ export class TexasRoomService {
     return seat;
   }
 
-  private nextActionSeat(after: Seat): Seat | null {
+  private nextActionSeat(after: TexasSeat): TexasSeat | null {
     const live = this.livePlayers().filter((player) => !player.allIn);
     if (live.length === 0) return null;
     let candidate = after;
@@ -542,11 +545,43 @@ export class TexasRoomService {
     if (!this.state || session.playerId !== this.state.hostId) throw new TexasRoomServiceError('NOT_HOST', '只有房主可以操作');
   }
 
-  private removeSeat(seat: Seat): void {
+  private addPlayer(seat: TexasSeat, session: Session, nickname: string): void {
+    if (!this.state) throw new TexasRoomServiceError('ROOM_NOT_FOUND', '房间尚未创建');
+    this.state.players[seat] = {
+      id: session.playerId,
+      seat,
+      nickname,
+      connected: session.connectionId !== null,
+      stack: TEXAS_STARTING_STACK,
+      totalBet: 0,
+      roundBet: 0,
+      holeCards: [],
+      folded: false,
+      allIn: false,
+    };
+    this.sessions.setTexasSeat(session.sessionToken, seat);
+  }
+
+  private isWaitingPlayer(playerId: string): boolean {
+    const session = this.sessions.findByPlayerId(playerId);
+    return Boolean(session && this.waitingSessionTokens.has(session.sessionToken));
+  }
+
+  private randomOpenSeat(): TexasSeat | null {
+    if (!this.state) return null;
+    const openSeats = TEXAS_SEATS.filter((candidate) => this.state?.players[candidate] === null);
+    if (openSeats.length === 0) return null;
+    const index = Math.min(openSeats.length - 1, Math.max(0, Math.floor(this.random() * openSeats.length)));
+    return openSeats[index];
+  }
+
+  private removeSeat(seat: TexasSeat): void {
     if (!this.state || !this.state.players[seat]) return;
     const target = this.state.players[seat]!;
+    const targetSession = this.sessions.findByPlayerId(target.id);
+    if (targetSession) this.waitingSessionTokens.delete(targetSession.sessionToken);
     this.state.players[seat] = null;
-    this.sessions.clearSeatForPlayer(target.id);
+    this.sessions.clearTexasSeatForPlayer(target.id);
     if (target.id === this.state.hostId) {
       this.state.hostId = this.orderedPlayers()[0]?.id ?? '';
     }
@@ -557,27 +592,20 @@ export class TexasRoomService {
   private promoteWaiting(): void {
     if (!this.state) return;
     for (const sessionToken of [...this.waitingSessionTokens]) {
-      const seat = TEXAS_SEATS.find((candidate) => this.state?.players[candidate] === null);
-      if (!seat) break;
       const session = this.sessions.get(sessionToken);
+      if (session.texasSeat) {
+        this.waitingSessionTokens.delete(sessionToken);
+        this.sessions.setIdentity(sessionToken, 'player', session.nickname?.trim() ?? '玩家');
+        continue;
+      }
+      const seat = this.randomOpenSeat();
+      if (!seat) break;
       const nickname = session.nickname?.trim();
       if (!nickname) {
         this.waitingSessionTokens.delete(sessionToken);
         continue;
       }
-      this.state.players[seat] = {
-        id: session.playerId,
-        seat,
-        nickname,
-        connected: session.connectionId !== null,
-        stack: TEXAS_STARTING_STACK,
-        totalBet: 0,
-        roundBet: 0,
-        holeCards: [],
-        folded: false,
-        allIn: false,
-      };
-      this.sessions.setSeat(sessionToken, seat);
+      this.addPlayer(seat, session, nickname);
       this.sessions.setIdentity(sessionToken, 'player', nickname);
       this.waitingSessionTokens.delete(sessionToken);
       this.state.version += 1;
@@ -591,7 +619,7 @@ export class TexasRoomService {
       phase: 'lobby',
       handNumber: 0,
       version: 0,
-      players: { A: null, B: null, C: null, D: null },
+      players: { A: null, B: null, C: null, D: null, E: null, F: null, G: null, H: null },
       dealerSeat: null,
       smallBlindSeat: null,
       bigBlindSeat: null,

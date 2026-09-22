@@ -84,22 +84,42 @@
 }
 
 .texas-seat-B {
+  top: 15%;
+  left: 84%;
+}
+
+.texas-seat-C {
   top: 50%;
   left: 96%;
   transform: translate(-100%, -50%);
 }
 
-.texas-seat-C {
+.texas-seat-D {
+  top: 85%;
+  left: 84%;
+}
+
+.texas-seat-E {
   top: 96%;
   left: 50%;
   transform: translate(-50%, -100%);
 }
 
-.texas-seat-D {
-  top: 50%;
-  left: 4%;
+.texas-seat-F {
+  top: 85%;
+  left: 16%;
 }
 
+.texas-seat-G {
+  top: 50%;
+  left: 4%;
+  transform: translate(0, -50%);
+}
+
+.texas-seat-H {
+  top: 15%;
+  left: 16%;
+}
 .texas-seat-position.occupied {
   border-style: solid;
   border-color: #70a9b4;
@@ -123,6 +143,10 @@
   white-space: nowrap;
   font-size: 28rpx;
   font-weight: 700;
+}
+
+.texas-seat-position .waiting {
+  color: #9dd9e5;
 }
 
 .texas-seat-position .host {

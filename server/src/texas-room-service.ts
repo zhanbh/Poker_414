@@ -524,16 +524,17 @@ export class TexasRoomService {
     const state = this.state;
     const seatedPlayers = this.orderedPlayers().filter((player) => !this.isWaitingPlayer(player.id));
 
-    if (state.phase === 'lobby' || !state.dealerSeat) {
-      return new Map(seatedPlayers.map((player, index) => [player.seat, `座位 ${index + 1}`] as const));
-    }
-
     // A player who joined during a hand has a seat, but no hole cards yet and
     // must not affect the position names for the current hand.
-    const handPlayers = seatedPlayers.filter((player) => player.holeCards.length > 0);
+    const handPlayers = seatedPlayers.filter((player) => state.phase === 'lobby' || player.holeCards.length > 0);
     if (handPlayers.length === 0) return new Map();
 
-    const dealerIndex = handPlayers.findIndex((player) => player.seat === state.dealerSeat);
+    // In the lobby show the positions for the next hand so the seats are
+    // understandable before the host presses "开始牌局".
+    const dealerSeat = state.phase === 'lobby'
+      ? (state.dealerSeat ? this.nextSeat(state.dealerSeat) : handPlayers[0].seat)
+      : state.dealerSeat;
+    const dealerIndex = handPlayers.findIndex((player) => player.seat === dealerSeat);
     const rotated = dealerIndex < 0
       ? handPlayers
       : [...handPlayers.slice(dealerIndex), ...handPlayers.slice(0, dealerIndex)];

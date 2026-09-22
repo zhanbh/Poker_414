@@ -16,6 +16,7 @@ describe('TexasRoomService', () => {
     room.join(second.sessionToken, '乙', 'texas');
 
     const lobby = room.getSnapshot(first.sessionToken);
+    expect(lobby.public.players.map((player) => player.positionLabel)).toEqual(expect.arrayContaining(['庄位/小盲', '大盲 BB']));
     const started = room.dispatch(first.sessionToken, command('start-hand', lobby.public.handNumber, lobby.public.version));
 
     expect(started.snapshot.public.phase).toBe('preflop');

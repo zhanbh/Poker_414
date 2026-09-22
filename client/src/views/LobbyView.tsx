@@ -17,8 +17,8 @@ export function LobbyView({ snapshot, ownSeat, spectator = false, onStart, onRem
   return (
     <main className="lobby-view">
       {testMode ? <div className="test-mode-banner" role="status">单机四人测试模式 · 每个标签页都是独立玩家</div> : null}
-      <RoomPurposeNotice />
       <header><h1>414 房间 {snapshot.roomId}</h1><span>等待开局</span></header>
+      <RoomPurposeNotice />
       <div className="team-grid">
         <section><h2>1队</h2><PlayerSeat seat="A" player={playersBySeat.get('A') ?? null} /><PlayerSeat seat="C" player={playersBySeat.get('C') ?? null} /></section>
         <section><h2>2队</h2><PlayerSeat seat="B" player={playersBySeat.get('B') ?? null} /><PlayerSeat seat="D" player={playersBySeat.get('D') ?? null} /></section>

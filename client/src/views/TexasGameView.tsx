@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { TexasCommandPayload, TexasCommandType, TexasSnapshot } from '../../../shared/src/protocol';
 import { TEXAS_SEATS, TexasSeat } from '../../../shared/src/texas';
 import { texasCardLabel, TexasCard } from '../../../shared/src/texas';
+import { LandscapeGate } from '../components/LandscapeGate';
 import { RoomPurposeNotice } from '../components/RoomPurposeNotice';
 
 function cardClass(card: TexasCard): string {
@@ -44,9 +45,10 @@ export function TexasGameView({ snapshot, onCommand, onLeave, testMode }: {
   return (
     <main className="texas-game">
       {testMode ? <div className="test-mode-banner" role="status">单机多标签测试模式 · 每个标签页都是独立玩家</div> : null}
-      <RoomPurposeNotice />
       {isSpectator ? <div className="spectator-banner" role="status">{snapshot.private.waiting ? '等待本局结束 · 下一局自动入座' : '观战模式 · 上帝视角 · 可查看所有手牌'}</div> : null}
       <header className="texas-header"><div><h1>德州扑克 · 房间 {snapshot.public.roomId}</h1><p>{snapshot.public.phase === 'settled' ? '本局已结算' : snapshot.public.currentTurn ? '轮到 ' + currentTurnLabel : '牌局进行中'}</p></div><button type="button" className="leave-room-button" onClick={onLeave}>退出房间并重选玩法</button></header>
+      <RoomPurposeNotice />
+      <LandscapeGate />
       <section className="texas-table texas-game-table" aria-label="德州扑克牌桌">
         <div className="texas-table-center">
           <div className="texas-table-meta"><span>底池 <strong>{snapshot.public.pot}</strong></span><span>当前下注 <strong>{snapshot.public.currentBet}</strong></span><span>轮到 <strong>{currentTurnLabel}</strong></span></div>

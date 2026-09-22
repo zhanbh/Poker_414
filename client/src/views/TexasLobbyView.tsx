@@ -1,5 +1,6 @@
 import { TexasPublicSnapshot } from '../../../shared/src/protocol';
 import { TEXAS_SEATS, TexasSeat } from '../../../shared/src/texas';
+import { LandscapeGate } from '../components/LandscapeGate';
 import { RoomPurposeNotice } from '../components/RoomPurposeNotice';
 
 const SEATS = TEXAS_SEATS;
@@ -18,8 +19,9 @@ export function TexasLobbyView({ snapshot, ownSeat, spectator = false, onStart, 
   return (
     <main className="texas-lobby">
       {testMode ? <div className="test-mode-banner" role="status">单机多标签测试模式 · 每个标签页都是独立玩家</div> : null}
-      <RoomPurposeNotice />
       <header className="texas-header"><div><h1>德州扑克房间 {snapshot.roomId}</h1><p>2—8 人无限注 · 1000 筹码 · 盲注 10/20</p></div><span>等待开局</span></header>
+      <RoomPurposeNotice />
+      <LandscapeGate />
       <section className="texas-lobby-table" aria-label="德州扑克座位">
         <div className="texas-table-felt">
           <strong>德州扑克</strong>

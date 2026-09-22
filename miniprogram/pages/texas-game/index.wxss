@@ -6,39 +6,49 @@
   margin-bottom: 20rpx;
 }
 
-.texas-meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 12rpx;
-  margin-top: 22rpx;
+.texas-game-table {
+  min-height: 760rpx;
+  margin-top: 26rpx;
 }
 
-.community-panel,
-.hand-panel,
-.action-panel,
-.settlement-panel {
-  margin-top: 20rpx;
+.texas-meta {
+  display: flex;
+  justify-content: center;
+  gap: 12rpx;
+  flex-wrap: wrap;
+  color: #d1e4eb;
+  font-size: 22rpx;
+}
+
+.community-panel {
+  margin-top: 16rpx;
+}
+
+.community-panel .section-title {
+  color: #a9c4d1;
+  font-size: 24rpx;
 }
 
 .card-row {
   display: flex;
+  justify-content: center;
+  gap: 8rpx;
   flex-wrap: wrap;
-  gap: 12rpx;
   margin-top: 14rpx;
 }
 
 .texas-card {
   display: inline-flex;
+  min-width: 62rpx;
+  height: 86rpx;
   align-items: center;
   justify-content: center;
-  min-width: 78rpx;
-  height: 104rpx;
   padding: 8rpx;
+  color: #132431;
   background: #f5f8fc;
   border: 2rpx solid #d6e2ea;
   border-radius: 10rpx;
-  color: #132431;
-  font-size: 34rpx;
+  font-size: 28rpx;
   font-weight: 800;
 }
 
@@ -47,33 +57,36 @@
 }
 
 .texas-card.small {
-  min-width: 62rpx;
-  height: 82rpx;
-  font-size: 26rpx;
-}
-
-.player-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14rpx;
-  margin-top: 20rpx;
+  min-width: 52rpx;
+  height: 70rpx;
+  font-size: 24rpx;
 }
 
 .texas-player {
-  display: flex;
-  flex-direction: column;
-  gap: 8rpx;
-  padding: 18rpx;
+  gap: 6rpx;
+  padding: 14rpx;
+  background: rgba(16, 35, 49, .8);
+  border: 2rpx solid #397a8b;
 }
 
 .texas-player.current {
-  border-color: #f0b44d;
-  box-shadow: 0 0 0 2rpx rgba(240, 180, 77, .2);
+  border-color: #ffd166;
+  box-shadow: 0 0 0 2rpx rgba(255, 209, 102, .2);
+}
+
+.texas-player > view:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 6rpx;
 }
 
 .texas-player .seat {
-  color: #f0b44d;
-  margin-right: 12rpx;
+  margin-right: 10rpx;
+  color: #ffd166;
+}
+
+.texas-player .muted {
+  font-size: 20rpx;
 }
 
 .host {
@@ -84,11 +97,17 @@
   color: #ff9aa4;
 }
 
+.hand-panel,
+.action-panel,
+.settlement-panel {
+  margin-top: 20rpx;
+}
+
 .spectator-hand {
-  background: #1e5368;
-  border-radius: 12rpx;
   margin-top: 14rpx;
   padding: 14rpx;
+  background: #1e5368;
+  border-radius: 12rpx;
 }
 
 .spectator-hand-title {

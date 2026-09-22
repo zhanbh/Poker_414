@@ -7,22 +7,24 @@
   <view wx:if="{{spectator}}" class="spectator-banner">{{waiting ? '等待本局结束 · 下一局自动入座' : '观战模式 · 上帝视角 · 可查看所有手牌'}}</view>
   <button class="leave-button" bindtap="onLeave">退出房间</button>
 
-  <view class="panel texas-meta">
-    <text>底池 {{pot}}</text>
-    <text>当前下注 {{currentBet}}</text>
-    <text>轮到 {{currentTurn || '—'}}</text>
-  </view>
+  <view class="texas-game-table" aria-label="德州扑克牌桌">
+    <view class="texas-table-center">
+      <view class="texas-meta">
+        <text>底池 {{pot}}</text>
+        <text>当前下注 {{currentBet}}</text>
+        <text>轮到 {{currentTurn || '—'}}</text>
+      </view>
 
-  <view class="panel community-panel">
-    <view class="section-title">公共牌</view>
-    <view class="card-row">
-      <view wx:for="{{community}}" wx:key="id" class="texas-card {{item.red ? 'red' : ''}}">{{item.label}}</view>
-      <view wx:if="{{!community.length}}" class="muted">等待发牌</view>
+      <view class="community-panel">
+        <view class="section-title">公共牌</view>
+        <view class="card-row">
+          <view wx:for="{{community}}" wx:key="id" class="texas-card {{item.red ? 'red' : ''}}">{{item.label}}</view>
+          <view wx:if="{{!community.length}}" class="muted">等待发牌</view>
+        </view>
+      </view>
     </view>
-  </view>
 
-  <view class="player-grid">
-    <view wx:for="{{players}}" wx:key="seat" class="panel texas-player {{item.seat === currentTurn ? 'current' : ''}}">
+    <view wx:for="{{players}}" wx:key="seat" class="texas-player texas-seat-position texas-seat-{{item.seat}} {{item.seat === currentTurn ? 'current' : ''}}">
       <view><text class="seat">{{item.seat}}</text><text>{{item.nickname}}</text></view>
       <view class="muted">筹码 {{item.stack}}</view>
       <view class="muted">本轮下注 {{item.roundBet}}</view>

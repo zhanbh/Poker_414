@@ -25,7 +25,7 @@ export interface GameSelection {
 
 export const GAME_SELECTIONS: readonly GameSelection[] = [
   { id: '414', name: '414', description: '四人私房扑克牌', maxPlayers: 4 },
-  { id: 'texas', name: '德州扑克', description: '四人无限注德州扑克', maxPlayers: 4 },
+  { id: 'texas', name: '德州扑克', description: '两人以上即可开局的无限注德州扑克', maxPlayers: 4 },
 ];
 
 

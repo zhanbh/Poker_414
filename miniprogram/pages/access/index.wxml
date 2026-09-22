@@ -12,7 +12,7 @@
     >
       <view class="game-card-title">{{item.name}}</view>
       <view class="game-card-description">{{item.description}}</view>
-      <view class="game-card-meta">{{item.maxPlayers}} 人桌 · 满员后自动观战</view>
+      <view class="game-card-meta">{{item.id === 'texas' ? '最多 4 人入座 · 牌局中后加入下一局' : item.maxPlayers + ' 人桌 · 满员后自动观战'}}</view>
     </view>
   </view>
 
@@ -23,7 +23,7 @@
     <input class="field-input" placeholder="请输入固定邀请码" value="{{inviteCode}}" bindinput="onInviteCodeInput" />
     <view class="field-label">昵称</view>
     <input class="field-input" maxlength="12" placeholder="请输入本局昵称" value="{{nickname}}" bindinput="onNicknameInput" />
-    <view class="join-mode-hint">有空位自动成为玩家，满员后自动观战</view>
+    <view class="join-mode-hint">有空位自动成为玩家；牌局中加入将等待下一局</view>
     <view wx:if="{{error}}" class="error">{{error}}</view>
     <button class="primary-button" loading="{{busy}}" disabled="{{busy}}" bindtap="onSubmit">进入房间</button>
   </view>

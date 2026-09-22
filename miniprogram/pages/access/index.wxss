@@ -1,14 +1,65 @@
 .access-page {
-  padding-top: 120rpx;
+  padding-top: 100rpx;
 }
 
 .subtitle {
   font-size: 28rpx;
-  margin-bottom: 56rpx;
+  margin-bottom: 36rpx;
+}
+
+.game-picker {
+  display: flex;
+  gap: 18rpx;
+  margin: 0 8rpx 28rpx;
+}
+
+.game-card {
+  flex: 1;
+  min-height: 154rpx;
+  background: #123244;
+  border: 2rpx solid #2e7189;
+  border-radius: 18rpx;
+  padding: 20rpx;
+}
+
+.game-card.selected {
+  background: #1e5368;
+  border-color: #f0b44d;
+  box-shadow: 0 0 0 2rpx rgba(240, 180, 77, .2);
+}
+
+.game-card-title {
+  color: #f0b44d;
+  font-size: 30rpx;
+  font-weight: 700;
+}
+
+.game-card-description,
+.game-card-meta {
+  color: #c2d7df;
+  font-size: 22rpx;
+  line-height: 1.5;
+  margin-top: 10rpx;
+}
+
+.game-card-meta {
+  color: #8fb4c1;
+  font-size: 20rpx;
 }
 
 .access-panel {
   margin: 0 8rpx;
+}
+
+.selected-game-title {
+  font-size: 34rpx;
+  font-weight: 700;
+  margin-bottom: 8rpx;
+}
+
+.selected-game-description {
+  font-size: 24rpx;
+  margin-bottom: 26rpx;
 }
 
 .field-label {
@@ -16,7 +67,6 @@
   font-size: 26rpx;
   margin: 10rpx 0;
 }
-
 
 .field-input {
   background: #0f2a3b;

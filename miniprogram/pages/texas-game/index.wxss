@@ -1,0 +1,115 @@
+.texas-game-page {
+  padding-top: 54rpx;
+}
+
+.game-header {
+  margin-bottom: 20rpx;
+}
+
+.texas-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12rpx;
+  margin-top: 22rpx;
+}
+
+.community-panel,
+.hand-panel,
+.action-panel,
+.settlement-panel {
+  margin-top: 20rpx;
+}
+
+.card-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-top: 14rpx;
+}
+
+.texas-card {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 78rpx;
+  height: 104rpx;
+  padding: 8rpx;
+  background: #f5f8fc;
+  border: 2rpx solid #d6e2ea;
+  border-radius: 10rpx;
+  color: #132431;
+  font-size: 34rpx;
+  font-weight: 800;
+}
+
+.texas-card.red {
+  color: #c62828;
+}
+
+.texas-card.small {
+  min-width: 62rpx;
+  height: 82rpx;
+  font-size: 26rpx;
+}
+
+.player-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14rpx;
+  margin-top: 20rpx;
+}
+
+.texas-player {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  padding: 18rpx;
+}
+
+.texas-player.current {
+  border-color: #f0b44d;
+  box-shadow: 0 0 0 2rpx rgba(240, 180, 77, .2);
+}
+
+.texas-player .seat {
+  color: #f0b44d;
+  margin-right: 12rpx;
+}
+
+.host {
+  color: #f0b44d;
+}
+
+.folded {
+  color: #ff9aa4;
+}
+
+.spectator-hand {
+  background: #1e5368;
+  border-radius: 12rpx;
+  margin-top: 14rpx;
+  padding: 14rpx;
+}
+
+.spectator-hand-title {
+  font-weight: 700;
+}
+
+.bet-slider {
+  margin: 18rpx 0;
+}
+
+.action-row {
+  display: flex;
+  gap: 12rpx;
+  flex-wrap: wrap;
+}
+
+.action-row button {
+  flex: 1;
+  min-width: 160rpx;
+}
+
+.settlement-panel .primary-button {
+  margin-top: 22rpx;
+}

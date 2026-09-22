@@ -1,8 +1,24 @@
 <view class="page access-page">
-  <view class="title">414 内测</view>
-  <view class="muted subtitle">4 人私房扑克 · 邀请制</view>
+  <view class="title">选择玩法</view>
+  <view class="muted subtitle">先选择游戏，再进入对应的私房房间</view>
+
+  <view class="game-picker">
+    <view
+      wx:for="{{gameOptions}}"
+      wx:key="id"
+      class="game-card {{item.id === gameId ? 'selected' : ''}}"
+      data-game-id="{{item.id}}"
+      bindtap="onGameChange"
+    >
+      <view class="game-card-title">{{item.name}}</view>
+      <view class="game-card-description">{{item.description}}</view>
+      <view class="game-card-meta">{{item.maxPlayers}} 人桌 · 满员后自动观战</view>
+    </view>
+  </view>
 
   <view class="panel access-panel">
+    <view class="selected-game-title">{{gameId === 'texas' ? '德州扑克' : '414'}} 内测</view>
+    <view class="muted selected-game-description">{{gameId === 'texas' ? '两人以上即可开局，后加入者等待下一局' : '四人私房扑克牌'}} · 邀请制</view>
     <view class="field-label">邀请码</view>
     <input class="field-input" placeholder="请输入固定邀请码" value="{{inviteCode}}" bindinput="onInviteCodeInput" />
     <view class="field-label">昵称</view>

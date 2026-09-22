@@ -1,0 +1,32 @@
+<view class="page texas-lobby-page">
+  <view class="game-header">
+    <view class="title">德州扑克房间</view>
+    <view class="muted">两人以上即可开始 · 1000 筹码 · 盲注 10/20</view>
+  </view>
+
+  <view class="seat-grid">
+    <view wx:for="{{players}}" wx:key="seat" class="panel texas-seat {{item.nickname ? 'occupied' : ''}}">
+      <view class="seat-title"><text class="seat">{{item.seat}}</text><text>{{item.nickname || '空位'}}</text></view>
+      <view wx:if="{{item.nickname}}" class="muted">筹码 {{item.stack}}</view>
+      <view wx:if="{{item.isHost}}" class="host">房主</view>
+      <view wx:if="{{item.nickname && !item.connected}}" class="muted">已断开</view>
+      <button wx:if="{{isHost && item.nickname && item.seat !== ownSeat}}" class="danger-button" data-seat="{{item.seat}}" bindtap="onRemove">移除</button>
+    </view>
+  </view>
+
+  <view wx:if="{{spectator}}" class="spectator-banner">观战模式 · 等待本局结束或下一局入座</view>
+  <view wx:if="{{spectators.length}}" class="panel spectator-panel">
+    <view class="section-title">观战席（{{spectators.length}}/4）</view>
+    <view wx:for="{{spectators}}" wx:key="nickname" class="spectator-row">{{item.nickname}}<text wx:if="{{item.waiting}}"> · 等待下一局</text></view>
+  </view>
+
+  <view class="panel status-panel">
+    <view>当前玩家：{{playerCount}} / 4</view>
+    <button wx:if="{{isHost}}" class="primary-button" disabled="{{playerCount < 2}}" bindtap="onStart">开始游戏</button>
+    <view wx:if="{{isHost && playerCount < 2}}" class="muted hint">至少需要两名玩家</view>
+    <view wx:if="{{!isHost}}" class="muted hint">等待房主开始，后加入者将在下一局入座</view>
+    <button class="leave-button" bindtap="onLeave">退出房间</button>
+  </view>
+
+  <view wx:if="{{error}}" class="error">{{error}}</view>
+</view>

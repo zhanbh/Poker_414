@@ -4,6 +4,7 @@ const { EVENTS, requestId } = require('./protocol');
 class MiniProgramTransport {
   constructor(options = {}) {
     this.url = options.url || getSocketUrl();
+    this.gameId = '414';
     this.socketTask = null;
     this.opened = false;
     this.connecting = null;
@@ -11,6 +12,10 @@ class MiniProgramTransport {
     this.snapshotListeners = new Set();
     this.replacedListeners = new Set();
     this.lastActivityAt = 0;
+  }
+
+  selectGame(gameId) {
+    this.gameId = gameId === 'texas' ? 'texas' : '414';
   }
 
   connect() {
@@ -104,11 +109,12 @@ class MiniProgramTransport {
   }
 
   login(inviteCode, sessionToken) {
-    return this.send(EVENTS.login, sessionToken ? { sessionToken } : { inviteCode });
+    const payload = sessionToken ? { sessionToken, gameId: this.gameId } : { inviteCode, gameId: this.gameId };
+    return this.send(EVENTS.login, payload);
   }
 
   join(nickname, roomId) {
-    return this.send(EVENTS.join, { nickname, roomId }).then((result) => result.snapshot);
+    return this.send(EVENTS.join, { nickname, roomId, gameId: this.gameId }).then((result) => result.snapshot);
   }
 
   leave() {

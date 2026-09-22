@@ -1,0 +1,70 @@
+<view class="page texas-game-page">
+  <view class="game-header">
+    <view class="title">德州扑克</view>
+    <view class="muted">第 {{handNumber}} 局 · {{phaseLabel}}</view>
+  </view>
+
+  <view wx:if="{{spectator}}" class="spectator-banner">{{waiting ? '等待本局结束 · 下一局自动入座' : '观战模式 · 上帝视角 · 可查看所有手牌'}}</view>
+  <button class="leave-button" bindtap="onLeave">退出房间</button>
+
+  <view class="panel texas-meta">
+    <text>底池 {{pot}}</text>
+    <text>当前下注 {{currentBet}}</text>
+    <text>轮到 {{currentTurn || '—'}}</text>
+  </view>
+
+  <view class="panel community-panel">
+    <view class="section-title">公共牌</view>
+    <view class="card-row">
+      <view wx:for="{{community}}" wx:key="id" class="texas-card {{item.red ? 'red' : ''}}">{{item.label}}</view>
+      <view wx:if="{{!community.length}}" class="muted">等待发牌</view>
+    </view>
+  </view>
+
+  <view class="player-grid">
+    <view wx:for="{{players}}" wx:key="seat" class="panel texas-player {{item.seat === currentTurn ? 'current' : ''}}">
+      <view><text class="seat">{{item.seat}}</text><text>{{item.nickname}}</text></view>
+      <view class="muted">筹码 {{item.stack}}</view>
+      <view class="muted">本轮下注 {{item.roundBet}}</view>
+      <view wx:if="{{item.folded}}" class="folded">已弃牌</view>
+      <view wx:if="{{item.allIn}}" class="host">All-in</view>
+      <view wx:if="{{item.isHost}}" class="host">房主</view>
+    </view>
+  </view>
+
+  <view class="panel hand-panel">
+    <view class="section-title">{{spectator || phase === 'showdown' || phase === 'settled' ? '玩家手牌（上帝视角）' : '我的手牌'}}</view>
+    <view wx:if="{{spectator || phase === 'showdown' || phase === 'settled'}}">
+      <view wx:for="{{spectatorHands}}" wx:for-item="player" wx:key="seat" class="spectator-hand">
+        <view class="spectator-hand-title">{{player.seat}} · {{player.nickname}}</view>
+        <view class="card-row">
+          <view wx:for="{{player.hand}}" wx:for-item="card" wx:key="id" class="texas-card small {{card.red ? 'red' : ''}}">{{card.label}}</view>
+        </view>
+      </view>
+    </view>
+    <view wx:else class="card-row">
+      <view wx:for="{{holeCards}}" wx:key="id" class="texas-card {{item.red ? 'red' : ''}}">{{item.label}}</view>
+    </view>
+  </view>
+
+  <view wx:if="{{!spectator && phase !== 'settled'}}" class="panel action-panel">
+    <view class="section-title">{{isMyTurn ? '轮到你操作' : '等待其他玩家操作'}}</view>
+    <view class="muted">{{currentBet === 0 ? '下注' : '加注到'}}：{{sliderValue}}{{selectedAllIn ? ' · All-in' : ''}}</view>
+    <slider class="bet-slider" min="{{sliderMin}}" max="{{sliderMax}}" step="10" value="{{sliderValue}}" disabled="{{!isMyTurn || !sliderMax}}" activeColor="#f0b44d" bindchange="onSliderChange" />
+    <view class="action-row">
+      <button class="secondary-button" disabled="{{!isMyTurn}}" bindtap="onFold">弃牌</button>
+      <button wx:if="{{canCheck}}" class="secondary-button" bindtap="onCheck">过牌</button>
+      <button wx:if="{{canCall}}" class="secondary-button" bindtap="onCall">跟注 {{callAmount}}</button>
+      <button class="primary-button" disabled="{{!isMyTurn || !sliderMax}}" bindtap="onCommit">{{selectedAllIn ? 'All-in' : (currentBet === 0 ? '下注' : '加注')}}</button>
+    </view>
+  </view>
+
+  <view wx:if="{{settlement}}" class="panel settlement-panel">
+    <view class="section-title">本局结果</view>
+    <view>赢家：{{settlement.winnerText}}</view>
+    <view wx:for="{{settlement.winners}}" wx:key="*this" class="muted">{{item}} +{{settlement.payouts[item]}}</view>
+    <button wx:if="{{isHost}}" class="primary-button" bindtap="onNextHand">回到大厅并开始下一局</button>
+  </view>
+
+  <view wx:if="{{error}}" class="error">{{error}}</view>
+</view>

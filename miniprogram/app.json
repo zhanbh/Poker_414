@@ -2,10 +2,12 @@
   "pages": [
     "pages/access/index",
     "pages/lobby/index",
-    "pages/game/index"
+    "pages/game/index",
+    "pages/texas-lobby/index",
+    "pages/texas-game/index"
   ],
   "window": {
-    "navigationBarTitleText": "414 内测",
+    "navigationBarTitleText": "选择玩法",
     "navigationBarBackgroundColor": "#0e2535",
     "navigationBarTextStyle": "white",
     "backgroundColor": "#0e2535",

@@ -4,6 +4,8 @@ import {
   EVENTS,
   GameId,
   GameSnapshot,
+  RoomChatMessage,
+  RoomChatPayload,
 } from '../../../shared/src/protocol';
 
 export interface AuthResult {
@@ -17,6 +19,7 @@ export interface ClientTransport {
   leave(): Promise<void>;
   command(command: AnyCommandEnvelope): Promise<{ readonly ok: true; readonly snapshot: GameSnapshot }>;
   activity(): void;
+  chat?(payload: RoomChatPayload): Promise<{ readonly ok: true; readonly message: RoomChatMessage }>;
   subscribe(listener: (snapshot: GameSnapshot) => void): () => void;
   onReplaced(listener: () => void): () => void;
   selectGame?(gameId: GameId): void;
@@ -81,6 +84,14 @@ export class SocketClientTransport implements ClientTransport {
     });
   }
 
+  chat(payload: RoomChatPayload): Promise<{ readonly ok: true; readonly message: RoomChatMessage }> {
+    return new Promise((resolve, reject) => {
+      this.socket.emit(EVENTS.chat, payload, (result: { ok: boolean; message?: RoomChatMessage; error?: string }) => {
+        if (result?.ok && result.message) resolve({ ok: true, message: result.message });
+        else reject(new Error(result?.error ?? '发送失败'));
+      });
+    });
+  }
   activity(): void {
     this.socket.emit(EVENTS.activity);
   }

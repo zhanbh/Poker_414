@@ -1,3 +1,5 @@
+const chatUtils = require('../../utils/chat');
+const chatMembers = chatUtils.chatMembers || ((snapshot) => (snapshot.public.players || []).map((player) => ({ id: player.seat, seat: player.seat, nickname: player.nickname, label: player.positionLabel || player.seat + ' 位' })));
 const { commandFor } = require('../../utils/commands');
 const { displayCards, displayHand } = require('../../utils/cards');
 
@@ -10,6 +12,8 @@ function phaseLabel(phase) {
 Page({
   data: {
     snapshot: null,
+    chat: [],
+    chatMembers: [],
     phase: 'playing',
     phaseLabel: '',
     handNumber: 0,
@@ -106,6 +110,8 @@ Page({
     this.app.setSnapshot(snapshot);
     this.setData({
       snapshot,
+      chat: snapshot.public.chat || [],
+      chatMembers: chatMembers(snapshot),
       phase: snapshot.public.phase,
       phaseLabel: phaseLabel(snapshot.public.phase),
       handNumber: snapshot.public.handNumber,
@@ -141,6 +147,10 @@ Page({
     return snapshot.public.openingTurn === snapshot.private.seat ? '请选择是否立棍' : '等待首牌权选择';
   },
 
+  onChatSend(event) {
+    this.transport.chat(event.detail.payload)
+      .catch((error) => this.setData({ error: error.message || '发送失败' }));
+  },
   runCommand(type, payload) {
     const snapshot = this.data.snapshot;
     if (!snapshot) return;

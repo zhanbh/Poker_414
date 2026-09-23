@@ -6,6 +6,8 @@ import {
   TexasSettlement,
   TexasHandView,
   TexasPlayerView,
+  RoomChatMessage,
+  RoomChatPayload,
 } from '../../shared/src/protocol';
 import {
   compareTexasHands,
@@ -20,6 +22,7 @@ import {
   TexasHandValue,
   TexasSeat,
 } from '../../shared/src/texas';
+import { appendRoomChatMessage, createRoomChatMessage } from './room-chat';
 import { Session, SessionService } from './session-service';
 
 export interface TexasRoomServiceOptions {
@@ -92,6 +95,7 @@ export class TexasRoomService {
   private state: TexasState | null = null;
   private readonly requestResults = new Map<string, Map<string, TexasCommandSuccess>>();
   private readonly waitingSessionTokens = new Set<string>();
+  private chatMessages: RoomChatMessage[] = [];
 
   constructor(options: TexasRoomServiceOptions) {
     this.inviteCode = options.inviteCode;
@@ -194,6 +198,7 @@ export class TexasRoomService {
       handNumber: state.handNumber,
       version: state.version,
       players,
+      chat: [...this.chatMessages],
       spectators: this.sessions.listSpectators().filter((viewer) => !viewer.texasSeat).map((viewer) => ({
         nickname: viewer.nickname ?? '观战者',
         connected: viewer.connectionId !== null,
@@ -270,6 +275,12 @@ export class TexasRoomService {
     this.sessions.clearIdentity(sessionToken);
   }
 
+  recordChat(sessionToken: string, payload: RoomChatPayload): RoomChatMessage {
+    if (!this.state) throw new TexasRoomServiceError('ROOM_NOT_FOUND', '房间尚未创建');
+    const message = createRoomChatMessage(this.sessions.get(sessionToken), payload);
+    this.chatMessages = appendRoomChatMessage(this.chatMessages, message);
+    return message;
+  }
   scan(): boolean {
     return false;
   }
@@ -655,7 +666,10 @@ export class TexasRoomService {
     if (target.id === this.state.hostId) {
       this.state.hostId = this.orderedPlayers()[0]?.id ?? '';
     }
-    if (this.orderedPlayers().length === 0) this.state = null;
+    if (this.orderedPlayers().length === 0) {
+      this.state = null;
+      this.chatMessages = [];
+    }
     else if (this.state) this.state.version += 1;
   }
 
@@ -713,6 +727,7 @@ export class TexasRoomService {
       version: 0,
       players: [],
       spectators: [],
+      chat: [],
       hostSeat: null,
       dealerSeat: null,
       smallBlindSeat: null,

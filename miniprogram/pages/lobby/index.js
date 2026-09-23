@@ -1,3 +1,5 @@
+const chatUtils = require('../../utils/chat');
+const chatMembers = chatUtils.chatMembers || ((snapshot) => (snapshot.public.players || []).map((player) => ({ id: player.seat, seat: player.seat, nickname: player.nickname, label: player.positionLabel || player.seat + ' 位' })));
 const { commandFor } = require('../../utils/commands');
 
 const SEATS = ['A', 'B', 'C', 'D'];
@@ -5,6 +7,8 @@ const SEATS = ['A', 'B', 'C', 'D'];
 Page({
   data: {
     snapshot: null,
+    chat: [],
+    chatMembers: [],
     players: [],
     ac: [],
     bd: [],
@@ -42,6 +46,8 @@ Page({
     this.app.setSnapshot(snapshot);
     this.setData({
       snapshot,
+      chat: snapshot.public.chat || [],
+      chatMembers: chatMembers(snapshot),
       players,
       ac: players.filter((player) => player.seat === 'A' || player.seat === 'C'),
       bd: players.filter((player) => player.seat === 'B' || player.seat === 'D'),
@@ -55,6 +61,10 @@ Page({
     });
   },
 
+  onChatSend(event) {
+    this.transport.chat(event.detail.payload)
+      .catch((error) => this.setData({ error: error.message || '发送失败' }));
+  },
   runCommand(type, payload) {
     const snapshot = this.data.snapshot;
     if (!snapshot) return;

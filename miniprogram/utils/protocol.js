@@ -5,6 +5,7 @@ const EVENTS = {
   snapshot: 'room:snapshot',
   command: 'command',
   activity: 'room:activity',
+  chat: 'room:chat',
   replaced: 'session:replaced',
 };
 

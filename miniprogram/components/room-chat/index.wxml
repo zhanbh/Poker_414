@@ -1,0 +1,21 @@
+<view class="room-chat panel">
+  <view class="room-chat-heading"><text class="section-title">房间聊天</text><text class="muted">聊天和互动仅在本房间保留</text></view>
+  <scroll-view class="room-chat-messages" scroll-y="true">
+    <view wx:if="{{!messages.length}}" class="muted">还没有消息，打个招呼吧</view>
+    <view wx:for="{{messages}}" wx:key="id" class="room-chat-message {{item.kind}}">
+      <text wx:if="{{item.kind === 'text'}}"><text class="chat-sender">{{item.senderNickname}}</text>：{{item.text}}</text>
+      <text wx:else>{{item.senderNickname}} {{item.interaction === 'tomato' ? '扔了番茄给' : item.interaction === 'water' ? '泼水给' : item.interaction === 'heart' ? '比心给' : '亲吻'}} {{item.targetNickname}}</text>
+    </view>
+  </scroll-view>
+  <view class="room-chat-targets">
+    <text class="chat-target-label">点击玩家互动</text>
+    <view wx:for="{{members}}" wx:for-item="member" wx:key="id" wx:if="{{!member.seat || member.seat !== ownSeat}}" class="room-chat-target">
+      <text class="chat-target-name">{{member.label}} · {{member.nickname}}</text>
+      <button size="mini" data-kind="tomato" data-seat="{{member.seat}}" data-nickname="{{member.nickname}}" bindtap="onInteraction">🍅</button>
+      <button size="mini" data-kind="water" data-seat="{{member.seat}}" data-nickname="{{member.nickname}}" bindtap="onInteraction">💦</button>
+      <button size="mini" data-kind="heart" data-seat="{{member.seat}}" data-nickname="{{member.nickname}}" bindtap="onInteraction">💖</button>
+      <button size="mini" data-kind="kiss" data-seat="{{member.seat}}" data-nickname="{{member.nickname}}" bindtap="onInteraction">💋</button>
+    </view>
+  </view>
+  <view class="room-chat-form"><input value="{{draft}}" maxlength="200" placeholder="输入消息…" bindinput="onInput" /><button class="primary-button" disabled="{{!draft || sending}}" bindtap="onSend">发送</button></view>
+</view>

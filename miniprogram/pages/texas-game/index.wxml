@@ -19,7 +19,6 @@
         <text>轮到 {{currentTurnLabel || '—'}}</text>
       </view>
       <view class="phase-notice">{{phaseNotice}}</view>
-
       <view class="community-panel">
         <view class="section-title">公共牌</view>
         <view class="card-row">
@@ -28,7 +27,6 @@
         </view>
       </view>
     </view>
-
     <view wx:for="{{players}}" wx:if="{{item.nickname}}" wx:key="seat" class="texas-player texas-seat-position texas-seat-{{item.seat}} {{item.seat === currentTurn ? 'current' : ''}}">
       <view><text class="seat">{{item.positionLabel}}</text><text>{{item.nickname}}</text></view>
       <view class="muted">筹码 {{item.stack}}</view>
@@ -70,10 +68,21 @@
     </view>
   </view>
 
-        <view class="spectator-hand-title">{{player.positionLabel || player.seat}} · {{player.nickname}}</view>
-        <view class="best-hand">{{player.bestHand ? '当前最佳：' + player.bestHand.label : '等待公共牌'}}</view>
+  <view wx:if="{{settlement && showSettlement}}" class="settlement-backdrop">
+    <view class="settlement-modal">
+      <view class="settlement-kicker">第 {{handNumber}} 局结束</view>
+      <view class="settlement-title">赢家：{{settlement.winnerText}}</view>
+      <view wx:for="{{settlement.winnerDetails}}" wx:key="seat" class="settlement-winner">
+        <view class="settlement-winner-name">{{item.nickname}}（{{item.seat}} 位）</view>
+        <view>以 <text class="settlement-hand">{{item.category}}</text> 获胜 · +{{item.payout}} 筹码</view>
+      </view>
+      <button class="secondary-button" bindtap="onCloseSettlement">继续查看牌桌</button>
+      <button wx:if="{{isHost}}" class="primary-button" bindtap="onNextHand">回到大厅并开始下一局</button>
+    </view>
   </view>
   <button wx:if="{{settlement && !showSettlement}}" class="settlement-summary-button" bindtap="onOpenSettlement">查看本局结算：{{settlement.winnerText}}</button>
+
+  <room-chat messages="{{chat}}" members="{{chatMembers}}" own-seat="{{ownSeat}}" bind:send="onChatSend" />
 
   <view wx:if="{{error}}" class="error">{{error}}</view>
 </view>

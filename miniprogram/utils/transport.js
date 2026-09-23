@@ -125,6 +125,9 @@ class MiniProgramTransport {
     return this.send(EVENTS.command, command);
   }
 
+  chat(payload) {
+    return this.send(EVENTS.chat, payload);
+  }
   activity() {
     const now = Date.now();
     if (now - this.lastActivityAt < 2500) return;

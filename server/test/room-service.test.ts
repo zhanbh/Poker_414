@@ -210,5 +210,25 @@ describe('单房间会话与命令服务', () => {
       payload: { seat: 'A' },
     })).toThrow(/不能移除自己/);
     expect(room.getSnapshot(auth.sessionToken).private.seat).toBe('A');
+  });  it('房间聊天和互动对玩家、观战者实时可见，并在房间清空后清除', () => {
+    const room = service();
+    const players = ['甲', '乙', '丙', '丁'].map((nickname) => {
+      const auth = room.login('inner-414');
+      room.join(auth.sessionToken, nickname, '414');
+      return auth;
+    });
+    const spectator = room.login('inner-414');
+    room.join(spectator.sessionToken, '观众', '414');
+
+    room.recordChat(spectator.sessionToken, { kind: 'text', text: '大家好' });
+    room.recordChat(players[0].sessionToken, { kind: 'interaction', interaction: 'tomato', target: { seat: 'B', nickname: '乙' } });
+    const view = room.getSnapshot(players[1].sessionToken);
+    expect(view.public.chat).toHaveLength(2);
+    expect(view.public.chat?.[0].senderNickname).toBe('观众');
+    expect(view.public.chat?.[1].targetNickname).toBe('乙');
+
+    room.leave(spectator.sessionToken);
+    players.forEach((auth) => room.leave(auth.sessionToken));
+    expect(room.getSnapshot(players[0].sessionToken).public.chat).toEqual([]);
   });
 });

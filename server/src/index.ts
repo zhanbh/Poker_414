@@ -13,6 +13,7 @@ import {
   isTexasCommandEnvelope,
   MINI_PROGRAM_SOCKET_PATH,
   TexasCommandEnvelope,
+  RoomChatPayload,
 } from '../../shared/src/protocol';
 import { createHttpApp } from './http';
 import { loadConfig, ServerConfig } from './config';
@@ -211,6 +212,12 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
         return;
       }
 
+      if (event === EVENTS.chat) {
+        const chatMessage = service.recordChat(sessionToken, message.payload as RoomChatPayload);
+        acknowledgeMini(state, requestId, { ok: true, message: chatMessage });
+        sendSnapshots();
+        return;
+      }
       if (event === EVENTS.activity) {
         const snapshot = service.recordActivity(sessionToken);
         acknowledgeMini(state, requestId, { ok: true, snapshot });
@@ -292,6 +299,20 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
       }
     });
 
+    socket.on(EVENTS.chat, (payload: RoomChatPayload, ack: unknown) => {
+      try {
+        const sessionToken = socket.data.sessionToken;
+        if (typeof sessionToken !== 'string') throw new Error('请先登录');
+        const gameId = socket.data.gameId === 'texas' ? 'texas' : gameIdForToken(sessionToken);
+        const service = serviceFor(gameId);
+        if (!service.isConnectionOwner(sessionToken, socket.id)) throw new Error('当前连接已失去操作权');
+        const message = service.recordChat(sessionToken, payload);
+        acknowledge(ack, { ok: true, message });
+        sendSnapshots();
+      } catch (error) {
+        acknowledge(ack, { ok: false, error: error instanceof Error ? error.message : '发送失败' });
+      }
+    });
     socket.on(EVENTS.activity, (ack: unknown) => {
       try {
         const sessionToken = socket.data.sessionToken;

@@ -1,3 +1,1 @@
-{
-  "navigationBarTitleText": "414 对局"
-}
+{"navigationBarTitleText":"414 对局","usingComponents":{"room-chat":"/components/room-chat/index"}}

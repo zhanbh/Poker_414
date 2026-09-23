@@ -10,6 +10,7 @@ import {
   TexasCommandEnvelope,
   TexasCommandPayload,
   TexasCommandType,
+  RoomChatPayload,
 } from '../../shared/src/protocol';
 import { AccessView } from './views/AccessView';
 import { GameView } from './views/GameView';
@@ -17,6 +18,7 @@ import { LobbyView } from './views/LobbyView';
 import { TexasGameView } from './views/TexasGameView';
 import { TexasLobbyView } from './views/TexasLobbyView';
 import { ClientTransport, createSocketClient } from './transport/socket-client';
+import { RoomChat, RoomChatMember } from './components/RoomChat';
 
 const GAME_KEY = '414.selectedGame';
 
@@ -46,6 +48,19 @@ function disconnectedNames(previous: GameSnapshot | null, next: GameSnapshot): s
     .map((player) => player.nickname);
 }
 
+
+function chatMembersFor(snapshot: GameSnapshot): RoomChatMember[] {
+  if (isTexasSnapshot(snapshot)) {
+    return [
+      ...snapshot.public.players.map((player) => ({ id: player.seat, seat: player.seat, nickname: player.nickname, label: player.positionLabel ?? player.seat + ' 位' })),
+      ...snapshot.public.spectators.map((viewer, index) => ({ id: 'spectator-' + index + '-' + viewer.nickname, nickname: viewer.nickname, label: '观战' })),
+    ];
+  }
+  return [
+    ...snapshot.public.players.map((player) => ({ id: player.seat, seat: player.seat, nickname: player.nickname, label: player.seat + ' 位' })),
+    ...(snapshot.public.spectators ?? []).map((viewer, index) => ({ id: 'spectator-' + index + '-' + viewer.nickname, nickname: viewer.nickname, label: '观战' })),
+  ];
+}
 export function App({ transport: providedTransport }: { readonly transport?: ClientTransport }) {
   const transport = useMemo(() => providedTransport ?? createSocketClient(), [providedTransport]);
   const testMode = isTestModeEnabled();
@@ -158,21 +173,31 @@ export function App({ transport: providedTransport }: { readonly transport?: Cli
     }
   };
 
+  const sendChat = async (payload: RoomChatPayload) => {
+    try {
+      if (!transport.chat) throw new Error('当前连接不支持聊天');
+      await transport.chat(payload);
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : '发送失败');
+      throw reason;
+    }
+  };
   const roomNotice = connectionNotice ? <p className="room-notice" role="status">{connectionNotice}</p> : null;
   if (!snapshot) {
     return <><AccessView gameId={gameId} onGameChange={selectGame} onSubmit={enterRoom} error={error} busy={busy} testMode={testMode} />{roomNotice}</>;
   }
+  const roomChat = <RoomChat messages={snapshot.public.chat ?? []} members={chatMembersFor(snapshot)} ownSeat={snapshot.private.seat} onSend={sendChat} />;
   if (gameId === 'texas' && isTexasSnapshot(snapshot)) {
     if (snapshot.public.phase === 'lobby') {
-      return <><TexasLobbyView snapshot={snapshot.public} ownSeat={snapshot.private.seat} spectator={Boolean(snapshot.private.spectator)} onStart={() => runCommand('start-hand', {})} onRemove={(seat) => runCommand('remove-player', { seat })} onLeave={leaveRoom} testMode={testMode} />{roomNotice}{error ? <p role="alert">{error}</p> : null}</>;
+      return <><TexasLobbyView snapshot={snapshot.public} ownSeat={snapshot.private.seat} spectator={Boolean(snapshot.private.spectator)} onStart={() => runCommand('start-hand', {})} onRemove={(seat) => runCommand('remove-player', { seat })} onLeave={leaveRoom} testMode={testMode} />{roomNotice}{error ? <p role="alert">{error}</p> : null}{roomChat}</>;
     }
-    return <><TexasGameView snapshot={snapshot} onCommand={runCommand} onLeave={leaveRoom} testMode={testMode} />{roomNotice}{error ? <p role="alert">{error}</p> : null}</>;
+    return <><TexasGameView snapshot={snapshot} onCommand={runCommand} onLeave={leaveRoom} testMode={testMode} />{roomNotice}{error ? <p role="alert">{error}</p> : null}{roomChat}</>;
   }
   if (!isTexasSnapshot(snapshot) && snapshot.public.phase === 'lobby') {
-    return <><LobbyView snapshot={snapshot.public} ownSeat={snapshot.private.seat} spectator={Boolean(snapshot.private.spectator)} onStart={() => runCommand('start-hand', {})} onRemove={(seat) => runCommand('remove-player', { seat })} onLeave={leaveRoom} testMode={testMode} />{roomNotice}{error ? <p role="alert">{error}</p> : null}</>;
+    return <><LobbyView snapshot={snapshot.public} ownSeat={snapshot.private.seat} spectator={Boolean(snapshot.private.spectator)} onStart={() => runCommand('start-hand', {})} onRemove={(seat) => runCommand('remove-player', { seat })} onLeave={leaveRoom} testMode={testMode} />{roomNotice}{error ? <p role="alert">{error}</p> : null}{roomChat}</>;
   }
   if (!isTexasSnapshot(snapshot)) {
-    return <><GameView snapshot={snapshot} onCommand={runCommand} onActivity={() => transport.activity()} onReady={() => runCommand('ready', {})} onLeave={leaveRoom} testMode={testMode} />{roomNotice}{error ? <p role="alert">{error}</p> : null}</>;
+    return <><GameView snapshot={snapshot} onCommand={runCommand} onActivity={() => transport.activity()} onReady={() => runCommand('ready', {})} onLeave={leaveRoom} testMode={testMode} />{roomNotice}{error ? <p role="alert">{error}</p> : null}{roomChat}</>;
   }
   return null;
 }

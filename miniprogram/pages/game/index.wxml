@@ -83,5 +83,7 @@
     <button wx:if="{{!spectator}}" class="primary-button" bindtap="onReady">准备下一局</button>
   </view>
 
+  <room-chat messages="{{chat}}" members="{{chatMembers}}" own-seat="{{ownSeat}}" bind:send="onChatSend" />
+
   <view wx:if="{{error}}" class="error">{{error}}</view>
 </view>

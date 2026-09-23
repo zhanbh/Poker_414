@@ -190,5 +190,19 @@ describe('Texas hand evaluator', () => {
     ]);
     expect(wheel.category).toBe('straight-flush');
     expect(compareTexasHands(wheel, lower)).toBeGreaterThan(0);
+  });  it('德州房间玩家和观战者共享聊天记录，最后一人离开后清空', () => {
+    const room = new TexasRoomService({ inviteCode: 'inner-414' });
+    const first = room.login('inner-414');
+    const second = room.login('inner-414');
+    room.join(first.sessionToken, '甲', 'texas');
+    room.join(second.sessionToken, '乙', 'texas');
+
+    room.recordChat(first.sessionToken, { kind: 'text', text: '准备开始' });
+    room.recordChat(second.sessionToken, { kind: 'interaction', interaction: 'heart', target: { nickname: '甲' } });
+    expect(room.getSnapshot(first.sessionToken).public.chat?.map((message) => message.kind)).toEqual(['text', 'interaction']);
+
+    room.leave(first.sessionToken);
+    room.leave(second.sessionToken);
+    expect(room.getSnapshot(first.sessionToken).public.chat).toEqual([]);
   });
 });

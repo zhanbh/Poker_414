@@ -40,5 +40,7 @@
     <button class="leave-button" bindtap="onLeave">退出房间</button>
   </view>
 
+  <room-chat messages="{{chat}}" members="{{chatMembers}}" own-seat="{{ownSeat}}" bind:send="onChatSend" />
+
   <view wx:if="{{error}}" class="error">{{error}}</view>
 </view>

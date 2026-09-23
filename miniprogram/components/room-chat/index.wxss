@@ -1,0 +1,14 @@
+.room-chat { margin-top: 24rpx; }
+.room-chat-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12rpx; }
+.room-chat-messages { height: 300rpx; margin: 18rpx 0; padding: 14rpx; background: rgba(10, 35, 49, .58); border-radius: 12rpx; }
+.room-chat-message { margin-bottom: 10rpx; color: #eaf2ff; line-height: 1.45; }
+.room-chat-message.interaction { color: #ffd166; }
+.chat-sender { color: #fff0b3; font-weight: 700; }
+.room-chat-targets { display: flex; flex-wrap: wrap; gap: 10rpx; }
+.chat-target-label { width: 100%; color: #9fc5ce; font-size: 22rpx; }
+.room-chat-target { display: flex; align-items: center; gap: 4rpx; padding: 8rpx; background: rgba(29, 75, 94, .8); border-radius: 10rpx; }
+.chat-target-name { max-width: 190rpx; overflow: hidden; color: #d1e4eb; font-size: 21rpx; text-overflow: ellipsis; white-space: nowrap; }
+.room-chat-target button { min-width: 46rpx; height: 44rpx; padding: 0; color: #102331; background: #f0b44d; line-height: 44rpx; }
+.room-chat-form { display: flex; gap: 10rpx; margin-top: 18rpx; }
+.room-chat-form input { flex: 1; min-width: 0; height: 76rpx; padding: 0 18rpx; color: #eef7ff; background: #102d3d; border: 1rpx solid #397a8b; border-radius: 10rpx; }
+.room-chat-form button { min-width: 120rpx; margin: 0; }

@@ -1,4 +1,1 @@
-{
-  "navigationBarTitleText": "德州扑克大厅",
-  "pageOrientation": "landscape"
-}
+{"navigationBarTitleText":"德州扑克大厅","pageOrientation":"landscape","usingComponents":{"room-chat":"/components/room-chat/index"}}

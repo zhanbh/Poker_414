@@ -26,6 +26,8 @@ import {
 } from '../../shared/src/game-state';
 import { HandKind } from '../../shared/src/hand-types';
 import { findBurstCandidates } from '../../shared/src/rule-engine';
+import { RoomChatMessage, RoomChatPayload } from '../../shared/src/protocol';
+import { appendRoomChatMessage, createRoomChatMessage } from './room-chat';
 import { Session, SessionService } from './session-service';
 
 export interface RoomServiceOptions {
@@ -65,6 +67,7 @@ export class RoomService {
   private readonly random: () => number;
   private state: GameState | null = null;
   private readonly requestResults = new Map<string, Map<string, CommandResult>>();
+  private chatMessages: RoomChatMessage[] = [];
 
   constructor(options: RoomServiceOptions) {
     this.inviteCode = options.inviteCode;
@@ -154,6 +157,7 @@ export class RoomService {
       version: state.version,
       players,
       spectators,
+      chat: [...this.chatMessages],
       hostSeat: Object.values(state.players).find((player) => player?.id === state.hostId)?.seat ?? null,
       levels: state.levels,
       completedRounds: state.completedRounds,
@@ -217,6 +221,7 @@ export class RoomService {
     const session = this.sessions.get(sessionToken);
     if (session.role === 'spectator' || !session.seat) {
       this.sessions.clearIdentity(sessionToken);
+      this.clearChatIfEmpty();
       return;
     }
     if (!this.state || this.state.phase !== 'lobby') {
@@ -231,6 +236,7 @@ export class RoomService {
       this.state = next;
     }
     this.sessions.clearIdentity(sessionToken);
+    this.clearChatIfEmpty();
   }
 
   scan(now = this.now()): boolean {
@@ -248,6 +254,12 @@ export class RoomService {
     return this.getSnapshot(sessionToken);
   }
 
+  recordChat(sessionToken: string, payload: RoomChatPayload): RoomChatMessage {
+    if (!this.state) throw new RoomServiceError('ROOM_NOT_FOUND', '房间尚未创建');
+    const message = createRoomChatMessage(this.sessions.get(sessionToken), payload);
+    this.chatMessages = appendRoomChatMessage(this.chatMessages, message);
+    return message;
+  }
   dispatch(sessionToken: string, command: CommandEnvelope): CommandResult {
     const session = this.sessions.get(sessionToken);
     if (!isCommandEnvelope(command)) throw new RoomServiceError('INVALID_COMMAND', '命令格式无效');
@@ -264,6 +276,7 @@ export class RoomService {
 
     try {
       this.state = this.applyCommand(session, command.type, command.payload);
+    if (command.type === 'end-room') this.chatMessages = [];
     } catch (error) {
       throw this.wrapGameError(error);
     }
@@ -332,6 +345,7 @@ export class RoomService {
       version: 0,
       players: [],
       spectators: [],
+      chat: [],
       hostSeat: null,
       levels: { AC: '3', BD: '3' },
       completedRounds: { AC: 0, BD: 0 },
@@ -352,6 +366,10 @@ export class RoomService {
     };
   }
 
+  private clearChatIfEmpty(): void {
+    const hasPlayers = Boolean(this.state && Object.values(this.state.players).some((player) => player !== null));
+    if (!hasPlayers && this.sessions.listSpectators().length === 0) this.chatMessages = [];
+  }
   private wrapGameError(error: unknown): Error {
     if (error instanceof GameStateError) return new RoomServiceError(error.code, error.message);
     if (error instanceof Error) return error;

@@ -10,6 +10,7 @@ export const EVENTS = {
   snapshot: 'room:snapshot',
   command: 'command',
   activity: 'room:activity',
+  chat: 'room:chat',
   replaced: 'session:replaced',
 } as const;
 
@@ -17,6 +18,23 @@ export const MINI_PROGRAM_SOCKET_PATH = '/414-ws';
 
 export type GameId = '414' | 'texas';
 
+export type RoomChatInteraction = 'tomato' | 'water' | 'heart' | 'kiss';
+
+export interface RoomChatMessage {
+  readonly id: string;
+  readonly kind: 'text' | 'interaction';
+  readonly senderNickname: string;
+  readonly senderSeat?: string;
+  readonly text?: string;
+  readonly interaction?: RoomChatInteraction;
+  readonly targetNickname?: string;
+  readonly targetSeat?: string;
+  readonly createdAt: number;
+}
+
+export type RoomChatPayload =
+  | { readonly kind: 'text'; readonly text: string }
+  | { readonly kind: 'interaction'; readonly interaction: RoomChatInteraction; readonly target: { readonly nickname: string; readonly seat?: string } };
 export interface GameSelection {
   readonly id: GameId;
   readonly name: string;
@@ -94,6 +112,7 @@ export interface PublicSnapshot {
   readonly version: number;
   readonly players: PublicPlayerView[];
   readonly spectators?: PublicSpectatorView[];
+  readonly chat?: RoomChatMessage[];
   readonly hostSeat: Seat | null;
   readonly levels: { readonly AC: Level; readonly BD: Level };
   readonly completedRounds: { readonly AC: number; readonly BD: number };
@@ -192,6 +211,7 @@ export interface TexasPublicSnapshot {
   readonly version: number;
   readonly players: TexasPlayerView[];
   readonly spectators: TexasSpectatorView[];
+  readonly chat?: RoomChatMessage[];
   readonly hostSeat: TexasSeat | null;
   readonly dealerSeat: TexasSeat | null;
   readonly smallBlindSeat: TexasSeat | null;
@@ -221,6 +241,19 @@ export interface TexasSnapshot {
 export type GameSnapshot = RoomSnapshot | TexasSnapshot;
 export type AnyCommandEnvelope = CommandEnvelope | TexasCommandEnvelope;
 
+
+const ROOM_CHAT_INTERACTIONS = new Set<RoomChatInteraction>(['tomato', 'water', 'heart', 'kiss']);
+
+export function isRoomChatPayload(value: unknown): value is RoomChatPayload {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<RoomChatPayload>;
+  if (candidate.kind === 'text') return typeof candidate.text === 'string';
+  if (candidate.kind !== 'interaction' || !ROOM_CHAT_INTERACTIONS.has(candidate.interaction as RoomChatInteraction)) return false;
+  const target = candidate.target;
+  return Boolean(target && typeof target === 'object'
+    && typeof target.nickname === 'string'
+    && target.nickname.trim().length > 0);
+}
 export function isTexasSnapshot(snapshot: GameSnapshot): snapshot is TexasSnapshot {
   return snapshot.public && 'gameId' in snapshot.public && snapshot.public.gameId === 'texas';
 }

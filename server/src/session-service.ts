@@ -2,6 +2,8 @@ import { randomBytes } from 'node:crypto';
 import { Seat } from '../../shared/src/scoring';
 import { TexasSeat } from '../../shared/src/texas';
 
+export const ROOM_INACTIVE_TIMEOUT_MS = 5 * 60 * 1_000;
+
 export interface Session {
   readonly sessionToken: string;
   readonly playerId: string;
@@ -10,12 +12,14 @@ export interface Session {
   seat: Seat | null;
   texasSeat: TexasSeat | null;
   connectionId: string | null;
+  lastActivityAt: number;
+  disconnectedAt: number | null;
 }
 
 export class SessionService {
   private readonly sessions = new Map<string, Session>();
 
-  create(): Session {
+  create(now = Date.now()): Session {
     const session: Session = {
       sessionToken: randomBytes(24).toString('hex'),
       playerId: randomBytes(12).toString('hex'),
@@ -24,6 +28,8 @@ export class SessionService {
       seat: null,
       texasSeat: null,
       connectionId: null,
+      lastActivityAt: now,
+      disconnectedAt: null,
     };
     this.sessions.set(session.sessionToken, session);
     return session;
@@ -57,18 +63,33 @@ export class SessionService {
     session.texasSeat = null;
   }
 
-  attach(sessionToken: string, connectionId: string): { previousConnectionId: string | null } {
+  touch(sessionToken: string, now = Date.now()): void {
+    const session = this.get(sessionToken);
+    session.lastActivityAt = now;
+  }
+
+  attach(sessionToken: string, connectionId: string, now = Date.now()): { previousConnectionId: string | null } {
     const session = this.get(sessionToken);
     const previousConnectionId = session.connectionId;
     session.connectionId = connectionId;
+    session.lastActivityAt = now;
+    session.disconnectedAt = null;
     return { previousConnectionId };
   }
 
-  detach(sessionToken: string, connectionId: string): boolean {
+  detach(sessionToken: string, connectionId: string, now = Date.now()): boolean {
     const session = this.get(sessionToken);
     if (session.connectionId !== connectionId) return false;
     session.connectionId = null;
+    session.disconnectedAt = now;
     return true;
+  }
+
+  isInactive(sessionToken: string, now: number, timeoutMs = ROOM_INACTIVE_TIMEOUT_MS): boolean {
+    const session = this.get(sessionToken);
+    return session.connectionId === null
+      && session.disconnectedAt !== null
+      && now - session.disconnectedAt >= timeoutMs;
   }
 
   findByPlayerId(playerId: string): Session | undefined {

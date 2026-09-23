@@ -37,6 +37,7 @@ describe('登录路径', () => {
       leave: async () => undefined,
     };
     render(<App transport={transport} />);
+    expect(screen.queryByText('开启单机多标签测试模式')).toBeNull();
 
     fireEvent.change(screen.getByLabelText('邀请码'), { target: { value: 'wrong' } });
     fireEvent.change(screen.getByLabelText('昵称'), { target: { value: '甲' } });

@@ -671,8 +671,11 @@ export function readyForNextHand(state: GameState, seat: Seat, random: RandomSou
   return readySeats.length === SEATS.length ? startHand(updated, random, now) : updated;
 }
 
-export function setPlayerConnection(state: GameState, seat: Seat, connected: boolean): GameState {
-  return withPlayer(state, seat, { connected });
+export function setPlayerConnection(state: GameState, seat: Seat, connected: boolean, now?: number): GameState {
+  return withPlayer(state, seat, {
+    connected,
+    ...(connected && now !== undefined ? { lastActivityAt: now, away: false } : {}),
+  });
 }
 
 export function removePlayer(state: GameState, seat: Seat): GameState {

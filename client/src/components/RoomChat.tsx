@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { RoomChatInteraction, RoomChatMessage, RoomChatPayload } from '../../../shared/src/protocol';
 
 export interface RoomChatMember {
@@ -28,6 +28,12 @@ export function RoomChat({ messages, members, ownSeat, onSend }: {
 }) {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const messagesRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const container = messagesRef.current;
+    if (container) container.scrollTop = container.scrollHeight;
+  }, [messages.length]);
 
   const send = async (payload: RoomChatPayload) => {
     if (sending) return;
@@ -58,7 +64,7 @@ export function RoomChat({ messages, members, ownSeat, onSend }: {
   return (
     <section className="room-chat" aria-label="房间聊天">
       <div className="room-chat-heading"><h2>房间聊天</h2><span>聊天和互动仅在本房间保留</span></div>
-      <div className="room-chat-messages" aria-live="polite">
+      <div ref={messagesRef} className="room-chat-messages" aria-live="polite">
         {messages.length === 0 ? <p className="room-chat-empty">还没有消息，打个招呼吧</p> : messages.map((message) => (
           <div className={'room-chat-message ' + message.kind} key={message.id}>
             {message.kind === 'text' ? <><strong>{message.senderNickname}</strong><span>：{message.text}</span></> : <span>{interactionText(message)}</span>}

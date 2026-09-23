@@ -492,7 +492,7 @@ main { min-height: 100svh; padding: clamp(16px, 4vw, 32px); }
 .room-chat-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .room-chat-heading h2 { margin: 0; color: #ffd166; font-size: 1.05rem; }
 .room-chat-heading span, .room-chat-empty, .room-chat-target-label { color: #9fc5ce; font-size: .82rem; }
-.room-chat-messages { display: grid; gap: 6px; max-height: 210px; margin: 12px 0; padding: 10px; overflow-y: auto; background: rgba(10, 35, 49, .58); border-radius: 8px; }
+.room-chat-messages { display: grid; gap: 6px; width: 100%; height: 210px; margin: 12px 0; padding: 10px; overflow-y: auto; box-sizing: border-box; background: rgba(10, 35, 49, .58); border-radius: 8px; }
 .room-chat-message { line-height: 1.45; }
 .room-chat-message strong { color: #fff0b3; }
 .room-chat-message.interaction { color: #ffd166; }

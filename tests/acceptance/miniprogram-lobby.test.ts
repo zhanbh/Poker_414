@@ -14,7 +14,9 @@ function loadLobbyPage(): LobbyPageDefinition {
   let definition: LobbyPageDefinition | undefined;
   runInNewContext(readFileSync('miniprogram/pages/lobby/index.js', 'utf8'), {
     Page: (page: LobbyPageDefinition) => { definition = page; },
-    require: () => ({ commandFor: () => ({}) }),
+    require: (request: string) => request.includes('utils/session')
+      ? { lostRoomIdentity: () => false, clearStoredIdentity: () => undefined }
+      : { commandFor: () => ({}) },
   });
   if (!definition) throw new Error('Mini-program lobby page was not registered');
   return definition;

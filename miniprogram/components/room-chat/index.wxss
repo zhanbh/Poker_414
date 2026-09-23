@@ -1,6 +1,6 @@
 .room-chat { margin-top: 24rpx; }
 .room-chat-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12rpx; }
-.room-chat-messages { height: 300rpx; margin: 18rpx 0; padding: 14rpx; background: rgba(10, 35, 49, .58); border-radius: 12rpx; }
+.room-chat-messages { width: 100%; height: 300rpx; margin: 18rpx 0; padding: 14rpx; box-sizing: border-box; background: rgba(10, 35, 49, .58); border-radius: 12rpx; }
 .room-chat-message { margin-bottom: 10rpx; color: #eaf2ff; line-height: 1.45; }
 .room-chat-message.interaction { color: #ffd166; }
 .chat-sender { color: #fff0b3; font-weight: 700; }

@@ -28,7 +28,7 @@ import { HandKind } from '../../shared/src/hand-types';
 import { findBurstCandidates } from '../../shared/src/rule-engine';
 import { RoomChatMessage, RoomChatPayload } from '../../shared/src/protocol';
 import { appendRoomChatMessage, createRoomChatMessage } from './room-chat';
-import { Session, SessionService } from './session-service';
+import { ROOM_INACTIVE_TIMEOUT_MS, Session, SessionService } from './session-service';
 
 export interface RoomServiceOptions {
   readonly inviteCode: string;
@@ -77,7 +77,7 @@ export class RoomService {
 
   login(inviteCode: string): AuthResult {
     if (inviteCode !== this.inviteCode) throw new RoomServiceError('INVALID_INVITE', '邀请码错误');
-    const session = this.sessions.create();
+    const session = this.sessions.create(this.now());
     return { sessionToken: session.sessionToken, playerId: session.playerId };
   }
 
@@ -112,6 +112,7 @@ export class RoomService {
     if (!seated) throw new RoomServiceError('JOIN_FAILED', '入房失败');
     this.sessions.setSeat(sessionToken, seated.seat);
     this.sessions.setIdentity(sessionToken, 'player', seated.nickname);
+    this.sessions.touch(sessionToken, this.now());
     return this.getSnapshot(sessionToken);
   }
 
@@ -204,7 +205,12 @@ export class RoomService {
   }
 
   attach(sessionToken: string, connectionId: string): { previousConnectionId: string | null } {
-    return this.sessions.attach(sessionToken, connectionId);
+    const attachment = this.sessions.attach(sessionToken, connectionId, this.now());
+    const session = this.sessions.get(sessionToken);
+    if (this.state && session.seat && this.state.players[session.seat]?.id === session.playerId) {
+      this.state = setPlayerConnection(this.state, session.seat, true, this.now());
+    }
+    return attachment;
   }
 
   isConnectionOwner(sessionToken: string, connectionId: string): boolean {
@@ -212,7 +218,7 @@ export class RoomService {
   }
 
   disconnect(sessionToken: string, connectionId: string): void {
-    if (!this.sessions.detach(sessionToken, connectionId)) return;
+    if (!this.sessions.detach(sessionToken, connectionId, this.now())) return;
     const seat = this.sessions.get(sessionToken).seat;
     if (this.state && seat) this.state = setPlayerConnection(this.state, seat, false);
   }
@@ -240,15 +246,55 @@ export class RoomService {
   }
 
   scan(now = this.now()): boolean {
-    if (!this.state) return false;
-    const next = scanPresence(this.state, now);
-    const changed = next !== this.state;
-    this.state = next;
+    let changed = false;
+    if (this.state) {
+      const next = scanPresence(this.state, now);
+      changed = next !== this.state;
+      this.state = next;
+      if (this.state && (this.state.phase === 'lobby' || this.state.phase === 'settled')) {
+        for (const player of Object.values(this.state.players)) {
+          if (!player || !this.isExpiredPlayer(player.id, player.away, player.lastActivityAt, now)) continue;
+          const currentState = this.state;
+          const seat = player.seat;
+          if (currentState.phase === 'lobby') {
+            const next = removePlayer(currentState, seat);
+            if (player.id === currentState.hostId) {
+              const replacement = Object.values(next.players).find((candidate) => candidate !== null);
+              this.state = replacement ? { ...next, hostId: replacement.id } : next;
+            } else {
+              this.state = next;
+            }
+          } else {
+            const next: GameState = {
+              ...currentState,
+              version: currentState.version + 1,
+              players: { ...currentState.players, [seat]: null },
+              readySeats: currentState.readySeats.filter((readySeat) => readySeat !== seat),
+            };
+            if (player.id === currentState.hostId) {
+              const replacement = Object.values(next.players).find((candidate) => candidate !== null);
+              this.state = replacement ? { ...next, hostId: replacement.id } : next;
+            } else {
+              this.state = next;
+            }
+          }
+          this.sessions.clearSeatForPlayer(player.id);
+          changed = true;
+        }
+      }
+    }
+    for (const spectator of this.sessions.listSpectators()) {
+      if (!this.sessions.isInactive(spectator.sessionToken, now)) continue;
+      this.sessions.clearIdentity(spectator.sessionToken);
+      changed = true;
+    }
+    this.clearChatIfEmpty();
     return changed;
   }
 
   recordActivity(sessionToken: string): RoomSnapshot {
     const session = this.sessions.get(sessionToken);
+    this.sessions.touch(sessionToken, this.now());
     if (!this.state || !session.seat) return this.getSnapshot(sessionToken);
     this.state = markActivity(this.state, session.seat, this.now());
     return this.getSnapshot(sessionToken);
@@ -256,12 +302,14 @@ export class RoomService {
 
   recordChat(sessionToken: string, payload: RoomChatPayload): RoomChatMessage {
     if (!this.state) throw new RoomServiceError('ROOM_NOT_FOUND', '房间尚未创建');
+    this.sessions.touch(sessionToken, this.now());
     const message = createRoomChatMessage(this.sessions.get(sessionToken), payload);
     this.chatMessages = appendRoomChatMessage(this.chatMessages, message);
     return message;
   }
   dispatch(sessionToken: string, command: CommandEnvelope): CommandResult {
     const session = this.sessions.get(sessionToken);
+    this.sessions.touch(sessionToken, this.now());
     if (!isCommandEnvelope(command)) throw new RoomServiceError('INVALID_COMMAND', '命令格式无效');
     const previous = this.requestResults.get(sessionToken)?.get(command.requestId);
     if (previous) return previous;
@@ -369,6 +417,16 @@ export class RoomService {
   private clearChatIfEmpty(): void {
     const hasPlayers = Boolean(this.state && Object.values(this.state.players).some((player) => player !== null));
     if (!hasPlayers && this.sessions.listSpectators().length === 0) this.chatMessages = [];
+  }
+  private isExpiredPlayer(playerId: string, away: boolean, fallbackActivityAt: number, now: number): boolean {
+    const session = this.sessions.findByPlayerId(playerId);
+    if (session) {
+      if (session.connectionId === null) {
+        return session.disconnectedAt !== null && this.sessions.isInactive(session.sessionToken, now);
+      }
+      return away && now - fallbackActivityAt >= ROOM_INACTIVE_TIMEOUT_MS;
+    }
+    return away && now - fallbackActivityAt >= ROOM_INACTIVE_TIMEOUT_MS;
   }
   private wrapGameError(error: unknown): Error {
     if (error instanceof GameStateError) return new RoomServiceError(error.code, error.message);

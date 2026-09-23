@@ -36,9 +36,7 @@ export function AccessView({ onSubmit, error, busy, testMode, gameId = '414', on
         <p className="join-mode-hint">有空位自动成为玩家；牌局中加入优先占空位并等待下一局</p>
         <button type="submit" disabled={busy}>进入房间</button>
       </form>
-      {testMode
-        ? <p className="test-mode-hint" role="status">单机多标签测试模式：本标签页使用独立玩家会话</p>
-        : <a className="test-mode-link" href="?test=1">开启单机多标签测试模式</a>}
+      {testMode ? <p className="test-mode-hint" role="status">单机多标签测试模式：本标签页使用独立玩家会话</p> : null}
       {error ? <p role="alert">{error}</p> : null}
     </main>
   );

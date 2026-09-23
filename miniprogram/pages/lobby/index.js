@@ -1,6 +1,7 @@
 const chatUtils = require('../../utils/chat');
 const chatMembers = chatUtils.chatMembers || ((snapshot) => (snapshot.public.players || []).map((player) => ({ id: player.seat, seat: player.seat, nickname: player.nickname, label: player.positionLabel || player.seat + ' 位' })));
 const { commandFor } = require('../../utils/commands');
+const { lostRoomIdentity, clearStoredIdentity } = require('../../utils/session');
 
 const SEATS = ['A', 'B', 'C', 'D'];
 
@@ -35,6 +36,13 @@ Page({
 
   updateSnapshot(snapshot) {
     if (!snapshot) return;
+    const roomPreviousSnapshot = this.data.snapshot || (this.app.getSnapshot ? this.app.getSnapshot() : null);
+    if (lostRoomIdentity(roomPreviousSnapshot, snapshot)) {
+      clearStoredIdentity(this.app.getGame());
+      this.app.setSnapshot(null);
+      wx.reLaunch({ url: '/pages/access/index' });
+      return;
+    }
     if (snapshot.public.phase !== 'lobby') {
       this.app.setSnapshot(snapshot);
       wx.reLaunch({ url: '/pages/game/index' });

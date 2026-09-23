@@ -1,8 +1,8 @@
 <view class="room-chat panel">
   <view class="room-chat-heading"><text class="section-title">房间聊天</text><text class="muted">聊天和互动仅在本房间保留</text></view>
-  <scroll-view class="room-chat-messages" scroll-y="true">
+  <scroll-view class="room-chat-messages" scroll-y="true" scroll-into-view="{{scrollIntoView}}">
     <view wx:if="{{!messages.length}}" class="muted">还没有消息，打个招呼吧</view>
-    <view wx:for="{{messages}}" wx:key="id" class="room-chat-message {{item.kind}}">
+    <view wx:for="{{messages}}" wx:key="id" id="chat-message-{{item.id}}" class="room-chat-message {{item.kind}}">
       <text wx:if="{{item.kind === 'text'}}"><text class="chat-sender">{{item.senderNickname}}</text>：{{item.text}}</text>
       <text wx:else>{{item.senderNickname}} {{item.interaction === 'tomato' ? '扔了番茄给' : item.interaction === 'water' ? '泼水给' : item.interaction === 'heart' ? '比心给' : '亲吻'}} {{item.targetNickname}}</text>
     </view>

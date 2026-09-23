@@ -121,6 +121,11 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
   };
 
   const addSocket = (sessionToken: string, socket: Socket, gameId: GameId) => {
+    if (socket.data.sessionToken && socket.data.sessionToken !== sessionToken) {
+      removeSocket(socket.data.sessionToken, socket);
+    }
+    socket.data.sessionToken = sessionToken;
+    socket.data.gameId = gameId;
     gameByToken.set(sessionToken, gameId);
     if (!socketsByToken.has(sessionToken)) socketsByToken.set(sessionToken, new Set());
     socketsByToken.get(sessionToken)!.add(socket);
@@ -237,8 +242,6 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
         const gameId = payload?.gameId === 'texas' ? 'texas' : '414';
         const service = serviceFor(gameId);
         const auth = payload?.sessionToken ? service.resume(payload.sessionToken) : service.login(payload?.inviteCode ?? '');
-        socket.data.sessionToken = auth.sessionToken;
-        socket.data.gameId = gameId;
         const attachment = service.attach(auth.sessionToken, socket.id);
         if (attachment.previousConnectionId) notifyReplaced(attachment.previousConnectionId);
         addSocket(auth.sessionToken, socket, gameId);
@@ -255,8 +258,6 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
         const gameId = payload?.gameId === 'texas' || socket.data.gameId === 'texas' ? 'texas' : '414';
         const service = serviceFor(gameId);
         const snapshot = service.join(sessionToken, payload?.nickname ?? '', payload?.roomId ?? (gameId === 'texas' ? 'texas' : '414'));
-        socket.data.sessionToken = sessionToken;
-        socket.data.gameId = gameId;
         addSocket(sessionToken, socket, gameId);
         acknowledge(ack, { ok: true, snapshot });
         sendSnapshots();
@@ -360,7 +361,9 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
   });
 
   const presenceTimer = setInterval(() => {
-    const changed = roomService.scan() || texasRoomService.scan();
+    const roomChanged = roomService.scan();
+    const texasChanged = texasRoomService.scan();
+    const changed = roomChanged || texasChanged;
     if (changed) sendSnapshots();
   }, config.presenceScanMs);
   presenceTimer.unref();

@@ -118,13 +118,18 @@ describe('TexasRoomService', () => {
     expect(() => room.join(second.sessionToken, '车文晶', 'texas')).toThrow('昵称已经被使用');
     expect(room.getSnapshot(first.sessionToken).public.players).toHaveLength(1);
   });
-  it('断线后同一用户重新进入不会重复占用座位', () => {
-    const room = new TexasRoomService({ inviteCode: 'inner-414' });
+  it('断线五分钟内保留座位，超时后释放并允许同名用户重新进入', () => {
+    let now = 1_000;
+    const room = new TexasRoomService({ inviteCode: 'inner-414', now: () => now });
     const first = room.login('inner-414');
     const second = room.login('inner-414');
     room.join(first.sessionToken, '车文晶', 'texas');
     room.attach(first.sessionToken, 'connection-1');
     room.disconnect(first.sessionToken, 'connection-1');
+    expect(() => room.join(second.sessionToken, '车文晶', 'texas')).toThrow('昵称已经被使用');
+
+    now += 5 * 60 * 1_000;
+    expect(room.scan(now)).toBe(true);
     room.join(second.sessionToken, '车文晶', 'texas');
 
     const snapshot = room.getSnapshot(second.sessionToken);

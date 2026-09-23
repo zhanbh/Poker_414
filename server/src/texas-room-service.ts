@@ -91,6 +91,7 @@ const MAX_SPECTATORS = 4;
 export class TexasRoomService {
   readonly sessions = new SessionService();
   private readonly inviteCode: string;
+  private readonly now: () => number;
   private readonly random: () => number;
   private state: TexasState | null = null;
   private readonly requestResults = new Map<string, Map<string, TexasCommandSuccess>>();
@@ -99,12 +100,13 @@ export class TexasRoomService {
 
   constructor(options: TexasRoomServiceOptions) {
     this.inviteCode = options.inviteCode;
+    this.now = options.now ?? (() => Date.now());
     this.random = options.random ?? Math.random;
   }
 
   login(inviteCode: string): TexasAuthResult {
     if (inviteCode !== this.inviteCode) throw new TexasRoomServiceError('INVALID_INVITE', '邀请码错误');
-    const session = this.sessions.create();
+    const session = this.sessions.create(this.now());
     return { sessionToken: session.sessionToken, playerId: session.playerId };
   }
 
@@ -157,6 +159,7 @@ export class TexasRoomService {
     }
     this.addPlayer(seat, session, nickname.trim());
     this.sessions.setIdentity(sessionToken, 'player', nickname.trim());
+    this.sessions.touch(sessionToken, this.now());
     this.state.version += 1;
     return this.getSnapshot(sessionToken);
   }
@@ -240,7 +243,13 @@ export class TexasRoomService {
   }
 
   attach(sessionToken: string, connectionId: string): { previousConnectionId: string | null } {
-    return this.sessions.attach(sessionToken, connectionId);
+    const attachment = this.sessions.attach(sessionToken, connectionId, this.now());
+    const session = this.sessions.get(sessionToken);
+    if (this.state && session.texasSeat && this.state.players[session.texasSeat]?.id === session.playerId) {
+      this.state.players[session.texasSeat]!.connected = true;
+      this.state.version += 1;
+    }
+    return attachment;
   }
 
   isConnectionOwner(sessionToken: string, connectionId: string): boolean {
@@ -248,7 +257,7 @@ export class TexasRoomService {
   }
 
   disconnect(sessionToken: string, connectionId: string): void {
-    if (!this.sessions.detach(sessionToken, connectionId)) return;
+    if (!this.sessions.detach(sessionToken, connectionId, this.now())) return;
     const session = this.sessions.get(sessionToken);
     if (this.state && session.texasSeat && this.state.players[session.texasSeat]) {
       this.state.players[session.texasSeat]!.connected = false;
@@ -277,20 +286,39 @@ export class TexasRoomService {
 
   recordChat(sessionToken: string, payload: RoomChatPayload): RoomChatMessage {
     if (!this.state) throw new TexasRoomServiceError('ROOM_NOT_FOUND', '房间尚未创建');
+    this.sessions.touch(sessionToken, this.now());
     const message = createRoomChatMessage(this.sessions.get(sessionToken), payload);
     this.chatMessages = appendRoomChatMessage(this.chatMessages, message);
     return message;
   }
-  scan(): boolean {
-    return false;
+  scan(now = this.now()): boolean {
+    let changed = false;
+    if (this.state && (this.state.phase === 'lobby' || this.state.phase === 'showdown' || this.state.phase === 'settled')) {
+      for (const player of Object.values(this.state.players)) {
+        if (!player || !this.isExpiredPlayer(player.id, now)) continue;
+        this.removeSeat(player.seat);
+        changed = true;
+        if (!this.state) break;
+      }
+    }
+    for (const spectator of this.sessions.listSpectators()) {
+      if (!this.sessions.isInactive(spectator.sessionToken, now)) continue;
+      this.waitingSessionTokens.delete(spectator.sessionToken);
+      if (spectator.texasSeat) this.removeSeat(spectator.texasSeat);
+      else this.sessions.clearIdentity(spectator.sessionToken);
+      changed = true;
+    }
+    return changed;
   }
 
   recordActivity(sessionToken: string): TexasSnapshot {
+    this.sessions.touch(sessionToken, this.now());
     return this.getSnapshot(sessionToken);
   }
 
   dispatch(sessionToken: string, command: TexasCommandEnvelope): TexasCommandSuccess {
     const session = this.sessions.get(sessionToken);
+    this.sessions.touch(sessionToken, this.now());
     const previous = this.requestResults.get(sessionToken)?.get(command.requestId);
     if (previous) return previous;
     if (!this.state) throw new TexasRoomServiceError('ROOM_NOT_FOUND', '房间尚未创建');
@@ -618,12 +646,19 @@ export class TexasRoomService {
     if (!this.state || session.playerId !== this.state.hostId) throw new TexasRoomServiceError('NOT_HOST', '只有房主可以操作');
   }
 
-  private pruneDisconnectedLobbyPlayers(): void {
+  private pruneDisconnectedLobbyPlayers(now = this.now()): void {
     if (!this.state || this.state.phase !== 'lobby') return;
     for (const player of Object.values(this.state.players)) {
       if (!this.state) break;
-      if (player && !player.connected) this.removeSeat(player.seat);
+      if (player && this.isExpiredPlayer(player.id, now)) this.removeSeat(player.seat);
     }
+  }
+
+  private isExpiredPlayer(playerId: string, now: number): boolean {
+    const session = this.sessions.findByPlayerId(playerId);
+    if (!session) return false;
+    if (session.connectionId === null && session.disconnectedAt === null) return false;
+    return this.sessions.isInactive(session.sessionToken, now);
   }
 
   private addPlayer(seat: TexasSeat, session: Session, nickname: string): void {

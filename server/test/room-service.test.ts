@@ -210,7 +210,31 @@ describe('单房间会话与命令服务', () => {
       payload: { seat: 'A' },
     })).toThrow(/不能移除自己/);
     expect(room.getSnapshot(auth.sessionToken).private.seat).toBe('A');
-  });  it('房间聊天和互动对玩家、观战者实时可见，并在房间清空后清除', () => {
+  });
+
+  it('断线五分钟内保留座位，超时后释放座位并移交房主', () => {
+    let now = 1_000;
+    const room = new RoomService({ inviteCode: 'inner-414', now: () => now });
+    const host = room.login('inner-414');
+    const player = room.login('inner-414');
+    room.join(host.sessionToken, '房主', '414');
+    room.join(player.sessionToken, '玩家', '414');
+    room.attach(host.sessionToken, 'host-connection');
+    room.disconnect(host.sessionToken, 'host-connection');
+
+    now += 5 * 60 * 1_000 - 1;
+    expect(room.scan(now)).toBe(true); // 此次扫描只更新“暂离”状态，尚未释放座位
+    expect(room.getSnapshot(player.sessionToken).public.players).toHaveLength(2);
+
+    now += 1;
+    expect(room.scan(now)).toBe(true);
+    const after = room.getSnapshot(player.sessionToken);
+    expect(after.public.players).toHaveLength(1);
+    expect(after.public.hostSeat).toBe('B');
+    expect(after.public.players[0]?.isHost).toBe(true);
+  });
+
+  it('房间聊天和互动对玩家、观战者实时可见，并在房间清空后清除', () => {
     const room = service();
     const players = ['甲', '乙', '丙', '丁'].map((nickname) => {
       const auth = room.login('inner-414');

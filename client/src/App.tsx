@@ -48,6 +48,10 @@ function disconnectedNames(previous: GameSnapshot | null, next: GameSnapshot): s
     .map((player) => player.nickname);
 }
 
+function hasRoomIdentity(snapshot: GameSnapshot | null): boolean {
+  return Boolean(snapshot && (snapshot.private.seat || snapshot.private.spectator));
+}
+
 
 function chatMembersFor(snapshot: GameSnapshot): RoomChatMember[] {
   if (isTexasSnapshot(snapshot)) {
@@ -74,6 +78,17 @@ export function App({ transport: providedTransport }: { readonly transport?: Cli
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const consumeSnapshot = useCallback((next: GameSnapshot) => {
+    const previous = previousSnapshot.current;
+    if (hasRoomIdentity(previous) && !hasRoomIdentity(next)) {
+      storage.removeItem(storageKey(gameId, 'sessionToken'));
+      storage.removeItem(storageKey(gameId, 'nickname'));
+      previousSnapshot.current = null;
+      setSnapshot(null);
+      setConnectionNotice('房间席位已释放，请重新选择玩法');
+      if (noticeTimer.current) clearTimeout(noticeTimer.current);
+      noticeTimer.current = setTimeout(() => setConnectionNotice(''), 6_000);
+      return;
+    }
     const names = disconnectedNames(previousSnapshot.current, next);
     if (names.length > 0) {
       if (noticeTimer.current) clearTimeout(noticeTimer.current);

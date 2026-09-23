@@ -5,7 +5,14 @@ Component({
     members: { type: Array, value: [] },
     ownSeat: { type: String, value: '' },
   },
-  data: { draft: '', sending: false },
+  data: { draft: '', sending: false, scrollIntoView: '' },
+  observers: {
+    messages(messages) {
+      if (!messages || !messages.length) return;
+      const last = messages[messages.length - 1];
+      if (last && last.id) this.setData({ scrollIntoView: 'chat-message-' + last.id });
+    },
+  },
   methods: {
     onInput(event) {
       this.setData({ draft: event.detail.value });

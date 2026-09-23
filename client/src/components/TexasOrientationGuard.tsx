@@ -10,18 +10,23 @@ type LockableScreenOrientation = ScreenOrientation & {
   readonly lock?: (orientation: 'landscape') => Promise<void>;
 };
 
-function requestLandscapeLock(): void {
+export function requestLandscapeLock(): void {
   const orientation = typeof window !== 'undefined'
     ? window.screen?.orientation as LockableScreenOrientation | undefined
     : undefined;
   if (!orientation || typeof orientation.lock !== 'function') return;
-  void orientation.lock('landscape').catch(() => undefined);
+  try {
+    void orientation.lock('landscape').catch(() => undefined);
+  } catch {
+    // WebView implementations may throw synchronously when orientation lock is unsupported.
+  }
 }
 
-export function TexasOrientationGuard() {
+export function usePortraitOrientation(): boolean {
   const [portrait, setPortrait] = useState(isPortrait);
 
   useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
     const media = window.matchMedia('(orientation: portrait)');
     const update = () => setPortrait(media.matches);
     update();
@@ -35,15 +40,22 @@ export function TexasOrientationGuard() {
   }, []);
 
   useEffect(() => {
+    document.documentElement.classList.toggle('texas-orientation-fallback', portrait);
     if (portrait) requestLandscapeLock();
+    return () => {
+      document.documentElement.classList.remove('texas-orientation-fallback');
+    };
   }, [portrait]);
 
+  return portrait;
+}
+
+export function TexasOrientationGuard({ portrait }: { readonly portrait: boolean }) {
   if (!portrait) return null;
-  return <div className="texas-orientation-guard" role="dialog" aria-modal="true" aria-label="横屏提示">
-    <div className="texas-orientation-icon" aria-hidden="true">↻</div>
-    <h2>请将手机横屏</h2>
-    <p>德州扑克桌需要横向显示。请打开手机自动旋转，并将手机横过来。</p>
-    <button type="button" onClick={requestLandscapeLock}>尝试切换横屏</button>
-    <small>如果没有自动旋转，请在手机快捷设置中开启“自动旋转”。</small>
-  </div>;
+  return (
+    <div className="texas-orientation-hint" role="status" aria-live="polite">
+      <span>当前设备未自动旋转，已启用横向适配；如支持自动旋转，请将手机横过来。</span>
+      <button type="button" onClick={requestLandscapeLock}>尝试切换横屏</button>
+    </div>
+  );
 }

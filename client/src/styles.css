@@ -184,12 +184,6 @@ main { min-height: 100svh; padding: clamp(16px, 4vw, 32px); }
   .room-purpose-notice strong { white-space: nowrap; }
 }
 
-@media (max-width: 760px) and (orientation: portrait) {
-  .landscape-gate { position: fixed; inset: 0; z-index: 20; display: grid; place-content: center; gap: 12px; padding: 28px; color: #eaf2ff; text-align: center; background: rgba(9, 28, 40, .98); }
-  .landscape-gate strong { color: #ffd166; font-size: 1.8rem; }
-  .landscape-gate span { color: #c9e0e8; font-size: 1rem; line-height: 1.6; }
-}
-
 @media (max-width: 380px) {
   main { padding-inline: 8px; }
   .table-layout { min-height: 620px; }
@@ -470,12 +464,34 @@ main { min-height: 100svh; padding: clamp(16px, 4vw, 32px); }
 @media (prefers-reduced-motion: reduce) {
   .texas-community .texas-card, .texas-phase-notice, .texas-settlement-modal { animation: none; }
 }
-.texas-orientation-guard { position: fixed; inset: 0; z-index: 100; display: grid; place-content: center; justify-items: center; gap: 12px; padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom)); color: #eaf2ff; text-align: center; background: #0e2535; }
-.texas-orientation-icon { color: #ffd166; font-size: 4rem; line-height: 1; transform: rotate(-45deg); }
-.texas-orientation-guard h2 { margin: 0; color: #ffd166; font-size: 1.7rem; }
-.texas-orientation-guard p { max-width: 360px; margin: 0; color: #d1e4eb; line-height: 1.6; }
-.texas-orientation-guard button { min-height: 42px; padding: 8px 18px; color: #102331; background: #ffd166; border: 0; border-radius: 8px; font-weight: 800; cursor: pointer; }
-.texas-orientation-guard small { max-width: 360px; color: #9fc5ce; line-height: 1.5; }
+.texas-orientation-hint { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 4px 0 8px; padding: 7px 10px; color: #d1e4eb; background: rgba(18, 61, 76, .96); border: 1px solid #4a9caf; border-radius: 8px; font-size: .78rem; line-height: 1.4; }
+.texas-orientation-hint button { flex: 0 0 auto; min-height: 32px; padding: 5px 9px; color: #102331; background: #ffd166; border: 0; border-radius: 6px; font-weight: 800; cursor: pointer; }
+
+@media (max-width: 760px) and (orientation: portrait) {
+  html.texas-orientation-fallback,
+  html.texas-orientation-fallback body { overflow: hidden; }
+  html.texas-orientation-fallback #root {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vh;
+    height: 100vw;
+    width: 100svh;
+    height: 100svw;
+    min-height: 0;
+    overflow: auto;
+    transform: rotate(90deg) translateY(-100%);
+    transform-origin: top left;
+  }
+  html.texas-orientation-fallback #root main.texas-lobby,
+  html.texas-orientation-fallback #root main.texas-game {
+    width: 100%;
+    max-width: none;
+    min-height: 100%;
+    margin: 0;
+    padding: 8px 14px 14px;
+  }
+}
 
 .room-chat { width: min(100% - 32px, 1180px); margin: 16px auto 28px; padding: 16px; color: #eaf2ff; background: #18384b; border: 1px solid #397a8b; border-radius: 12px; }
 .room-chat-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }

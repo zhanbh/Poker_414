@@ -33,9 +33,21 @@ describe('德州横屏提示', () => {
 
     render(<TexasGameView snapshot={snapshot} onCommand={vi.fn()} onLeave={vi.fn()} testMode={false} />);
 
-    expect(screen.getByRole('dialog', { name: '横屏提示' })).toBeInTheDocument();
-    expect(screen.getByText('请将手机横屏')).toBeInTheDocument();
+    expect(screen.getByText('当前设备未自动旋转，已启用横向适配；如支持自动旋转，请将手机横过来。')).toBeInTheDocument();
     expect(lock).toHaveBeenCalledWith('landscape');
+  });
+
+  it('portrait fallback remains usable when orientation lock is unavailable', () => {
+    Object.defineProperty(window, 'screen', { configurable: true, value: { orientation: undefined } });
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: vi.fn().mockReturnValue({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }),
+    });
+
+    render(<TexasGameView snapshot={snapshot} onCommand={vi.fn()} onLeave={vi.fn()} testMode={false} />);
+
+    expect(document.documentElement.classList.contains('texas-orientation-fallback')).toBe(true);
+    expect(screen.queryByRole('dialog', { name: '\u6a2a\u5c4f\u63d0\u793a' })).not.toBeInTheDocument();
   });
 
   it('横屏时不显示遮罩', () => {

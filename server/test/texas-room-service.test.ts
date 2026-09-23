@@ -26,6 +26,27 @@ describe('TexasRoomService', () => {
     expect(started.snapshot.public.players.map((player) => player.positionLabel)).toEqual(expect.arrayContaining(['庄位/小盲', '大盲 BB']));
   });
 
+  it('翻牌后向玩家返回当前最佳牌型', () => {
+    const room = new TexasRoomService({ inviteCode: 'inner-414', random: () => 0.42 });
+    const first = room.login('inner-414');
+    const second = room.login('inner-414');
+    room.join(first.sessionToken, '甲', 'texas');
+    room.join(second.sessionToken, '乙', 'texas');
+    const lobby = room.getSnapshot(first.sessionToken);
+    room.dispatch(first.sessionToken, command('start-hand', lobby.public.handNumber, lobby.public.version));
+
+    let current = room.getSnapshot(first.sessionToken);
+    for (let index = 0; index < 3 && current.public.phase === 'preflop'; index += 1) {
+      const actor = current.public.currentTurn === room.getSnapshot(first.sessionToken).private.seat ? first : second;
+      const actorView = room.getSnapshot(actor.sessionToken);
+      const actorPlayer = actorView.public.players.find((player) => player.seat === actorView.private.seat)!;
+      const type = actorPlayer.roundBet < actorView.public.currentBet ? 'call' : 'check';
+      current = room.dispatch(actor.sessionToken, command(type, actorView.public.handNumber, actorView.public.version)).snapshot;
+    }
+
+    expect(current.public.phase).toBe('flop');
+    expect(room.getSnapshot(first.sessionToken).private.bestHand?.label).toBeTruthy();
+  });
   it('随机从八个空闲座位中分配入座位置', () => {
     const room = new TexasRoomService({ inviteCode: 'inner-414', random: () => 0.99 });
     const sessions = Array.from({ length: 4 }, () => room.login('inner-414'));
@@ -65,6 +86,8 @@ describe('TexasRoomService', () => {
 
     const settled = room.getSnapshot(first.sessionToken);
     expect(settled.public.phase).toBe('settled');
+    expect(settled.private.bestHand?.category).toBeTruthy();
+    expect(settled.private.bestHand?.label).toBeTruthy();
     room.dispatch(first.sessionToken, command('next-hand', settled.public.handNumber, settled.public.version));
     const nextLobby = room.getSnapshot(waiting.sessionToken);
     expect(nextLobby.private.waiting).toBe(false);

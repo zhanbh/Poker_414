@@ -1,17 +1,31 @@
 const { commandFor } = require('../../utils/commands');
-const { decorateCards, phaseLabel } = require('../../utils/texas');
+const { decorateCards, handCategoryLabel, phaseLabel } = require('../../utils/texas');
 
 const SEATS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+
+function phaseNotice(phase) {
+  const notices = {
+    preflop: '翻牌前 · 等待玩家行动',
+    flop: '翻牌 · 已发出 3 张公共牌',
+    turn: '转牌 · 第 4 张公共牌',
+    river: '河牌 · 第 5 张公共牌',
+    showdown: '摊牌 · 正在比较牌型',
+    settled: '结算完成 · 可查看本局结果',
+  };
+  return notices[phase] || '等待开局';
+}
 
 Page({
   data: {
     snapshot: null,
     phase: 'preflop',
     phaseLabel: '',
+    phaseNotice: '',
     handNumber: 0,
     players: [],
     community: [],
     holeCards: [],
+    bestHand: null,
     spectatorHands: [],
     ownSeat: null,
     ownPlayer: null,
@@ -32,6 +46,8 @@ Page({
     sliderMax: 1000,
     selectedAllIn: false,
     settlement: null,
+    showSettlement: false,
+    settlementHandNumber: null,
     error: '',
   },
 
@@ -85,26 +101,39 @@ Page({
     const spectatorHands = (snapshot.private.spectatorHands || []).map((player) => ({
       ...player,
       hand: decorateCards(player.hand),
+      bestHand: player.bestHand ? { ...player.bestHand, label: handCategoryLabel(player.bestHand.category) } : null,
     }));
     const settlement = snapshot.public.settlement
       ? {
         ...snapshot.public.settlement,
-        winnerText: snapshot.public.settlement.winners.map((seat) => bySeat.get(seat)?.positionLabel || '玩家').join('、'),
+        winnerText: snapshot.public.settlement.winners.map((seat) => bySeat.get(seat)?.nickname || seat).join('、'),
         payoutRows: Object.entries(snapshot.public.settlement.payouts).map(([seat, payout]) => ({
-          label: bySeat.get(seat)?.positionLabel || '玩家',
+          label: bySeat.get(seat)?.positionLabel || bySeat.get(seat)?.nickname || '玩家',
           payout,
+        })),
+        winnerDetails: snapshot.public.settlement.winners.map((seat) => ({
+          seat,
+          nickname: bySeat.get(seat)?.nickname || seat,
+          category: handCategoryLabel(snapshot.public.settlement.hands[seat]),
+          payout: snapshot.public.settlement.payouts[seat] || 0,
         })),
       }
       : null;
+    const isNewSettlement = Boolean(settlement && snapshot.public.handNumber !== this.data.settlementHandNumber);
+    const showSettlement = snapshot.public.phase === 'settled'
+      ? (isNewSettlement ? true : this.data.showSettlement)
+      : false;
     this.app.setSnapshot(snapshot);
     this.setData({
       snapshot,
       phase: snapshot.public.phase,
       phaseLabel: phaseLabel(snapshot.public.phase),
+      phaseNotice: phaseNotice(snapshot.public.phase),
       handNumber: snapshot.public.handNumber,
       players,
       community: decorateCards(snapshot.public.community),
       holeCards: decorateCards(snapshot.private.holeCards),
+      bestHand: snapshot.private.bestHand ? { ...snapshot.private.bestHand, label: handCategoryLabel(snapshot.private.bestHand.category) } : null,
       spectatorHands,
       ownSeat: snapshot.private.seat,
       ownPlayer,
@@ -125,6 +154,8 @@ Page({
       sliderMax,
       selectedAllIn: sliderMax > 0 && sliderValue >= sliderMax,
       settlement,
+      showSettlement,
+      settlementHandNumber: settlement && snapshot.public.phase === 'settled' ? snapshot.public.handNumber : null,
       error: '',
     });
   },
@@ -166,6 +197,14 @@ Page({
 
   onNextHand() {
     this.runCommand('next-hand', {});
+  },
+
+  onCloseSettlement() {
+    this.setData({ showSettlement: false });
+  },
+
+  onOpenSettlement() {
+    this.setData({ showSettlement: true });
   },
 
   onLeave() {

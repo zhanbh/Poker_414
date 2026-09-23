@@ -18,11 +18,12 @@
         <text>当前下注 {{currentBet}}</text>
         <text>轮到 {{currentTurnLabel || '—'}}</text>
       </view>
+      <view class="phase-notice">{{phaseNotice}}</view>
 
       <view class="community-panel">
         <view class="section-title">公共牌</view>
         <view class="card-row">
-          <view wx:for="{{community}}" wx:key="id" class="texas-card {{item.red ? 'red' : ''}}">{{item.label}}</view>
+          <view wx:for="{{community}}" wx:key="id" class="texas-card texas-card-deal {{item.red ? 'red' : ''}}">{{item.label}}</view>
           <view wx:if="{{!community.length}}" class="muted">等待发牌</view>
         </view>
       </view>
@@ -41,9 +42,12 @@
 
   <view class="panel hand-panel">
     <view class="section-title">{{spectator || phase === 'showdown' || phase === 'settled' ? '玩家手牌（上帝视角）' : '我的手牌'}}</view>
+    <view wx:if="{{!spectator && bestHand}}" class="best-hand">当前最佳牌型：<text>{{bestHand.label}}</text></view>
+    <view wx:if="{{!spectator && !bestHand && community.length < 3}}" class="best-hand muted">翻牌后显示当前最佳牌型</view>
     <view wx:if="{{spectator || phase === 'showdown' || phase === 'settled'}}">
       <view wx:for="{{spectatorHands}}" wx:for-item="player" wx:key="seat" class="spectator-hand">
-        <view class="spectator-hand-title">{{player.positionLabel || '玩家'}} · {{player.nickname}}</view>
+        <view class="spectator-hand-title">{{player.positionLabel || player.seat}} · {{player.nickname}}</view>
+        <view class="best-hand">{{player.bestHand ? '当前最佳：' + player.bestHand.label : '等待公共牌'}}</view>
         <view class="card-row">
           <view wx:for="{{player.hand}}" wx:for-item="card" wx:key="id" class="texas-card small {{card.red ? 'red' : ''}}">{{card.label}}</view>
         </view>
@@ -66,12 +70,10 @@
     </view>
   </view>
 
-  <view wx:if="{{settlement}}" class="panel settlement-panel">
-    <view class="section-title">本局结果</view>
-    <view>赢家：{{settlement.winnerText}}</view>
-    <view wx:for="{{settlement.payoutRows}}" wx:key="label" class="muted">{{item.label}} +{{item.payout}}</view>
-    <button wx:if="{{isHost}}" class="primary-button" bindtap="onNextHand">回到大厅并开始下一局</button>
+        <view class="spectator-hand-title">{{player.positionLabel || player.seat}} · {{player.nickname}}</view>
+        <view class="best-hand">{{player.bestHand ? '当前最佳：' + player.bestHand.label : '等待公共牌'}}</view>
   </view>
+  <button wx:if="{{settlement && !showSettlement}}" class="settlement-summary-button" bindtap="onOpenSettlement">查看本局结算：{{settlement.winnerText}}</button>
 
   <view wx:if="{{error}}" class="error">{{error}}</view>
 </view>

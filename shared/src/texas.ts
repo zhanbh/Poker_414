@@ -16,6 +16,22 @@ export interface TexasCard {
 
 export type TexasHandCategory = 'high-card' | 'pair' | 'two-pair' | 'three-of-a-kind' | 'straight' | 'flush' | 'full-house' | 'four-of-a-kind' | 'straight-flush';
 
+export const TEXAS_HAND_CATEGORY_LABELS: Readonly<Record<TexasHandCategory, string>> = {
+  'high-card': '高牌',
+  pair: '一对',
+  'two-pair': '两对',
+  'three-of-a-kind': '三条',
+  straight: '顺子',
+  flush: '同花',
+  'full-house': '葫芦',
+  'four-of-a-kind': '四条',
+  'straight-flush': '同花顺',
+};
+
+export function texasHandCategoryLabel(category: TexasHandCategory): string {
+  return TEXAS_HAND_CATEGORY_LABELS[category];
+}
+
 export interface TexasHandValue {
   readonly category: TexasHandCategory;
   readonly score: readonly number[];

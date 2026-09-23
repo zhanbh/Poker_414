@@ -4,12 +4,14 @@ import {
   TexasSnapshot,
   TexasPublicSnapshot,
   TexasSettlement,
+  TexasHandView,
   TexasPlayerView,
 } from '../../shared/src/protocol';
 import {
   compareTexasHands,
   createTexasDeck,
   evaluateTexasHand,
+  texasHandCategoryLabel,
   TEXAS_BIG_BLIND,
   TEXAS_SEATS,
   TEXAS_SMALL_BLIND,
@@ -155,6 +157,11 @@ export class TexasRoomService {
     return this.getSnapshot(sessionToken);
   }
 
+  private bestHand(player: TexasPlayer, community: readonly TexasCard[]): TexasHandView | undefined {
+    if (player.holeCards.length + community.length < 5) return undefined;
+    const value = evaluateTexasHand([...player.holeCards, ...community]);
+    return { category: value.category, label: texasHandCategoryLabel(value.category) };
+  }
   getSnapshot(sessionToken: string): TexasSnapshot {
     const session = this.sessions.get(sessionToken);
     const state = this.state;
@@ -204,6 +211,7 @@ export class TexasRoomService {
       settlement: state.settlement,
     };
     const ownPlayer = session.texasSeat ? state.players[session.texasSeat] : null;
+    const ownBestHand = ownPlayer ? this.bestHand(ownPlayer, state.community) : undefined;
     const spectatorHands = Object.values(state.players)
       .filter((player): player is TexasPlayer => player !== null && !this.isWaitingPlayer(player.id))
       .map((player) => ({
@@ -211,12 +219,14 @@ export class TexasRoomService {
         positionLabel: positionLabels.get(player.seat) ?? '等待入座',
         nickname: player.nickname,
         hand: [...player.holeCards],
+        bestHand: this.bestHand(player, state.community),
       }));
     return {
       public: publicSnapshot,
       private: {
         seat: session.texasSeat,
         holeCards: ownPlayer ? [...ownPlayer.holeCards] : [],
+        ...(ownBestHand ? { bestHand: ownBestHand } : {}),
         waiting: this.waitingSessionTokens.has(sessionToken),
         spectator: session.role === 'spectator',
         ...(session.role === 'spectator' || state.phase === 'showdown' || state.phase === 'settled' ? { spectatorHands } : {}),

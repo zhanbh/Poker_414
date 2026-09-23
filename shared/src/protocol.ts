@@ -179,6 +179,11 @@ export interface TexasSettlement {
   readonly hands: Readonly<Record<string, string>>;
 }
 
+export interface TexasHandView {
+  readonly category: import('./texas').TexasHandCategory;
+  readonly label: string;
+}
+
 export interface TexasPublicSnapshot {
   readonly gameId: 'texas';
   readonly roomId: string;
@@ -202,9 +207,10 @@ export interface TexasPublicSnapshot {
 export interface TexasPrivateSnapshot {
   readonly seat: TexasSeat | null;
   readonly holeCards: import('./texas').TexasCard[];
+  readonly bestHand?: TexasHandView;
   readonly waiting?: boolean;
   readonly spectator?: boolean;
-  readonly spectatorHands?: ReadonlyArray<{ readonly seat: TexasSeat; readonly positionLabel?: string; readonly nickname: string; readonly hand: import('./texas').TexasCard[] }>;
+  readonly spectatorHands?: ReadonlyArray<{ readonly seat: TexasSeat; readonly positionLabel?: string; readonly nickname: string; readonly hand: import('./texas').TexasCard[]; readonly bestHand?: TexasHandView }>;
 }
 
 export interface TexasSnapshot {

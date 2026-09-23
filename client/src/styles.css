@@ -440,3 +440,39 @@ main { min-height: 100svh; padding: clamp(16px, 4vw, 32px); }
   .texas-card, .texas-card-back { min-width: 38px; min-height: 54px; font-size: .78rem; }
   .texas-community { min-height: 66px; margin: 4px 0; }
 }
+
+@keyframes texas-card-deal {
+  from { opacity: 0; transform: translateY(-14px) scale(.84) rotate(-2deg); }
+  to { opacity: 1; transform: translateY(0) scale(1) rotate(0); }
+}
+
+@keyframes texas-phase-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.texas-community .texas-card { animation: texas-card-deal .42s ease both; }
+.texas-phase-notice { min-height: 1.4em; color: #ffd166; font-weight: 800; animation: texas-phase-in .32s ease both; }
+.texas-best-hand { margin: 6px 0 0; color: #ffd166; }
+.texas-best-hand strong { color: #fff0b3; }
+.texas-settlement-backdrop { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 20px; background: rgba(3, 15, 24, .74); }
+.texas-settlement-modal { position: relative; width: min(520px, 100%); padding: 26px; color: #eaf2ff; background: linear-gradient(145deg, #214d60, #122d3e); border: 2px solid #ffd166; border-radius: 18px; box-shadow: 0 24px 70px rgba(0, 0, 0, .45); animation: texas-phase-in .25s ease both; }
+.texas-settlement-modal h2 { margin: 4px 0 18px; color: #ffd166; font-size: 1.6rem; }
+.texas-settlement-kicker { margin: 0; color: #9fc5ce; }
+.texas-settlement-winners { display: grid; gap: 10px; }
+.texas-settlement-winner { display: grid; gap: 4px; padding: 12px 14px; background: rgba(255, 209, 102, .12); border: 1px solid rgba(255, 209, 102, .44); border-radius: 10px; }
+.texas-settlement-winner strong { color: #fff0b3; }
+.texas-settlement-winner b { color: #ffd166; }
+.texas-settlement-close { position: absolute; top: 10px; right: 12px; width: 34px; height: 34px; color: #d1e4eb; background: transparent; border: 0; font-size: 1.8rem; line-height: 1; cursor: pointer; }
+.texas-settlement-continue, .texas-settlement-next, .texas-settlement-summary { min-height: 40px; margin-top: 18px; padding: 8px 14px; color: #102331; background: #ffd166; border: 0; border-radius: 8px; cursor: pointer; }
+.texas-settlement-next { margin-left: 8px; color: #ffd166; background: #315f70; }
+.texas-settlement-summary { display: block; width: 100%; margin-top: 16px; color: #102331; font-weight: 800; }
+@media (prefers-reduced-motion: reduce) {
+  .texas-community .texas-card, .texas-phase-notice, .texas-settlement-modal { animation: none; }
+}
+.texas-orientation-guard { position: fixed; inset: 0; z-index: 100; display: grid; place-content: center; justify-items: center; gap: 12px; padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom)); color: #eaf2ff; text-align: center; background: #0e2535; }
+.texas-orientation-icon { color: #ffd166; font-size: 4rem; line-height: 1; transform: rotate(-45deg); }
+.texas-orientation-guard h2 { margin: 0; color: #ffd166; font-size: 1.7rem; }
+.texas-orientation-guard p { max-width: 360px; margin: 0; color: #d1e4eb; line-height: 1.6; }
+.texas-orientation-guard button { min-height: 42px; padding: 8px 18px; color: #102331; background: #ffd166; border: 0; border-radius: 8px; font-weight: 800; cursor: pointer; }
+.texas-orientation-guard small { max-width: 360px; color: #9fc5ce; line-height: 1.5; }

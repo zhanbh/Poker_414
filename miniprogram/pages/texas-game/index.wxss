@@ -294,3 +294,30 @@
     min-width: 140rpx;
   }
 }
+
+@keyframes texas-card-deal {
+  from { opacity: 0; transform: translateY(-18rpx) scale(.84) rotate(-2deg); }
+  to { opacity: 1; transform: translateY(0) scale(1) rotate(0); }
+}
+
+@keyframes texas-phase-in {
+  from { opacity: 0; transform: translateY(-8rpx); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.texas-card-deal { animation: texas-card-deal .42s ease both; }
+.phase-notice { min-height: 32rpx; color: #ffd166; font-size: 24rpx; font-weight: 700; animation: texas-phase-in .32s ease both; }
+.best-hand { margin-top: 10rpx; color: #ffd166; }
+.best-hand text { color: #fff0b3; font-weight: 700; }
+.settlement-backdrop { position: fixed; z-index: 20; top: 0; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: center; padding: 30rpx; background: rgba(3, 15, 24, .76); }
+.settlement-modal { width: 100%; padding: 32rpx; background: linear-gradient(145deg, #214d60, #122d3e); border: 3rpx solid #ffd166; border-radius: 22rpx; box-shadow: 0 24rpx 70rpx rgba(0, 0, 0, .45); animation: texas-phase-in .25s ease both; }
+.settlement-kicker { color: #9fc5ce; }
+.settlement-title { margin: 8rpx 0 22rpx; color: #ffd166; font-size: 38rpx; font-weight: 800; }
+.settlement-winner { margin-top: 14rpx; padding: 18rpx; background: rgba(255, 209, 102, .12); border: 2rpx solid rgba(255, 209, 102, .44); border-radius: 12rpx; }
+.settlement-winner-name { color: #fff0b3; font-weight: 700; }
+.settlement-hand { color: #ffd166; font-weight: 700; }
+.settlement-modal button { margin-top: 22rpx; }
+.settlement-summary-button { margin-top: 20rpx; color: #102331; background: #ffd166; font-weight: 700; }
+@media (prefers-reduced-motion: reduce) {
+  .texas-card-deal, .phase-notice, .settlement-modal { animation: none; }
+}

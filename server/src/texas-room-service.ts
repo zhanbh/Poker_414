@@ -116,6 +116,15 @@ export class TexasRoomService {
     if (!this.state) {
       this.state = this.emptyState(roomId, session.playerId);
     }
+    if (this.state.phase === 'lobby') {
+      this.pruneDisconnectedLobbyPlayers();
+      if (!this.state) {
+        this.state = this.emptyState(roomId, session.playerId);
+      }
+    }
+    if (Object.values(this.state.players).some((player) => player?.nickname === nickname.trim())) {
+      throw new TexasRoomServiceError('NICKNAME_EXISTS', '昵称已经被使用，请更换昵称');
+    }
     if (this.state.phase !== 'lobby') {
       const seat = this.randomOpenSeat();
       if (seat) {
@@ -584,13 +593,21 @@ export class TexasRoomService {
     if (!this.state || session.playerId !== this.state.hostId) throw new TexasRoomServiceError('NOT_HOST', '只有房主可以操作');
   }
 
+  private pruneDisconnectedLobbyPlayers(): void {
+    if (!this.state || this.state.phase !== 'lobby') return;
+    for (const player of Object.values(this.state.players)) {
+      if (!this.state) break;
+      if (player && !player.connected) this.removeSeat(player.seat);
+    }
+  }
+
   private addPlayer(seat: TexasSeat, session: Session, nickname: string): void {
     if (!this.state) throw new TexasRoomServiceError('ROOM_NOT_FOUND', '房间尚未创建');
     this.state.players[seat] = {
       id: session.playerId,
       seat,
       nickname,
-      connected: session.connectionId !== null,
+      connected: true,
       stack: TEXAS_STARTING_STACK,
       totalBet: 0,
       roundBet: 0,

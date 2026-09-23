@@ -85,7 +85,31 @@ describe('TexasRoomService', () => {
     expect(spectator.public.spectators).toHaveLength(1);
     expect(spectator.private.spectatorHands).toHaveLength(8);
   });
+
+  it('在线同名玩家不能再次占用座位', () => {
+    const room = new TexasRoomService({ inviteCode: 'inner-414' });
+    const first = room.login('inner-414');
+    const second = room.login('inner-414');
+    room.join(first.sessionToken, '车文晶', 'texas');
+
+    expect(() => room.join(second.sessionToken, '车文晶', 'texas')).toThrow('昵称已经被使用');
+    expect(room.getSnapshot(first.sessionToken).public.players).toHaveLength(1);
+  });
+  it('断线后同一用户重新进入不会重复占用座位', () => {
+    const room = new TexasRoomService({ inviteCode: 'inner-414' });
+    const first = room.login('inner-414');
+    const second = room.login('inner-414');
+    room.join(first.sessionToken, '车文晶', 'texas');
+    room.attach(first.sessionToken, 'connection-1');
+    room.disconnect(first.sessionToken, 'connection-1');
+    room.join(second.sessionToken, '车文晶', 'texas');
+
+    const snapshot = room.getSnapshot(second.sessionToken);
+    expect(snapshot.public.players).toHaveLength(1);
+    expect(snapshot.public.players[0]?.nickname).toBe('车文晶');
+  });
 });
+
 describe('Texas hand evaluator', () => {
   const card = (rank: TexasCard['rank'], suit: TexasCard['suit'], id = rank + suit): TexasCard => ({ id, rank, suit });
 

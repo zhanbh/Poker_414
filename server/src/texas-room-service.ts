@@ -253,7 +253,7 @@ export class TexasRoomService {
       this.sessions.clearIdentity(sessionToken);
       return;
     }
-    if (!this.state || this.state.phase !== 'lobby') {
+    if (!this.state || (this.state.phase !== 'lobby' && this.state.phase !== 'showdown' && this.state.phase !== 'settled')) {
       throw new TexasRoomServiceError('HAND_IN_PROGRESS', '牌局进行中不能退出玩家位，请等待本局结束');
     }
     this.removeSeat(session.texasSeat);
@@ -315,10 +315,14 @@ export class TexasRoomService {
       return;
     }
     if (type === 'remove-player') {
-      this.assertHost(session);
-      if (state.phase !== 'lobby') throw new TexasRoomServiceError('INVALID_PHASE', '牌局进行中不能移除玩家');
+      if (!session.texasSeat) throw new TexasRoomServiceError('NOT_SEATED', '只有在座玩家可以踢人');
+      if (state.phase !== 'lobby' && state.phase !== 'settled') throw new TexasRoomServiceError('INVALID_PHASE', '牌局进行中不能移除玩家');
       const target = (payload as { readonly seat: TexasSeat }).seat;
       if (target === session.texasSeat) throw new TexasRoomServiceError('CANNOT_REMOVE_SELF', '不能移除自己');
+      const targetPlayer = state.players[target];
+      if (!targetPlayer) throw new TexasRoomServiceError('PLAYER_NOT_FOUND', '该座位没有玩家');
+      const isHost = session.playerId === state.hostId;
+      if (!isHost && targetPlayer.connected) throw new TexasRoomServiceError('KICK_FORBIDDEN', '只能踢出已断线的玩家');
       this.removeSeat(target);
       return;
     }

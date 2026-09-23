@@ -350,6 +350,8 @@ main { min-height: 100svh; padding: clamp(16px, 4vw, 32px); }
 .texas-seat-position b { font-size: 1.1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .texas-seat-position span { color: #9fc5ce; }
 .texas-seat-position em { color: #8de6bd; font-style: normal; }
+.texas-seat-position .offline { color: #f3a7a7; }
+.texas-seat-position.kickable { cursor: pointer; }
 .texas-seat-remove { min-height: 28px; padding: 4px 8px; color: #ffe5e7; background: #7e3942; border: 0; border-radius: 6px; font-size: .78rem; }
 .texas-table { margin: 18px 0; }
 .texas-table-meta { display: flex; justify-content: center; gap: 18px; flex-wrap: wrap; color: #d1e4eb; }

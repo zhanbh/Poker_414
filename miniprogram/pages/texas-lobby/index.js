@@ -33,6 +33,7 @@ Page({
       return;
     }
     const bySeat = new Map(snapshot.public.players.map((player) => [player.seat, player]));
+    const own = snapshot.public.players.find((player) => player.seat === snapshot.private.seat);
     const players = SEATS.map((seat) => bySeat.get(seat) || {
       seat,
       positionLabel: '空位',
@@ -44,8 +45,10 @@ Page({
       folded: false,
       allIn: false,
       isHost: false,
-    });
-    const own = snapshot.public.players.find((player) => player.seat === snapshot.private.seat);
+    }).map((player) => ({
+      ...player,
+      canKick: Boolean(player.nickname && own && player.seat !== own.seat && (own.isHost || !player.connected)),
+    }));
     this.app.setSnapshot(snapshot);
     this.setData({
       snapshot,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TexasRoomService } from '../src/texas-room-service';
 import { TexasCommandEnvelope } from '../../shared/src/protocol';
-import { compareTexasHands, evaluateTexasHand, TexasCard } from '../../shared/src/texas';
+import { compareTexasHands, evaluateTexasHand, texasCardLabel, TexasCard } from '../../shared/src/texas';
 
 function command(type: TexasCommandEnvelope['type'], handNumber: number, stateVersion: number, payload: TexasCommandEnvelope['payload'] = {}): TexasCommandEnvelope {
   return { type, requestId: type + '-' + Math.random(), handNumber, stateVersion, payload };
@@ -109,10 +109,55 @@ describe('TexasRoomService', () => {
     expect(snapshot.public.players[0]?.nickname).toBe('车文晶');
   });
 });
+  it('结算后玩家可以退出房间', () => {
+    const room = new TexasRoomService({ inviteCode: 'inner-414', random: () => 0.42 });
+    const first = room.login('inner-414');
+    const second = room.login('inner-414');
+    room.join(first.sessionToken, '甲', 'texas');
+    room.join(second.sessionToken, '乙', 'texas');
+    const lobby = room.getSnapshot(first.sessionToken);
+    room.dispatch(first.sessionToken, command('start-hand', lobby.public.handNumber, lobby.public.version));
+
+    const firstView = room.getSnapshot(first.sessionToken);
+    const firstActor = firstView.public.currentTurn === firstView.private.seat ? first : second;
+    const secondActor = firstActor === first ? second : first;
+    const firstActorView = room.getSnapshot(firstActor.sessionToken);
+    room.dispatch(firstActor.sessionToken, command('all-in', firstActorView.public.handNumber, firstActorView.public.version));
+    const secondActorView = room.getSnapshot(secondActor.sessionToken);
+    room.dispatch(secondActor.sessionToken, command('all-in', secondActorView.public.handNumber, secondActorView.public.version));
+
+    expect(room.getSnapshot(first.sessionToken).public.phase).toBe('settled');
+    room.leave(first.sessionToken);
+    expect(room.getSnapshot(second.sessionToken).public.players).toHaveLength(1);
+    expect(room.getSnapshot(first.sessionToken).private.seat).toBeNull();
+  });
+
+  it('断线房主可以被在座玩家踢出并移交房主', () => {
+    const room = new TexasRoomService({ inviteCode: 'inner-414' });
+    const host = room.login('inner-414');
+    const player = room.login('inner-414');
+    room.join(host.sessionToken, '房主', 'texas');
+    room.join(player.sessionToken, '玩家', 'texas');
+    room.attach(host.sessionToken, 'host-connection');
+    room.disconnect(host.sessionToken, 'host-connection');
+
+    const playerView = room.getSnapshot(player.sessionToken);
+    const hostSeat = playerView.public.players.find((candidate) => candidate.nickname === '房主')?.seat;
+    expect(hostSeat).toBeTruthy();
+    room.dispatch(player.sessionToken, command('remove-player', playerView.public.handNumber, playerView.public.version, { seat: hostSeat! }));
+
+    const after = room.getSnapshot(player.sessionToken);
+    expect(after.public.players).toHaveLength(1);
+    expect(after.public.hostSeat).toBe(after.private.seat);
+    expect(after.public.players[0]?.isHost).toBe(true);
+  });
 
 describe('Texas hand evaluator', () => {
   const card = (rank: TexasCard['rank'], suit: TexasCard['suit'], id = rank + suit): TexasCard => ({ id, rank, suit });
 
+  it('将 T 显示为 10', () => {
+    expect(texasCardLabel({ id: 'T-clubs', rank: 'T', suit: 'clubs' })).toBe('10♣');
+  });
   it('能识别同花顺并比较 A 高同花顺', () => {
     const wheel = evaluateTexasHand([
       card('A', 'spades'), card('K', 'spades'), card('Q', 'spades'), card('J', 'spades'), card('T', 'spades'), card('2', 'clubs'), card('3', 'diamonds'),

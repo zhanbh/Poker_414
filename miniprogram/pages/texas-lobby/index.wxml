@@ -23,7 +23,7 @@
       <view wx:if="{{item.isHost}}" class="host">房主</view>
       <view wx:if="{{item.waiting}}" class="waiting">等待下一局</view>
       <view wx:if="{{item.nickname && !item.connected}}" class="muted">已断开</view>
-      <button wx:if="{{isHost && item.nickname && item.seat !== ownSeat}}" class="danger-button texas-seat-remove" data-seat="{{item.seat}}" bindtap="onRemove">移除</button>
+      <button wx:if="{{item.canKick}}" class="danger-button texas-seat-remove" data-seat="{{item.seat}}" bindtap="onRemove">{{isHost ? '移除' : '踢出'}}</button>
     </view>
   </view>
 

@@ -90,5 +90,5 @@ export function compareTexasHands(left: TexasHandValue, right: TexasHandValue): 
 
 export function texasCardLabel(card: TexasCard): string {
   const suit = { clubs: '♣', diamonds: '♦', hearts: '♥', spades: '♠' }[card.suit];
-  return card.rank + suit;
+  return (card.rank === 'T' ? '10' : card.rank) + suit;
 }

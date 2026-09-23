@@ -31,10 +31,11 @@ export function TexasLobbyView({ snapshot, ownSeat, spectator = false, onStart, 
         </div>
         {SEATS.map((seat) => {
           const player = players.get(seat);
-          return <article className={'texas-seat texas-seat-position texas-seat-' + seat + (player ? ' occupied' : '')} key={seat}>
-            <strong>{player?.positionLabel ?? '空位'}</strong>
-            {player ? <><b>{player.nickname}</b><span>{player.stack} 筹码</span>{player.isHost ? <em>房主</em> : null}{player.waiting ? <em>等待下一局</em> : null}</> : null}
-            {ownPlayer?.isHost && player && player.seat !== ownSeat ? <button type="button" className="texas-seat-remove" onClick={() => onRemove(player.seat)}>移除</button> : null}
+          const canKick = Boolean(player && ownPlayer && player.seat !== ownSeat && (ownPlayer.isHost || !player.connected));
+          return <article className={'texas-seat texas-seat-position texas-seat-' + seat + (player ? ' occupied' : '') + (canKick ? ' kickable' : '')} key={seat}>
+            <strong>{player?.positionLabel ?? seat + ' 位'}</strong>
+            {player ? <><b>{player.nickname}</b><span>{player.stack} 筹码</span>{player.isHost ? <em>房主</em> : null}{player.waiting ? <em>等待下一局</em> : null}{!player.connected ? <em className="offline">已断开</em> : null}</> : <span>空位</span>}
+            {canKick ? <button type="button" className="texas-seat-remove" onClick={() => onRemove(player!.seat)}>{ownPlayer?.isHost ? '移除' : '踢出'}</button> : null}
           </article>;
         })}
       </section>

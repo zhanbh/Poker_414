@@ -11,7 +11,8 @@ const PHASE_LABELS = {
 };
 
 function decorateCard(card) {
-  return { ...card, label: String(card.rank) + (SUIT_LABELS[card.suit] || ''), red: Boolean(RED_SUITS[card.suit]) };
+  const rank = card.rank === 'T' ? '10' : card.rank;
+  return { ...card, label: String(rank) + (SUIT_LABELS[card.suit] || ''), red: Boolean(RED_SUITS[card.suit]) };
 }
 
 function decorateCards(cards) {

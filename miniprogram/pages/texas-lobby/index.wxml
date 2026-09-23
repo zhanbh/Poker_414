@@ -1,7 +1,7 @@
 <view class="page texas-lobby-page">
   <view class="game-header">
     <view class="title">德州扑克房间</view>
-    <view class="muted">两人以上即可开始 · 1000 筹码 · 盲注 10/20</view>
+    <view class="muted">两人以上即可开始 · 1m 筹码 · 盲注 100/200</view>
   </view>
   <view class="room-purpose-notice" role="note">
     <text class="room-purpose-title">测试学习交流声明</text>
@@ -19,7 +19,7 @@
     <view wx:for="{{players}}" wx:key="seat" class="texas-seat texas-seat-position texas-seat-{{item.seat}} {{item.nickname ? 'occupied' : ''}}">
       <view class="seat-title"><text class="seat">{{item.positionLabel}}</text></view>
       <view wx:if="{{item.nickname}}" class="seat-name">{{item.nickname}}</view>
-      <view wx:if="{{item.nickname}}" class="muted">筹码 {{item.stack}}</view>
+      <view wx:if="{{item.nickname}}" class="muted">筹码 {{item.stackLabel}}</view>
       <view wx:if="{{item.isHost}}" class="host">房主</view>
       <view wx:if="{{item.waiting}}" class="waiting">等待下一局</view>
       <view wx:if="{{item.nickname && !item.connected}}" class="muted">已断开</view>

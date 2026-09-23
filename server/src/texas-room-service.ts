@@ -573,13 +573,13 @@ export class TexasRoomService {
       ? handPlayers
       : [...handPlayers.slice(dealerIndex), ...handPlayers.slice(0, dealerIndex)];
     const namesByCount: Readonly<Record<number, readonly string[]>> = {
-      2: ['庄位/小盲', '大盲 BB'],
-      3: ['庄位 BTN', '小盲 SB', '大盲 BB'],
-      4: ['庄位 BTN', '小盲 SB', '大盲 BB', '枪口位 UTG'],
-      5: ['庄位 BTN', '小盲 SB', '大盲 BB', '枪口位 UTG', '关煞位 CO'],
-      6: ['庄位 BTN', '小盲 SB', '大盲 BB', '枪口位 UTG', '劫持位 HJ', '关煞位 CO'],
-      7: ['庄位 BTN', '小盲 SB', '大盲 BB', '枪口位 UTG', '中位 MP', '劫持位 HJ', '关煞位 CO'],
-      8: ['庄位 BTN', '小盲 SB', '大盲 BB', '枪口位 UTG', '枪口+1 UTG+1', '中位 MP', '劫持位 HJ', '关煞位 CO'],
+      2: ['按钮位/小盲 BTN/SB', '大盲 BB'],
+      3: ['按钮位 BTN', '小盲 SB', '大盲 BB'],
+      4: ['按钮位 BTN', '小盲 SB', '大盲 BB', '枪口位 UTG'],
+      5: ['按钮位 BTN', '小盲 SB', '大盲 BB', '枪口位 UTG', '关煞位 CO'],
+      6: ['按钮位 BTN', '小盲 SB', '大盲 BB', '枪口位 UTG', '劫持位 HJ', '关煞位 CO'],
+      7: ['按钮位 BTN', '小盲 SB', '大盲 BB', '枪口位 UTG', '中位 MP', '劫持位 HJ', '关煞位 CO'],
+      8: ['按钮位 BTN', '小盲 SB', '大盲 BB', '枪口位 UTG', '枪口+1 UTG+1', '中位 MP', '劫持位 HJ', '关煞位 CO'],
     };
     const names = namesByCount[rotated.length] ?? namesByCount[8];
     return new Map(rotated.map((player, index) => [player.seat, names[index] ?? `座位 ${index + 1}`] as const));

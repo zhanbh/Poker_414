@@ -150,6 +150,66 @@
   font-size: 20rpx;
 }
 
+.texas-player-chip-area {
+  display: flex;
+  align-items: flex-end;
+  gap: 8rpx;
+  min-height: 54rpx;
+}
+
+.texas-player-chip-area .muted {
+  flex: 1;
+}
+
+.texas-chip-stack {
+  position: relative;
+  flex: 0 0 30rpx;
+  width: 30rpx;
+  height: 48rpx;
+}
+
+.texas-chip {
+  position: absolute;
+  left: 2rpx;
+  width: 26rpx;
+  height: 9rpx;
+  box-sizing: border-box;
+  border: 2rpx solid rgba(255, 255, 255, .65);
+  border-radius: 50%;
+  box-shadow: 0 2rpx 4rpx rgba(0, 0, 0, .38), inset 0 0 0 3rpx rgba(255, 255, 255, .18);
+}
+
+.texas-chip-red { background: #d64d5b; }
+.texas-chip-blue { background: #3d86c6; }
+.texas-chip-green { background: #43a982; }
+.texas-chip-black { background: #25323b; }
+.texas-chip-purple { background: #9360bd; }
+
+.texas-chip-flight {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  animation: texas-chip-to-pot .72s cubic-bezier(.22, .72, .35, 1) both;
+}
+
+.texas-chip-flight .texas-chip {
+  position: relative;
+  left: auto;
+  bottom: auto;
+}
+
+.texas-chip-flight text {
+  color: #fff0b3;
+  font-size: 20rpx;
+  font-weight: 700;
+  text-shadow: 0 2rpx 6rpx rgba(0, 0, 0, .65);
+  white-space: nowrap;
+}
+
 .host {
   color: #f0b44d;
 }
@@ -305,6 +365,13 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes texas-chip-to-pot {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.75) rotate(-8deg); }
+  12% { opacity: 1; }
+  72% { left: 50%; top: 50%; opacity: 1; transform: translate(-50%, -50%) scale(1.05) rotate(3deg); }
+  100% { left: 50%; top: 50%; opacity: 0; transform: translate(-50%, -50%) scale(.52) rotate(0); }
+}
+
 .texas-card-deal { animation: texas-card-deal .42s ease both; }
 .phase-notice { min-height: 32rpx; color: #ffd166; font-size: 24rpx; font-weight: 700; animation: texas-phase-in .32s ease both; }
 .best-hand { margin-top: 10rpx; color: #ffd166; }
@@ -319,5 +386,5 @@
 .settlement-modal button { margin-top: 22rpx; }
 .settlement-summary-button { margin-top: 20rpx; color: #102331; background: #ffd166; font-weight: 700; }
 @media (prefers-reduced-motion: reduce) {
-  .texas-card-deal, .phase-notice, .settlement-modal { animation: none; }
+  .texas-card-deal, .phase-notice, .settlement-modal, .texas-chip-flight { animation: none; }
 }

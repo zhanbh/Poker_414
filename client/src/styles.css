@@ -14,7 +14,6 @@ main { min-height: 100vh; padding: 32px; }
 .test-mode-banner { margin-bottom: 16px; }
 .room-purpose-notice { display: flex; align-items: baseline; gap: 8px; margin: 10px 0 12px; padding: 8px 12px; color: #d9edf2; background: rgba(18, 61, 76, .96); border: 1px solid #4a9caf; border-radius: 8px; box-shadow: 0 6px 18px rgba(0, 0, 0, .18); font-size: .78rem; line-height: 1.45; }
 .room-purpose-notice strong { flex: 0 0 auto; color: #ffd166; }
-.landscape-gate { display: none; }
 .room-notice { max-width: 1180px; margin: 12px auto; padding: 10px 14px; color: #ffe5e7; background: #7e3942; border: 1px solid #d56f79; border-radius: 8px; }
 .team-grid { display: grid; grid-template-columns: repeat(2, minmax(280px, 1fr)); gap: 16px; }
 .team-grid section { padding: 16px; background: #18384b; border-radius: 12px; }
@@ -361,6 +360,20 @@ main { min-height: 100svh; padding: clamp(16px, 4vw, 32px); }
 .texas-player strong { line-height: 1.15; }
 .texas-player span { text-align: right; }
 .texas-player small { color: #9fc5ce; }
+.texas-player-chip-area { display: flex; align-items: flex-end; justify-content: flex-start; gap: 6px; min-height: 42px; }
+.texas-player-chip-area small { flex: 1; }
+.texas-player.own { border-color: #ffd166; }
+.texas-chip-stack { position: relative; flex: 0 0 24px; width: 24px; height: 38px; }
+.texas-chip { position: absolute; left: 2px; width: 20px; height: 7px; box-sizing: border-box; border: 1px solid rgba(255, 255, 255, .65); border-radius: 50%; box-shadow: 0 1px 2px rgba(0, 0, 0, .38), inset 0 0 0 2px rgba(255, 255, 255, .18); }
+.texas-chip-red { background: #d64d5b; }
+.texas-chip-blue { background: #3d86c6; }
+.texas-chip-green { background: #43a982; }
+.texas-chip-black { background: #25323b; }
+.texas-chip-purple { background: #9360bd; }
+.texas-chip-gold { background: #ffd166; }
+.texas-chip-flight { position: absolute; z-index: 6; display: flex; align-items: center; gap: 4px; pointer-events: none; transform: translate(-50%, -50%); animation: texas-chip-to-pot .72s cubic-bezier(.22, .72, .35, 1) both; will-change: left, top, opacity, transform; }
+.texas-chip-flight .texas-chip { position: relative; left: auto; bottom: auto; flex: 0 0 20px; }
+.texas-chip-flight b { color: #fff0b3; font-size: .74rem; text-shadow: 0 1px 3px rgba(0, 0, 0, .65); white-space: nowrap; }
 .texas-hand, .texas-settlement, .texas-actions { margin-top: 16px; padding: 16px; background: #18384b; border-radius: 12px; }
 .texas-hand h2, .texas-settlement h2 { margin-top: 0; }
 .texas-cards { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -381,8 +394,11 @@ main { min-height: 100svh; padding: clamp(16px, 4vw, 32px); }
   .texas-lobby-table, .texas-game-table { min-height: 420px; margin: 16px 0 24px; border-radius: 48%; }
   .texas-table-felt, .texas-table-center { width: 56%; gap: 5px; font-size: .82rem; }
   .texas-table-felt strong { font-size: 1.05rem; }
-  .texas-seat-position, .texas-player { width: 106px; min-height: 72px; padding: 9px; border-radius: 10px; font-size: .82rem; }
-  .texas-seat-position b { font-size: .95rem; }
+  .texas-seat-position, .texas-player { width: 84px; min-height: 58px; padding: 6px; gap: 4px; border-radius: 8px; font-size: .72rem; }
+  .texas-seat-position strong { font-size: .68rem; line-height: 1.15; overflow-wrap: anywhere; }
+  .texas-seat-position b { font-size: .82rem; }
+  .texas-seat-position span, .texas-seat-position em { font-size: .68rem; }
+  .texas-seat-remove { min-height: 24px; padding: 3px 5px; font-size: .66rem; }
   .texas-seat-A { top: 3%; left: 50%; }
   .texas-seat-B { top: 17%; left: 83%; }
   .texas-seat-C { top: 50%; left: 98%; }
@@ -429,8 +445,9 @@ main { min-height: 100svh; padding: clamp(16px, 4vw, 32px); }
 @media (max-width: 760px) and (orientation: landscape) {
   .texas-lobby-table, .texas-game-table { height: calc(100svh - 175px); min-height: 210px; margin: 8px 0 10px; }
   .texas-table-felt, .texas-table-center { width: 50%; font-size: .7rem; }
-  .texas-seat-position, .texas-player { width: 100px; min-height: 58px; padding: 6px 7px; font-size: .68rem; }
-  .texas-seat-position b { font-size: .78rem; }
+  .texas-seat-position, .texas-player { width: 84px; min-height: 52px; padding: 5px 6px; font-size: .64rem; }
+  .texas-seat-position strong { font-size: .62rem; }
+  .texas-seat-position b { font-size: .72rem; }
   .texas-card, .texas-card-back { min-width: 38px; min-height: 54px; font-size: .78rem; }
   .texas-community { min-height: 66px; margin: 4px 0; }
 }
@@ -443,6 +460,13 @@ main { min-height: 100svh; padding: clamp(16px, 4vw, 32px); }
 @keyframes texas-phase-in {
   from { opacity: 0; transform: translateY(-6px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes texas-chip-to-pot {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.75) rotate(-8deg); }
+  12% { opacity: 1; }
+  72% { left: 50%; top: 50%; opacity: 1; transform: translate(-50%, -50%) scale(1.05) rotate(3deg); }
+  100% { left: 50%; top: 50%; opacity: 0; transform: translate(-50%, -50%) scale(.52) rotate(0); }
 }
 
 .texas-community .texas-card { animation: texas-card-deal .42s ease both; }
@@ -462,11 +486,8 @@ main { min-height: 100svh; padding: clamp(16px, 4vw, 32px); }
 .texas-settlement-next { margin-left: 8px; color: #ffd166; background: #315f70; }
 .texas-settlement-summary { display: block; width: 100%; margin-top: 16px; color: #102331; font-weight: 800; }
 @media (prefers-reduced-motion: reduce) {
-  .texas-community .texas-card, .texas-phase-notice, .texas-settlement-modal { animation: none; }
+  .texas-community .texas-card, .texas-phase-notice, .texas-settlement-modal, .texas-chip-flight { animation: none; }
 }
-.texas-orientation-hint { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 4px 0 8px; padding: 7px 10px; color: #d1e4eb; background: rgba(18, 61, 76, .96); border: 1px solid #4a9caf; border-radius: 8px; font-size: .78rem; line-height: 1.4; }
-.texas-orientation-hint button { flex: 0 0 auto; min-height: 32px; padding: 5px 9px; color: #102331; background: #ffd166; border: 0; border-radius: 6px; font-weight: 800; cursor: pointer; }
-
 .room-chat { width: min(100% - 32px, 1180px); margin: 16px auto 28px; padding: 16px; color: #eaf2ff; background: #18384b; border: 1px solid #397a8b; border-radius: 12px; }
 .room-chat-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .room-chat-heading h2 { margin: 0; color: #ffd166; font-size: 1.05rem; }

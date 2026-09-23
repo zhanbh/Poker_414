@@ -1,9 +1,31 @@
 export type TexasSeat = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H';
 
 export const TEXAS_SEATS: readonly TexasSeat[] = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
-export const TEXAS_STARTING_STACK = 1_000;
-export const TEXAS_SMALL_BLIND = 10;
-export const TEXAS_BIG_BLIND = 20;
+export const TEXAS_DEFAULT_POSITION_LABELS: Readonly<Record<TexasSeat, string>> = {
+  A: '按钮位 BTN',
+  B: '小盲 SB',
+  C: '大盲 BB',
+  D: '枪口位 UTG',
+  E: '枪口+1 UTG+1',
+  F: '中位 MP',
+  G: '劫持位 HJ',
+  H: '关煞位 CO',
+};
+export const TEXAS_STARTING_STACK = 1_000_000;
+export const TEXAS_SMALL_BLIND = 100;
+export const TEXAS_BIG_BLIND = 200;
+export const TEXAS_BET_STEP = 100;
+
+export function formatTexasChips(amount: number): string {
+  const sign = amount < 0 ? '-' : '';
+  const value = Math.abs(amount);
+  if (value >= 1_000_000) return sign + (Math.round(value / 10_000) / 100).toString() + 'm';
+  if (value >= 1_000) {
+    const thousands = Math.round(value / 10) / 100;
+    return sign + (thousands >= 1_000 ? '1m' : thousands.toString() + 'k');
+  }
+  return sign + value.toString();
+}
 
 export type TexasSuit = 'clubs' | 'diamonds' | 'hearts' | 'spades';
 export type TexasRank = '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | 'T' | 'J' | 'Q' | 'K' | 'A';

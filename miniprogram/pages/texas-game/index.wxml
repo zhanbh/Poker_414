@@ -1,7 +1,7 @@
 <view class="page texas-game-page">
   <view class="game-header">
     <view class="title">德州扑克</view>
-    <view class="muted">第 {{handNumber}} 局 · {{phaseLabel}}</view>
+    <view class="muted">第 {{handNumber}} 局 · {{phaseLabel}} · 初始 1m · 盲注 100/200</view>
   </view>
   <view class="room-purpose-notice" role="note">
     <text class="room-purpose-title">测试学习交流声明</text>
@@ -14,8 +14,8 @@
   <view class="texas-game-table" aria-label="德州扑克牌桌">
     <view class="texas-table-center">
       <view class="texas-meta">
-        <text>底池 {{pot}}</text>
-        <text>当前下注 {{currentBet}}</text>
+        <text>底池 {{potLabel}}</text>
+        <text>当前下注 {{currentBetLabel}}</text>
         <text>轮到 {{currentTurnLabel || '—'}}</text>
       </view>
       <view class="phase-notice">{{phaseNotice}}</view>
@@ -27,10 +27,19 @@
         </view>
       </view>
     </view>
+    <view wx:for="{{chipFlights}}" wx:key="id" class="texas-chip-flight" style="left:{{item.left}};top:{{item.top}};">
+      <view class="texas-chip texas-chip-{{item.color}}"></view>
+      <text>+{{item.amountLabel}}</text>
+    </view>
     <view wx:for="{{players}}" wx:if="{{item.nickname}}" wx:key="seat" class="texas-player texas-seat-position texas-seat-{{item.seat}} {{item.seat === currentTurn ? 'current' : ''}}">
       <view><text class="seat">{{item.positionLabel}}</text><text>{{item.nickname}}</text></view>
-      <view class="muted">筹码 {{item.stack}}</view>
-      <view class="muted">本轮下注 {{item.roundBet}}</view>
+      <view class="texas-player-chip-area">
+        <view class="texas-chip-stack" aria-label="{{item.stackLabel}} 筹码">
+          <view wx:for="{{item.chipStack}}" wx:for-item="chip" wx:key="index" class="texas-chip texas-chip-{{chip.color}}" style="bottom:{{chip.bottom}}rpx;"></view>
+        </view>
+        <view class="muted">筹码 {{item.stackLabel}}</view>
+      </view>
+      <view class="muted">本轮下注 {{item.roundBetLabel}}</view>
       <view wx:if="{{item.waiting}}" class="waiting">等待下一局</view>
       <view wx:if="{{item.folded}}" class="folded">已弃牌</view>
       <view wx:if="{{item.allIn}}" class="host">All-in</view>
@@ -58,12 +67,12 @@
 
   <view wx:if="{{!spectator && phase !== 'settled'}}" class="panel action-panel">
     <view class="section-title">{{isMyTurn ? '轮到你操作' : '等待其他玩家操作'}}</view>
-    <view class="muted">{{currentBet === 0 ? '下注' : '加注到'}}：{{sliderValue}}{{selectedAllIn ? ' · All-in' : ''}}</view>
-    <slider class="bet-slider" min="{{sliderMin}}" max="{{sliderMax}}" step="10" value="{{sliderValue}}" disabled="{{!isMyTurn || !sliderMax}}" activeColor="#f0b44d" bindchange="onSliderChange" />
+    <view class="muted">{{currentBet === 0 ? '下注' : '加注到'}}：{{sliderLabel}}{{selectedAllIn ? ' · All-in' : ''}}</view>
+    <slider class="bet-slider" min="{{sliderMin}}" max="{{sliderMax}}" step="100" value="{{sliderValue}}" disabled="{{!isMyTurn || !sliderMax}}" activeColor="#f0b44d" bindchange="onSliderChange" />
     <view class="action-row">
       <button class="secondary-button" disabled="{{!isMyTurn}}" bindtap="onFold">弃牌</button>
       <button wx:if="{{canCheck}}" class="secondary-button" bindtap="onCheck">过牌</button>
-      <button wx:if="{{canCall}}" class="secondary-button" bindtap="onCall">跟注 {{callAmount}}</button>
+      <button wx:if="{{canCall}}" class="secondary-button" bindtap="onCall">跟注 {{callAmountLabel}}</button>
       <button class="primary-button" disabled="{{!isMyTurn || !sliderMax}}" bindtap="onCommit">{{selectedAllIn ? 'All-in' : (currentBet === 0 ? '下注' : '加注')}}</button>
     </view>
   </view>
@@ -74,7 +83,7 @@
       <view class="settlement-title">赢家：{{settlement.winnerText}}</view>
       <view wx:for="{{settlement.winnerDetails}}" wx:key="seat" class="settlement-winner">
         <view class="settlement-winner-name">{{item.nickname}}（{{item.seat}} 位）</view>
-        <view>以 <text class="settlement-hand">{{item.category}}</text> 获胜 · +{{item.payout}} 筹码</view>
+        <view>以 <text class="settlement-hand">{{item.category}}</text> 获胜 · +{{item.payoutLabel}} 筹码</view>
       </view>
       <button class="secondary-button" bindtap="onCloseSettlement">继续查看牌桌</button>
       <button wx:if="{{isHost}}" class="primary-button" bindtap="onNextHand">回到大厅并开始下一局</button>

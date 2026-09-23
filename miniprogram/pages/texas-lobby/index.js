@@ -1,8 +1,19 @@
 const chatUtils = require('../../utils/chat');
 const chatMembers = chatUtils.chatMembers || ((snapshot) => (snapshot.public.players || []).map((player) => ({ id: player.seat, seat: player.seat, nickname: player.nickname, label: player.positionLabel || player.seat + ' 位' })));
 const { commandFor } = require('../../utils/commands');
+const { formatTexasChips } = require('../../utils/texas');
 
 const SEATS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+const POSITION_LABELS = {
+  A: '按钮位 BTN',
+  B: '小盲 SB',
+  C: '大盲 BB',
+  D: '枪口位 UTG',
+  E: '枪口+1 UTG+1',
+  F: '中位 MP',
+  G: '劫持位 HJ',
+  H: '关煞位 CO',
+};
 
 Page({
   data: {
@@ -40,10 +51,10 @@ Page({
     const own = snapshot.public.players.find((player) => player.seat === snapshot.private.seat);
     const players = SEATS.map((seat) => bySeat.get(seat) || {
       seat,
-      positionLabel: '空位',
+      positionLabel: POSITION_LABELS[seat],
       nickname: '',
       connected: false,
-      stack: 1000,
+      stack: 1000000,
       totalBet: 0,
       roundBet: 0,
       folded: false,
@@ -51,6 +62,7 @@ Page({
       isHost: false,
     }).map((player) => ({
       ...player,
+      stackLabel: formatTexasChips(player.stack),
       canKick: Boolean(player.nickname && own && player.seat !== own.seat && (own.isHost || !player.connected)),
     }));
     this.app.setSnapshot(snapshot);

@@ -38,9 +38,21 @@ function handCategoryLabel(category) {
   return HAND_CATEGORY_LABELS[category] || category || '未知牌型';
 }
 
+function formatTexasChips(amount) {
+  const sign = amount < 0 ? '-' : '';
+  const value = Math.abs(amount);
+  if (value >= 1000000) return sign + (Math.round(value / 10000) / 100) + 'm';
+  if (value >= 1000) {
+    const thousands = Math.round(value / 10) / 100;
+    return sign + (thousands >= 1000 ? '1m' : thousands + 'k');
+  }
+  return sign + value;
+}
+
 module.exports = {
   decorateCard,
   decorateCards,
+  formatTexasChips,
   phaseLabel,
   handCategoryLabel,
 };

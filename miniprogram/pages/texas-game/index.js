@@ -1,9 +1,38 @@
 const chatUtils = require('../../utils/chat');
 const chatMembers = chatUtils.chatMembers || ((snapshot) => (snapshot.public.players || []).map((player) => ({ id: player.seat, seat: player.seat, nickname: player.nickname, label: player.positionLabel || player.seat + ' 位' })));
 const { commandFor } = require('../../utils/commands');
-const { decorateCards, handCategoryLabel, phaseLabel } = require('../../utils/texas');
+const { decorateCards, formatTexasChips, handCategoryLabel, phaseLabel } = require('../../utils/texas');
 
 const SEATS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+const POSITION_LABELS = {
+  A: '按钮位 BTN',
+  B: '小盲 SB',
+  C: '大盲 BB',
+  D: '枪口位 UTG',
+  E: '枪口+1 UTG+1',
+  F: '中位 MP',
+  G: '劫持位 HJ',
+  H: '关煞位 CO',
+};
+const CHIP_COLORS = ['red', 'blue', 'green', 'black', 'purple'];
+const CHIP_ORIGINS = {
+  A: { left: '50%', top: '7%' },
+  B: { left: '84%', top: '17%' },
+  C: { left: '96%', top: '50%' },
+  D: { left: '84%', top: '83%' },
+  E: { left: '50%', top: '96%' },
+  F: { left: '16%', top: '83%' },
+  G: { left: '4%', top: '50%' },
+  H: { left: '16%', top: '17%' },
+};
+
+function chipStack(amount) {
+  const count = amount > 0 ? Math.min(12, Math.max(1, Math.ceil(amount / 100000))) : 0;
+  return Array.from({ length: count }, (_, index) => ({
+    color: CHIP_COLORS[index % CHIP_COLORS.length],
+    bottom: index * 2,
+  }));
+}
 
 function phaseNotice(phase) {
   const notices = {
@@ -36,8 +65,10 @@ Page({
     currentTurn: null,
     currentTurnLabel: '',
     pot: 0,
+    potLabel: '0',
     currentBet: 0,
-    minRaise: 20,
+    currentBetLabel: '0',
+    minRaise: 200,
     isHost: false,
     spectator: false,
     waiting: false,
@@ -45,13 +76,16 @@ Page({
     canCheck: false,
     canCall: false,
     callAmount: 0,
-    sliderValue: 20,
-    sliderMin: 20,
-    sliderMax: 1000,
+    sliderValue: 200,
+    sliderLabel: '200',
+    sliderMin: 200,
+    sliderMax: 1000000,
     selectedAllIn: false,
+    callAmountLabel: '0',
     settlement: null,
     showSettlement: false,
     settlementHandNumber: null,
+    chipFlights: [],
     error: '',
   },
 
@@ -66,6 +100,7 @@ Page({
   onUnload() {
     if (this.unsubscribe) this.unsubscribe();
     if (this.unsubscribeReplaced) this.unsubscribeReplaced();
+    if (this.chipFlightTimer) clearTimeout(this.chipFlightTimer);
   },
 
   updateSnapshot(snapshot) {
@@ -79,7 +114,7 @@ Page({
     const players = SEATS.map((seat) => bySeat.get(seat) || {
       seat,
       nickname: '',
-      positionLabel: '空位',
+      positionLabel: POSITION_LABELS[seat],
       connected: false,
       stack: 0,
       totalBet: 0,
@@ -87,7 +122,12 @@ Page({
       folded: false,
       allIn: false,
       isHost: false,
-    });
+    }).map((player) => ({
+      ...player,
+      stackLabel: formatTexasChips(player.stack),
+      roundBetLabel: formatTexasChips(player.roundBet),
+      chipStack: chipStack(player.stack),
+    }));
     const ownPlayer = snapshot.public.players.find((player) => player.seat === snapshot.private.seat) || null;
     const spectator = Boolean(snapshot.private.spectator);
     const isMyTurn = !spectator && Boolean(ownPlayer && snapshot.public.currentTurn === ownPlayer.seat);
@@ -120,6 +160,7 @@ Page({
           nickname: bySeat.get(seat)?.nickname || seat,
           category: handCategoryLabel(snapshot.public.settlement.hands[seat]),
           payout: snapshot.public.settlement.payouts[seat] || 0,
+          payoutLabel: formatTexasChips(snapshot.public.settlement.payouts[seat] || 0),
         })),
       }
       : null;
@@ -127,6 +168,30 @@ Page({
     const showSettlement = snapshot.public.phase === 'settled'
       ? (isNewSettlement ? true : this.data.showSettlement)
       : false;
+    const previousSnapshot = this.data.snapshot;
+    const previousBets = previousSnapshot && previousSnapshot.public.version !== snapshot.public.version
+      ? new Map(previousSnapshot.public.players.map((player) => [player.seat, player.totalBet]))
+      : null;
+    const newFlights = previousBets
+      ? snapshot.public.players.flatMap((player) => {
+        const increase = player.totalBet - (previousBets.get(player.seat) || 0);
+        if (increase <= 0) return [];
+        return [{
+          id: `${snapshot.public.handNumber}-${snapshot.public.version}-${player.seat}`,
+          seat: player.seat,
+          amount: increase,
+          amountLabel: formatTexasChips(increase),
+          left: CHIP_ORIGINS[player.seat].left,
+          top: CHIP_ORIGINS[player.seat].top,
+          color: CHIP_COLORS[snapshot.public.version % CHIP_COLORS.length],
+        }];
+      })
+      : [];
+    const chipFlights = newFlights.length ? [...(this.data.chipFlights || []), ...newFlights].slice(-12) : (this.data.chipFlights || []);
+    if (newFlights.length) {
+      if (this.chipFlightTimer) clearTimeout(this.chipFlightTimer);
+      this.chipFlightTimer = setTimeout(() => this.setData({ chipFlights: [] }), 900);
+    }
     this.app.setSnapshot(snapshot);
     this.setData({
       snapshot,
@@ -146,7 +211,9 @@ Page({
       currentTurn: snapshot.public.currentTurn,
       currentTurnLabel: currentPlayer ? `${currentPlayer.nickname} · ${currentPlayer.positionLabel || '当前行动位'}` : '',
       pot: snapshot.public.pot,
+      potLabel: formatTexasChips(snapshot.public.pot),
       currentBet: snapshot.public.currentBet,
+      currentBetLabel: formatTexasChips(snapshot.public.currentBet),
       minRaise: snapshot.public.minRaise,
       isHost: Boolean(ownPlayer && ownPlayer.isHost),
       spectator,
@@ -155,13 +222,16 @@ Page({
       canCheck: isMyTurn && Boolean(ownPlayer && ownPlayer.roundBet === snapshot.public.currentBet),
       canCall: isMyTurn && Boolean(ownPlayer && ownPlayer.roundBet < snapshot.public.currentBet),
       callAmount: ownPlayer ? Math.max(0, snapshot.public.currentBet - ownPlayer.roundBet) : 0,
+      callAmountLabel: ownPlayer ? formatTexasChips(Math.max(0, snapshot.public.currentBet - ownPlayer.roundBet)) : '0',
       sliderValue,
+      sliderLabel: formatTexasChips(sliderValue),
       sliderMin,
       sliderMax,
       selectedAllIn: sliderMax > 0 && sliderValue >= sliderMax,
       settlement,
       showSettlement,
       settlementHandNumber: settlement && snapshot.public.phase === 'settled' ? snapshot.public.handNumber : null,
+      chipFlights,
       error: '',
     });
   },
@@ -181,7 +251,7 @@ Page({
 
   onSliderChange(event) {
     const value = Number(event.detail.value);
-    this.setData({ sliderValue: value, selectedAllIn: value >= this.data.sliderMax });
+    this.setData({ sliderValue: value, sliderLabel: formatTexasChips(value), selectedAllIn: value >= this.data.sliderMax });
   },
 
   onFold() {

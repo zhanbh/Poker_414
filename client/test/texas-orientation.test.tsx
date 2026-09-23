@@ -46,7 +46,7 @@ describe('德州横屏提示', () => {
 
     render(<TexasGameView snapshot={snapshot} onCommand={vi.fn()} onLeave={vi.fn()} testMode={false} />);
 
-    expect(document.documentElement.classList.contains('texas-orientation-fallback')).toBe(true);
+    expect(document.documentElement.classList.contains('texas-orientation-fallback')).toBe(false);
     expect(screen.queryByRole('dialog', { name: '\u6a2a\u5c4f\u63d0\u793a' })).not.toBeInTheDocument();
   });
 

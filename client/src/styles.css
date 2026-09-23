@@ -467,32 +467,6 @@ main { min-height: 100svh; padding: clamp(16px, 4vw, 32px); }
 .texas-orientation-hint { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 4px 0 8px; padding: 7px 10px; color: #d1e4eb; background: rgba(18, 61, 76, .96); border: 1px solid #4a9caf; border-radius: 8px; font-size: .78rem; line-height: 1.4; }
 .texas-orientation-hint button { flex: 0 0 auto; min-height: 32px; padding: 5px 9px; color: #102331; background: #ffd166; border: 0; border-radius: 6px; font-weight: 800; cursor: pointer; }
 
-@media (max-width: 760px) and (orientation: portrait) {
-  html.texas-orientation-fallback,
-  html.texas-orientation-fallback body { overflow: hidden; }
-  html.texas-orientation-fallback #root {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vh;
-    height: 100vw;
-    width: 100svh;
-    height: 100svw;
-    min-height: 0;
-    overflow: auto;
-    transform: rotate(90deg) translateY(-100%);
-    transform-origin: top left;
-  }
-  html.texas-orientation-fallback #root main.texas-lobby,
-  html.texas-orientation-fallback #root main.texas-game {
-    width: 100%;
-    max-width: none;
-    min-height: 100%;
-    margin: 0;
-    padding: 8px 14px 14px;
-  }
-}
-
 .room-chat { width: min(100% - 32px, 1180px); margin: 16px auto 28px; padding: 16px; color: #eaf2ff; background: #18384b; border: 1px solid #397a8b; border-radius: 12px; }
 .room-chat-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .room-chat-heading h2 { margin: 0; color: #ffd166; font-size: 1.05rem; }

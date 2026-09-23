@@ -40,11 +40,7 @@ export function usePortraitOrientation(): boolean {
   }, []);
 
   useEffect(() => {
-    document.documentElement.classList.toggle('texas-orientation-fallback', portrait);
     if (portrait) requestLandscapeLock();
-    return () => {
-      document.documentElement.classList.remove('texas-orientation-fallback');
-    };
   }, [portrait]);
 
   return portrait;

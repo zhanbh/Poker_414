@@ -627,9 +627,17 @@ main { min-height: 100svh; padding: clamp(16px, 4vw, 32px); }
   .room-chat { max-height: min(68svh, 520px); }
   .room-chat-messages { max-height: 24svh; }
   .room-chat-targets { max-height: 120px; }
-  .player-seat { min-height: 72px; padding: 6px; }
-  .player-avatar { flex-basis: 48px; width: 48px; height: 48px; font-size: 1rem; }
-  .player-identity { gap: 7px; }
+  /* 414 手机端座位卡片保持紧凑，避免四个座位和牌桌把屏幕占满。 */
+  .lobby-view .player-seat,
+  .game-view .table-seat .player-seat { min-height: 58px; padding: 5px; gap: 3px; border-radius: 9px; }
+  .lobby-view .player-avatar,
+  .game-view .table-seat .player-avatar { flex-basis: 36px; width: 36px; height: 36px; border-width: 2px; font-size: .84rem; }
+  .lobby-view .player-identity,
+  .game-view .table-seat .player-identity { gap: 5px; }
+  .lobby-view .player-info,
+  .game-view .table-seat .player-info { gap: 1px; font-size: .68rem; line-height: 1.15; }
+  .lobby-view .player-info strong,
+  .game-view .table-seat .player-info strong { font-size: .72rem; }
   .room-interaction-trigger { min-height: 22px; font-size: .64rem; }
   .room-interaction-options button { width: 28px; height: 28px; }
   .texas-player .room-interaction { margin-top: 2px; }

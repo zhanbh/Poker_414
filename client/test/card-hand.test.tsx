@@ -22,7 +22,7 @@ describe('手牌组件', () => {
     expect(screen.getByText('可拖动调整顺序')).toBeInTheDocument();
   });
 
-  it('拖动后使用自定义顺序，并在剩余手牌变化时保留顺序', () => {
+  it('拖动后使用自定义顺序，并在剩余手牌变化后恢复自动排序', () => {
     const cards = [
       standardCard('5', 'clubs', 'five'),
       standardCard('6', 'clubs', 'six'),
@@ -43,6 +43,6 @@ describe('手牌组件', () => {
     expect(screen.getByRole('button', { name: '恢复自动排序' })).toBeInTheDocument();
 
     rerender(<CardHand cards={[cards[0], cards[2]]} selectedIds={[]} onToggle={vi.fn()} />);
-    expect(cardIds(container)).toEqual(['seven', 'five']);
+    expect(cardIds(container)).toEqual(['five', 'seven']);
   });
 });

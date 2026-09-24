@@ -1,6 +1,6 @@
-import { type MouseEvent, useEffect, useMemo, useState } from 'react';
+import { type MouseEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { findBurstCandidates } from '../../../shared/src/rule-engine';
-import { Card } from '../../../shared/src/cards';
+import { Card, Rank, sortCards } from '../../../shared/src/cards';
 import { CommandPayload, CommandType, RoomChatInteraction, RoomSnapshot } from '../../../shared/src/protocol';
 import { analyzeHand, getHandOptions } from '../../../shared/src/hand-types';
 import { PlayDeclaration, validatePlay } from '../../../shared/src/rules';
@@ -29,6 +29,12 @@ function tableSeatsFor(ownSeat: Seat | null) {
   });
 }
 
+function suggestedSingleCardIds(cards: readonly Card[], lead: ReturnType<typeof analyzeHand>, main: Rank | null): string[] {
+  if (!lead || lead.kind !== 'single' || !main) return [];
+  const card = sortCards(cards, main).find((candidate) => validatePlay([candidate], lead, main).legal);
+  return card ? [card.id] : [];
+}
+
 export function GameView({ snapshot, onCommand, onActivity, onReady, onLeave, testMode, onInteract, interactionEffect = null }: {
   readonly snapshot: RoomSnapshot;
   readonly onCommand: GameCommand;
@@ -40,6 +46,8 @@ export function GameView({ snapshot, onCommand, onActivity, onReady, onLeave, te
   readonly interactionEffect?: RoomInteractionEffect | null;
 }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [autoSuggestionVisible, setAutoSuggestionVisible] = useState(false);
+  const suggestionContextRef = useRef('');
   const [showSettlement, setShowSettlement] = useState(snapshot.public.phase === 'settled');
   useEffect(() => {
     setSelectedIds([]);
@@ -60,6 +68,7 @@ export function GameView({ snapshot, onCommand, onActivity, onReady, onLeave, te
   const playersBySeat = new Map(snapshot.public.players.map((player) => [player.seat, player]));
   const onToggle = (card: Card) => {
     onActivity();
+    setAutoSuggestionVisible(false);
     setSelectedIds((ids) => ids.includes(card.id) ? ids.filter((id) => id !== card.id) : [...ids, card.id]);
   };
   const selected = selectedIds.filter((id) => ownHand.some((card) => card.id === id));
@@ -67,6 +76,24 @@ export function GameView({ snapshot, onCommand, onActivity, onReady, onLeave, te
   const lead = snapshot.public.trick && snapshot.public.effectiveMain
     ? analyzeHand(snapshot.public.trick.cards, snapshot.public.effectiveMain)
     : null;
+  const suggestionCardIds = useMemo(
+    () => isMyTurn ? suggestedSingleCardIds(ownHand, lead, snapshot.public.effectiveMain) : [],
+    [isMyTurn, lead, ownHand, snapshot.public.effectiveMain],
+  );
+  const suggestionContextKey = [
+    snapshot.public.handNumber,
+    snapshot.public.currentTurn ?? '-',
+    snapshot.public.trick?.cards.map((card) => card.id).join(',') ?? '-',
+    ownHand.map((card) => card.id).join(','),
+  ].join('|');
+  useEffect(() => {
+    if (suggestionContextRef.current === suggestionContextKey) return;
+    suggestionContextRef.current = suggestionContextKey;
+    setAutoSuggestionVisible(false);
+    if (suggestionCardIds.length === 0 || selected.length > 0) return;
+    setSelectedIds(suggestionCardIds);
+    setAutoSuggestionVisible(true);
+  }, [selected.length, suggestionCardIds, suggestionContextKey]);
   const declarations: PlayDeclaration[] = [];
   let hasPlayableSelection = false;
   let hasDifferenceSelection = false;
@@ -168,6 +195,7 @@ export function GameView({ snapshot, onCommand, onActivity, onReady, onLeave, te
       {isSpectator
         ? <SpectatorHands hands={snapshot.private.spectatorHands ?? []} main={handSortMain} />
         : <CardHand cards={ownHand} main={handSortMain} selectedIds={selected} onToggle={onToggle} dimmed={ownHandIsDiscarded} resetKey={snapshot.public.handNumber} />}
+      {autoSuggestionVisible && selected.length > 0 ? <p className="hand-suggestion" role="status">已自动选中建议牌，可手动调整后再出牌</p> : null}
       {canClickBlankToPlay ? <p className="play-hint">已选牌合法，点击桌面空白处即可出牌</p> : null}
       {snapshot.public.burstPendingSeat && !burstPendingForMe && !isSpectator ? <p className="burst-waiting">等待{playersBySeat.get(snapshot.public.burstPendingSeat)?.nickname ?? snapshot.public.burstPendingSeat}选择是否报爆</p> : null}
       {!isSpectator ? <BurstPrompt kinds={burstKinds} onChoose={(kind) => onCommand('burst', { kind })} onSkip={() => onCommand('burst', { kind: 'skip' })} /> : null}

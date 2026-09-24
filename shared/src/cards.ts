@@ -89,18 +89,16 @@ function takeFlexibleFourOneFourGroup(cards: readonly Card[]): { readonly group:
   const fours = cards.filter((card): card is StandardCard => card.kind === 'standard' && card.rank === '4');
   const aces = cards.filter((card): card is StandardCard => card.kind === 'standard' && card.rank === 'A');
   const jokers = cards.filter(isJoker);
-  const jokersNeeded = Math.max(0, 2 - fours.length);
-  if (aces.length === 0 || fours.length + jokers.length < 2) return null;
+  if (aces.length !== 1 || fours.length + jokers.length !== 2) return null;
 
-  const selectedJokers = jokers.slice(0, jokersNeeded);
-  const group = [...fours, ...selectedJokers, ...aces];
+  const group = [...fours, ...jokers, ...aces];
   return { group, usedIds: new Set(group.map((card) => card.id)) };
 }
 
 function displayGroupPriority(rank: Rank, count: number, main: Rank | null): number {
   if (count === 1) return 10;
+  if (count === 2 && rank !== main) return 20;
   if (rank === main && count >= 2) return 40 + (count - 2) * 20;
-  if (count === 2) return 20;
   if (count >= 3) return 30 + (count - 3) * 20;
   return 200;
 }
@@ -126,7 +124,7 @@ export function sortCards(cards: readonly Card[], main: Rank | null = null): Car
   if (specialGroup) {
     groups.push({
       cards: [...specialGroup.group].sort((left, right) => compareSpecialFourOneFourCards(left, right, main)),
-      priority: 200,
+      priority: 45,
       rank: null,
       order: order++,
     });

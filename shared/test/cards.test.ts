@@ -18,7 +18,7 @@ describe('手牌展示排序', () => {
     ]);
   });
 
-  it('将可灵活解释为414的4和A整理到手牌末尾', () => {
+  it('将可灵活解释为414的4和A按特殊牌型顺序整理', () => {
     const cards = [
       standardCard('A', 'hearts', 'ace'),
       standardCard('4', 'spades', 'four'),
@@ -54,12 +54,13 @@ describe('手牌展示排序', () => {
 
     expect(sortCards(cards).map((card) => card.id)).toEqual([
       'five',
+      'four-1', 'four-2',
       'six-1', 'six-2',
       'seven-1', 'seven-2',
       'eight-1', 'eight-2',
       'nine-1', 'nine-2',
       'two-1', 'two-2', 'two-3',
-      'four-1', 'four-2', 'ace-1', 'ace-2', 'ace-3', 'ace-4',
+      'ace-1', 'ace-2', 'ace-3', 'ace-4',
     ]);
   });
 });

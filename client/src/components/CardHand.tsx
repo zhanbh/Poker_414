@@ -34,10 +34,11 @@ export function CardHand({
   const [customOrder, setCustomOrder] = useState<string[] | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const cardIdsKey = cards.map((card) => card.id).join('|');
 
   useEffect(() => {
     setCustomOrder(null);
-  }, [resetKey]);
+  }, [resetKey, cardIdsKey]);
 
   const orderedCards = useMemo(() => {
     if (!customOrder) return automaticCards;

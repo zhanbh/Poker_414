@@ -73,6 +73,7 @@ main { min-height: 100vh; padding: 32px; }
 .host-label { color: #ffd166; }
 .public-play { min-height: 80px; padding: 16px; margin: 12px 0; border: 1px dashed #397a8b; }
 .play-hint { margin: 0 0 12px; color: #ffd166; text-align: center; }
+.hand-suggestion { margin: 0 0 8px; color: #9fe8c9; text-align: center; font-size: .84rem; }
 .played-cards { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 .played-card { display: inline-flex; align-items: center; justify-content: center; min-width: 42px; padding: 8px 6px; background: #f5f8fc; border: 1px solid #d6e2ea; border-radius: 6px; font-weight: 700; }
 .played-card.red { color: #c62828; }

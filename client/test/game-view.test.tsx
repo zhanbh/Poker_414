@@ -113,6 +113,28 @@ describe('对局视图', () => {
     expect(onCommand).toHaveBeenCalledWith('play', { cardIds: ['a4'] });
   });
 
+  it('轮到跟单牌时自动选中最小的合法压制牌，但保留玩家决定权', () => {
+    const snapshot: RoomSnapshot = {
+      ...playing,
+      public: {
+      ...playing.public,
+        effectiveMain: '3',
+        trick: {
+          leadSeat: 'B', lastPlaySeat: 'B', kind: 'single',
+          cards: [standardCard('5', 'diamonds', 'lead-five')], passCount: 0,
+        },
+      },
+    };
+    const onCommand = vi.fn();
+    render(<GameView snapshot={snapshot} onCommand={onCommand} onActivity={vi.fn()} onLeave={vi.fn()} testMode={false} />);
+
+    expect(screen.getByRole('button', { name: '6♣' })).toHaveClass('selected');
+    expect(screen.getByRole('status')).toHaveTextContent('已自动选中建议牌，可手动调整后再出牌');
+    fireEvent.click(screen.getByRole('button', { name: '6♣' }));
+    expect(screen.getByRole('button', { name: '6♣' })).not.toHaveClass('selected');
+    expect(onCommand).not.toHaveBeenCalled();
+  });
+
   it('不是自己的牌权时不能点击出牌，避免提交必然被服务端拒绝的命令', () => {
     render(<GameView snapshot={{ ...playing, public: { ...playing.public, currentTurn: 'B' } }} onCommand={vi.fn()} onActivity={vi.fn()} onLeave={vi.fn()} testMode={false} />);
 
@@ -204,10 +226,10 @@ describe('对局视图', () => {
     const onCommand = vi.fn();
     render(<GameView snapshot={snapshot} onCommand={onCommand} onActivity={vi.fn()} onLeave={vi.fn()} testMode={false} />);
 
-    fireEvent.click(screen.getByRole('button', { name: '2♠' }));
     expect(screen.queryByRole('button', { name: '差牌' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '2♥' })).toHaveClass('selected');
     fireEvent.click(screen.getByRole('button', { name: '出牌' }));
-    expect(onCommand).toHaveBeenCalledWith('play', { cardIds: ['ui-split-2-1'] });
+    expect(onCommand).toHaveBeenCalledWith('play', { cardIds: ['ui-split-2-2'] });
   });
 
   it('一对A拆出单张管K时不显示差牌选项', () => {

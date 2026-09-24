@@ -212,9 +212,12 @@ Page({
   },
 
   onLeave() {
+    const inProgress = !this.data.spectator && (this.data.phase === 'opening' || this.data.phase === 'playing');
     wx.showModal({
       title: '退出房间',
-      content: '观战者可以随时退出；进行中的玩家牌局需要等本局结束。确定退出吗？',
+      content: inProgress
+        ? '退出将立即终止本局且不结算，其他玩家可以退出并重新开始。确定退出吗？'
+        : '观战者可以随时退出。确定退出吗？',
       success: (result) => {
         if (!result.confirm) return;
         this.app.leaveRoom()

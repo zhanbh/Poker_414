@@ -172,7 +172,16 @@ export function App({ transport: providedTransport }: { readonly transport?: Cli
   };
 
   const leaveRoom = async () => {
-    if (!window.confirm('退出后将释放当前身份，确定退出吗？')) return;
+    const is414HandInProgress = Boolean(
+      snapshot
+      && !isTexasSnapshot(snapshot)
+      && !snapshot.private.spectator
+      && (snapshot.public.phase === 'opening' || snapshot.public.phase === 'playing'),
+    );
+    const message = is414HandInProgress
+      ? '退出将立即终止本局且不结算，其他玩家可以退出并重新开始。确定退出吗？'
+      : '退出后将释放当前身份，确定退出吗？';
+    if (!window.confirm(message)) return;
     try {
       await transport.leave();
       storage.removeItem(storageKey(gameId, 'sessionToken'));

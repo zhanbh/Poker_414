@@ -86,6 +86,23 @@ describe('单房间会话与命令服务', () => {
     expect(room.isConnectionOwner(auth.sessionToken, 'socket-b')).toBe(true);
   });
 
+  it('玩家锁屏断线后重新连接，应恢复已连接并清除暂离状态', () => {
+    const room = service();
+    const auth = room.login('inner-414');
+    room.join(auth.sessionToken, '甲', '414');
+    room.attach(auth.sessionToken, 'socket-a');
+    room.disconnect(auth.sessionToken, 'socket-a');
+    room.scan(31_000);
+
+    expect(room.getState()!.players.A?.connected).toBe(false);
+    expect(room.getState()!.players.A?.away).toBe(true);
+
+    room.attach(auth.sessionToken, 'socket-b');
+
+    expect(room.getState()!.players.A?.connected).toBe(true);
+    expect(room.getState()!.players.A?.away).toBe(false);
+  });
+
   it('结算后四人同时准备时，允许同一局内的旧版本准备命令合并', () => {
     const room = service();
     const auths = ['甲', '乙', '丙', '丁'].map((nickname) => {
@@ -180,7 +197,7 @@ describe('单房间会话与命令服务', () => {
     })).not.toThrow();
   });
 
-  it('牌局进行中玩家不能退出并破坏当前牌局', () => {
+  it('牌局进行中玩家退出会终止本局但不结算，其他玩家可退出并重新入房', () => {
     const room = service();
     const auths = ['甲', '乙', '丙', '丁'].map((nickname) => {
       const auth = room.login('inner-414');
@@ -192,8 +209,21 @@ describe('单房间会话与命令服务', () => {
       type: 'start-hand', requestId: 'start-before-leave', handNumber: state.handNumber, stateVersion: state.version, payload: {},
     });
 
-    expect(() => room.leave(auths[1].sessionToken)).toThrow(/牌局进行中/);
-    expect(room.getState()!.players.B?.nickname).toBe('乙');
+    room.leave(auths[1].sessionToken);
+    expect(room.getState()!.phase).toBe('lobby');
+    expect(room.getState()!.settlement).toBeNull();
+    expect(room.getState()!.players.B).toBeNull();
+    expect(room.getState()!.players.A?.hand).toEqual([]);
+    expect(room.getSnapshot(auths[0].sessionToken).public.phase).toBe('lobby');
+
+    room.leave(auths[0].sessionToken);
+    room.leave(auths[2].sessionToken);
+    room.leave(auths[3].sessionToken);
+    expect(room.getState()).toBeNull();
+
+    const replacement = room.login('inner-414');
+    const replacementView = room.join(replacement.sessionToken, '新玩家', '414');
+    expect(replacementView.private.seat).toBe('A');
   });
 
   it('房主不能移除自己，避免房间清空后会话仍停留在房间', () => {

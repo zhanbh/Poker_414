@@ -8,6 +8,7 @@ import {
 import {
   GameState,
   GameStateError,
+  abortHand,
   createGameState,
   endRoom,
   hasDifferenceOpportunity,
@@ -230,9 +231,8 @@ export class RoomService {
       this.clearChatIfEmpty();
       return;
     }
-    if (!this.state || this.state.phase !== 'lobby') {
-      throw new RoomServiceError('HAND_IN_PROGRESS', '牌局进行中不能退出玩家位，请等待本局结束');
-    }
+    if (this.state?.phase === 'opening' || this.state?.phase === 'playing') this.state = abortHand(this.state);
+    if (!this.state || this.state.phase !== 'lobby') throw new RoomServiceError('HAND_IN_PROGRESS', '当前状态不能退出玩家位');
     const leavingPlayer = this.state.players[session.seat];
     const next = removePlayer(this.state, session.seat);
     if (leavingPlayer?.id === this.state.hostId) {
@@ -416,7 +416,10 @@ export class RoomService {
 
   private clearChatIfEmpty(): void {
     const hasPlayers = Boolean(this.state && Object.values(this.state.players).some((player) => player !== null));
-    if (!hasPlayers && this.sessions.listSpectators().length === 0) this.chatMessages = [];
+    if (!hasPlayers && this.sessions.listSpectators().length === 0) {
+      this.chatMessages = [];
+      this.state = null;
+    }
   }
   private isExpiredPlayer(playerId: string, away: boolean, fallbackActivityAt: number, now: number): boolean {
     const session = this.sessions.findByPlayerId(playerId);

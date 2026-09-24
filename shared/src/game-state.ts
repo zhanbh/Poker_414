@@ -688,6 +688,46 @@ export function removePlayer(state: GameState, seat: Seat): GameState {
   };
 }
 
+export function abortHand(state: GameState): GameState {
+  if (state.phase !== 'opening' && state.phase !== 'playing') {
+    throw new GameStateError('HAND_NOT_IN_PROGRESS', '当前没有进行中的牌局');
+  }
+
+  const players = Object.fromEntries(SEATS.map((seat) => {
+    const player = state.players[seat];
+    return [seat, player ? {
+      ...player,
+      hand: [],
+      activeInHand: true,
+      finishedRank: null,
+      burstLocked: false,
+      burstKind: null,
+    } : null];
+  })) as Record<Seat, PlayerState | null>;
+
+  return {
+    ...state,
+    version: state.version + 1,
+    phase: 'lobby',
+    players,
+    candidateLeader: null,
+    nextLeaderSeat: null,
+    currentTurn: null,
+    effectiveMain: null,
+    openingMode: 'normal',
+    modeTeam: null,
+    openingTurn: null,
+    openingSkippedSeats: [],
+    trick: null,
+    publicLastPlay: null,
+    burstPending: null,
+    readySeats: [],
+    finishOrder: [],
+    burstAnnounced: [],
+    settlement: null,
+  };
+}
+
 export function endRoom(state: GameState): GameState {
   if (state.phase === 'ended') return state;
   return { ...state, version: state.version + 1, phase: 'ended', currentTurn: null, trick: null, burstPending: null, readySeats: [] };

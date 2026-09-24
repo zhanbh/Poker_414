@@ -1,7 +1,7 @@
 import { type MouseEvent, useEffect, useMemo, useState } from 'react';
 import { findBurstCandidates } from '../../../shared/src/rule-engine';
 import { Card } from '../../../shared/src/cards';
-import { CommandPayload, CommandType, RoomSnapshot } from '../../../shared/src/protocol';
+import { CommandPayload, CommandType, RoomChatInteraction, RoomSnapshot } from '../../../shared/src/protocol';
 import { analyzeHand, getHandOptions } from '../../../shared/src/hand-types';
 import { PlayDeclaration, validatePlay } from '../../../shared/src/rules';
 import { Seat, teamLabel, teamOf } from '../../../shared/src/scoring';
@@ -10,6 +10,7 @@ import { BurstPrompt } from '../components/BurstPrompt';
 import { CardHand, cardColorClass, cardLabel } from '../components/CardHand';
 import { MainStatus } from '../components/MainStatus';
 import { PlayerSeat } from '../components/PlayerSeat';
+import { RoomInteractionEffect, RoomInteractionTarget } from '../components/InteractionMenu';
 import { RoomPurposeNotice } from '../components/RoomPurposeNotice';
 import { SettlementDialog } from '../components/SettlementDialog';
 import { SpectatorHands } from '../components/SpectatorHands';
@@ -28,13 +29,15 @@ function tableSeatsFor(ownSeat: Seat | null) {
   });
 }
 
-export function GameView({ snapshot, onCommand, onActivity, onReady, onLeave, testMode }: {
+export function GameView({ snapshot, onCommand, onActivity, onReady, onLeave, testMode, onInteract, interactionEffect = null }: {
   readonly snapshot: RoomSnapshot;
   readonly onCommand: GameCommand;
   readonly onActivity: () => void;
   readonly onReady?: () => void;
   readonly onLeave: () => void;
   readonly testMode: boolean;
+  readonly onInteract?: (target: RoomInteractionTarget, interaction: RoomChatInteraction) => Promise<void> | void;
+  readonly interactionEffect?: RoomInteractionEffect | null;
 }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showSettlement, setShowSettlement] = useState(snapshot.public.phase === 'settled');
@@ -141,6 +144,9 @@ export function GameView({ snapshot, onCommand, onActivity, onReady, onLeave, te
               showRemainingHand={snapshot.public.phase === 'settled'}
               main={snapshot.public.effectiveMain}
               isDiscarded={playerIsDiscarded}
+              canInteract={seat !== snapshot.private.seat}
+              onInteract={onInteract}
+              interactionEffect={interactionEffect}
             />;
           })()}
           {seat === snapshot.private.seat && snapshot.public.phase === 'playing' ? <div className="seat-actions">

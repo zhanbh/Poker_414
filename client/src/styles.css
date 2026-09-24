@@ -507,3 +507,140 @@ main { min-height: 100svh; padding: clamp(16px, 4vw, 32px); }
 .room-chat-form input { flex: 1; min-width: 0; min-height: 40px; padding: 8px 10px; color: #eaf2ff; background: #102d3d; border: 1px solid #397a8b; border-radius: 8px; }
 .room-chat-form button { min-width: 64px; color: #102331; background: #ffd166; border: 0; border-radius: 8px; cursor: pointer; }
 @media (max-width: 760px) { .room-chat { width: calc(100% - 24px); margin-top: 12px; padding: 12px; } .room-chat-heading { display: block; } .room-chat-heading span { display: block; margin-top: 3px; } .room-chat-target { max-width: 100%; } }
+
+/* Web layout: keep chat out of the document flow and leave the table visible. */
+.room-chat-shell {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 30;
+  width: min(326px, calc(100vw - 32px));
+  pointer-events: none;
+}
+.room-chat-shell > * { pointer-events: auto; }
+.room-chat-shell.is-collapsed { width: auto; }
+.room-chat-toggle {
+  min-height: 36px;
+  padding: 7px 12px;
+  color: #102331;
+  background: #ffd166;
+  border: 0;
+  border-radius: 999px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .3);
+  font-weight: 800;
+}
+.room-chat {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: min(74svh, 620px);
+  margin: 8px 0 0;
+  padding: 12px;
+  overflow: hidden;
+  box-shadow: 0 16px 38px rgba(0, 0, 0, .3);
+}
+.room-chat-messages { height: auto; max-height: min(32svh, 230px); min-height: 84px; margin: 8px 0; }
+.room-chat-targets { max-height: 154px; overflow-y: auto; align-content: flex-start; }
+.room-chat-target-hint { flex: 0 0 100%; margin: 0; color: #83adba; font-size: .72rem; }
+.room-chat-target { min-width: 0; }
+.room-chat-target strong { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.room-chat-target .room-interaction { margin-left: auto; }
+.room-chat-form { flex: 0 0 auto; }
+.room-chat-form input { min-height: 36px; }
+.room-chat-form button { min-height: 36px; }
+
+.player-seat, .texas-seat-position, .texas-player { position: relative; }
+.room-interaction { position: relative; display: flex; align-items: center; gap: 4px; }
+.room-interaction-trigger {
+  min-height: 24px;
+  padding: 2px 7px;
+  color: #102331;
+  background: #ffd166;
+  border: 0;
+  border-radius: 999px;
+  font-size: .7rem;
+  font-weight: 800;
+}
+.room-interaction-options {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 5px);
+  z-index: 20;
+  display: flex;
+  gap: 3px;
+  padding: 4px;
+  background: #102331;
+  border: 1px solid #70a9b4;
+  border-radius: 10px;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, .35);
+  animation: room-interaction-pop .16s ease both;
+}
+.room-interaction-options button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  background: #f0b44d;
+  border: 0;
+  border-radius: 50%;
+  font-size: 1rem;
+}
+.room-interaction-options button:disabled { opacity: .5; }
+.room-interaction-effect {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 25;
+  pointer-events: none;
+  font-size: clamp(2rem, 5vw, 4rem);
+  filter: drop-shadow(0 4px 4px rgba(0, 0, 0, .35));
+  animation: room-interaction-delivery 1.15s cubic-bezier(.2, .75, .25, 1) both;
+}
+.texas-player .room-interaction { display: block; }
+.texas-player .room-interaction-options { bottom: calc(100% + 4px); }
+.texas-seat-position .room-interaction { margin-top: 4px; }
+.texas-seat-position .room-interaction-options { bottom: calc(100% + 4px); }
+
+@keyframes room-interaction-pop {
+  from { opacity: 0; transform: translateY(4px) scale(.9); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes room-interaction-delivery {
+  0% { opacity: 0; transform: translate(-50%, -100%) scale(.35) rotate(-18deg); }
+  35% { opacity: 1; transform: translate(-50%, -65%) scale(1.22) rotate(8deg); }
+  72% { opacity: 1; transform: translate(-50%, -52%) scale(1) rotate(-4deg); }
+  100% { opacity: 0; transform: translate(-50%, -45%) scale(.86) rotate(0); }
+}
+
+@media (min-width: 761px) {
+  main { padding: clamp(18px, 2.2vw, 32px); }
+  .game-view, .lobby-view, .texas-lobby, .texas-game { max-width: min(1180px, calc(100vw - 36px)); margin-inline: auto; }
+  .table-layout { min-height: min(560px, calc(100svh - 250px)); }
+  .texas-lobby-table, .texas-game-table { min-height: min(620px, calc(100svh - 250px)); }
+  .texas-hand { margin-top: 10px; padding: 12px 16px; }
+}
+@media (max-width: 760px) {
+  .room-chat-shell { top: auto; right: 12px; bottom: 12px; width: min(326px, calc(100vw - 24px)); }
+  .room-chat-shell.is-collapsed { right: 12px; bottom: 12px; }
+  .room-chat { max-height: min(68svh, 520px); }
+  .room-chat-messages { max-height: 24svh; }
+  .room-chat-targets { max-height: 120px; }
+  .player-seat { min-height: 72px; padding: 6px; }
+  .player-avatar { flex-basis: 48px; width: 48px; height: 48px; font-size: 1rem; }
+  .player-identity { gap: 7px; }
+  .room-interaction-trigger { min-height: 22px; font-size: .64rem; }
+  .room-interaction-options button { width: 28px; height: 28px; }
+  .texas-player .room-interaction { margin-top: 2px; }
+  .texas-player .room-interaction-trigger { min-height: 20px; }
+}
+@media (max-height: 720px) and (min-width: 761px) {
+  main { padding-top: 12px; padding-bottom: 12px; }
+  .room-purpose-notice { margin-block: 6px; padding-block: 5px; }
+  .table-layout { min-height: calc(100svh - 190px); margin-block: 12px; }
+  .texas-lobby-table, .texas-game-table { min-height: calc(100svh - 190px); margin-block: 10px; }
+  .texas-hand, .texas-actions { margin-top: 8px; padding-block: 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .room-interaction-options, .room-interaction-effect { animation: none; }
+}

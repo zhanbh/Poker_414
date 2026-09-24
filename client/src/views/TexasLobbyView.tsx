@@ -1,10 +1,11 @@
-import { TexasPublicSnapshot } from '../../../shared/src/protocol';
+import { RoomChatInteraction, TexasPublicSnapshot } from '../../../shared/src/protocol';
 import { formatTexasChips, TEXAS_DEFAULT_POSITION_LABELS, TEXAS_SEATS, TEXAS_STARTING_STACK, TEXAS_BIG_BLIND, TEXAS_SMALL_BLIND, TexasSeat } from '../../../shared/src/texas';
 import { RoomPurposeNotice } from '../components/RoomPurposeNotice';
+import { InteractionEffect, InteractionMenu, RoomInteractionEffect, RoomInteractionTarget } from '../components/InteractionMenu';
 
 const SEATS = TEXAS_SEATS;
 
-export function TexasLobbyView({ snapshot, ownSeat, spectator = false, onStart, onRemove, onLeave, testMode }: {
+export function TexasLobbyView({ snapshot, ownSeat, spectator = false, onStart, onRemove, onLeave, testMode, onInteract, interactionEffect = null }: {
   readonly snapshot: TexasPublicSnapshot;
   readonly ownSeat: TexasSeat | null;
   readonly spectator?: boolean;
@@ -12,6 +13,8 @@ export function TexasLobbyView({ snapshot, ownSeat, spectator = false, onStart, 
   readonly onRemove: (seat: TexasSeat) => void;
   readonly onLeave: () => void;
   readonly testMode: boolean;
+  readonly onInteract?: (target: RoomInteractionTarget, interaction: RoomChatInteraction) => Promise<void> | void;
+  readonly interactionEffect?: RoomInteractionEffect | null;
 }) {
   const players = new Map(snapshot.players.map((player) => [player.seat, player]));
   const ownPlayer = snapshot.players.find((player) => player.seat === ownSeat);
@@ -33,7 +36,7 @@ export function TexasLobbyView({ snapshot, ownSeat, spectator = false, onStart, 
           const positionLabel = player?.positionLabel ?? TEXAS_DEFAULT_POSITION_LABELS[seat];
           return <article className={'texas-seat texas-seat-position texas-seat-' + seat + (player ? ' occupied' : '') + (canKick ? ' kickable' : '')} key={seat}>
             <strong>{positionLabel}</strong>
-            {player ? <><b>{player.nickname}</b><span>{formatTexasChips(player.stack)} 筹码</span>{player.isHost ? <em>房主</em> : null}{player.waiting ? <em>等待下一局</em> : null}{!player.connected ? <em className="offline">已断开</em> : null}</> : <span>空位</span>}
+            {player ? <><b>{player.nickname}</b><span>{formatTexasChips(player.stack)} 筹码</span>{player.isHost ? <em>房主</em> : null}{player.waiting ? <em>等待下一局</em> : null}{!player.connected ? <em className="offline">已断开</em> : null}{onInteract && player.seat !== ownSeat ? <InteractionMenu target={{ id: player.seat, nickname: player.nickname, label: positionLabel, seat: player.seat }} onInteract={onInteract} /> : null}{interactionEffect?.targetSeat === player.seat ? <InteractionEffect interaction={interactionEffect.interaction} /> : null}</> : <span>空位</span>}
             {canKick ? <button type="button" className="texas-seat-remove" onClick={() => onRemove(player!.seat)}>{ownPlayer?.isHost ? '移除' : '踢出'}</button> : null}
           </article>;
         })}

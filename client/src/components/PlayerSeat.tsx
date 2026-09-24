@@ -3,14 +3,19 @@ import { PublicPlayerView } from '../../../shared/src/protocol';
 import { teamLabel } from '../../../shared/src/scoring';
 import { PresenceBadge } from './PresenceBadge';
 import { cardColorClass, cardLabel } from './CardHand';
+import { RoomChatInteraction } from '../../../shared/src/protocol';
+import { InteractionEffect, InteractionMenu, RoomInteractionEffect, RoomInteractionTarget } from './InteractionMenu';
 
-export function PlayerSeat({ seat, player, isCurrentTurn = false, showRemainingHand = false, main = null, isDiscarded = false }: {
+export function PlayerSeat({ seat, player, isCurrentTurn = false, showRemainingHand = false, main = null, isDiscarded = false, canInteract = true, onInteract, interactionEffect = null }: {
   readonly seat: PublicPlayerView['seat'];
   readonly player: PublicPlayerView | null;
   readonly isCurrentTurn?: boolean;
   readonly showRemainingHand?: boolean;
   readonly main?: Rank | null;
   readonly isDiscarded?: boolean;
+  readonly canInteract?: boolean;
+  readonly onInteract?: (target: RoomInteractionTarget, interaction: RoomChatInteraction) => Promise<void> | void;
+  readonly interactionEffect?: RoomInteractionEffect | null;
 }) {
   if (!player) {
     return <div className={`player-seat seat-${seat}`}><div className="player-identity"><div className="player-avatar"><span>{seat}</span></div><span>空位</span></div></div>;
@@ -31,6 +36,8 @@ export function PlayerSeat({ seat, player, isCurrentTurn = false, showRemainingH
           <PresenceBadge away={player.away} connected={player.connected} />
         </div>
       </div>
+      {onInteract && canInteract ? <InteractionMenu target={{ id: seat, nickname: player.nickname, label: seat, seat }} onInteract={onInteract} /> : null}
+      {interactionEffect?.targetSeat === seat ? <InteractionEffect interaction={interactionEffect.interaction} /> : null}
       {showRemainingHand && player.remainingHand.length > 0 ? <div className={`remaining-hand${isDiscarded ? ' discarded-hand' : ''}`} aria-label={`${seat}剩余手牌`}>
         <div className="played-cards">
           {sortCards(player.remainingHand, main).map((card) => <span className={`played-card ${cardColorClass(card)}`} key={card.id}>{cardLabel(card)}</span>)}

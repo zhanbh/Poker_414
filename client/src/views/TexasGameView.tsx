@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { TexasCommandPayload, TexasCommandType, TexasSnapshot } from '../../../shared/src/protocol';
+import { RoomChatInteraction, TexasCommandPayload, TexasCommandType, TexasSnapshot } from '../../../shared/src/protocol';
 import { formatTexasChips, TEXAS_BET_STEP, TEXAS_BIG_BLIND, TEXAS_HAND_CATEGORY_LABELS, TEXAS_SEATS, TEXAS_STARTING_STACK, TEXAS_SMALL_BLIND, TexasSeat, texasCardLabel, TexasCard } from '../../../shared/src/texas';
 import { RoomPurposeNotice } from '../components/RoomPurposeNotice';
+import { InteractionEffect, InteractionMenu, RoomInteractionEffect, RoomInteractionTarget } from '../components/InteractionMenu';
 
 function cardClass(card: TexasCard): string {
   return card.suit === 'diamonds' || card.suit === 'hearts' ? 'texas-card red' : 'texas-card black';
@@ -68,11 +69,13 @@ function phaseNotice(phase: TexasSnapshot['public']['phase']): string {
   }
 }
 
-export function TexasGameView({ snapshot, onCommand, onLeave, testMode }: {
+export function TexasGameView({ snapshot, onCommand, onLeave, testMode, onInteract, interactionEffect = null }: {
   readonly snapshot: TexasSnapshot;
   readonly onCommand: (type: TexasCommandType, payload: TexasCommandPayload) => void;
   readonly onLeave: () => void;
   readonly testMode: boolean;
+  readonly onInteract?: (target: RoomInteractionTarget, interaction: RoomChatInteraction) => Promise<void> | void;
+  readonly interactionEffect?: RoomInteractionEffect | null;
 }) {
   const [amount, setAmount] = useState(TEXAS_BIG_BLIND);
   const [settlementClosedHand, setSettlementClosedHand] = useState<number | null>(null);
@@ -146,6 +149,8 @@ export function TexasGameView({ snapshot, onCommand, onLeave, testMode }: {
           if (!player) return null;
           return <article className={'texas-player texas-seat-position texas-seat-' + seat + (player.seat === snapshot.public.currentTurn ? ' current' : '') + (player.seat === snapshot.private.seat ? ' own' : '')} key={seat}>
             <div><strong>{player.positionLabel ?? '等待入座'}</strong><span>{player.nickname}</span></div>
+            {onInteract && player.seat !== snapshot.private.seat ? <InteractionMenu target={{ id: player.seat, nickname: player.nickname, label: player.positionLabel ?? player.seat, seat: player.seat }} onInteract={onInteract} /> : null}
+            {interactionEffect?.targetSeat === player.seat ? <InteractionEffect interaction={interactionEffect.interaction} /> : null}
             <div className="texas-player-chip-area"><ChipStack amount={player.stack} /><small>{formatTexasChips(player.stack)} 筹码 · 已下注 {formatTexasChips(player.totalBet)}{player.waiting ? ' · 等待下一局' : ''}{player.folded ? ' · 已弃牌' : ''}{player.allIn ? ' · All-in' : ''}</small></div>
           </article>;
         })}

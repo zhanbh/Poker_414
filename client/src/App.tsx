@@ -10,6 +10,7 @@ import {
   TexasCommandEnvelope,
   TexasCommandPayload,
   TexasCommandType,
+  RoomChatInteraction,
   RoomChatPayload,
 } from '../../shared/src/protocol';
 import { AccessView } from './views/AccessView';
@@ -19,6 +20,7 @@ import { TexasGameView } from './views/TexasGameView';
 import { TexasLobbyView } from './views/TexasLobbyView';
 import { ClientTransport, createSocketClient } from './transport/socket-client';
 import { RoomChat, RoomChatMember } from './components/RoomChat';
+import { RoomInteractionEffect, RoomInteractionTarget } from './components/InteractionMenu';
 
 const GAME_KEY = '414.selectedGame';
 
@@ -76,6 +78,8 @@ export function App({ transport: providedTransport }: { readonly transport?: Cli
   const [connectionNotice, setConnectionNotice] = useState('');
   const previousSnapshot = useRef<GameSnapshot | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const interactionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [interactionEffect, setInteractionEffect] = useState<RoomInteractionEffect | null>(null);
 
   const consumeSnapshot = useCallback((next: GameSnapshot) => {
     const previous = previousSnapshot.current;
@@ -95,13 +99,25 @@ export function App({ transport: providedTransport }: { readonly transport?: Cli
       setConnectionNotice(names.join('、') + ' 已退出房间');
       noticeTimer.current = setTimeout(() => setConnectionNotice(''), 6_000);
     }
+    const previousChat = previous?.public.chat ?? [];
+    const nextChat = next.public.chat ?? [];
+    const latest = nextChat[nextChat.length - 1];
+    const previousLatest = previousChat[previousChat.length - 1];
+    if (latest?.kind === 'interaction' && latest.interaction && latest.targetSeat && latest.id !== previousLatest?.id) {
+      setInteractionEffect({ id: latest.id, targetSeat: latest.targetSeat, interaction: latest.interaction });
+      if (interactionTimer.current) clearTimeout(interactionTimer.current);
+      interactionTimer.current = setTimeout(() => setInteractionEffect(null), 1_200);
+    }
     previousSnapshot.current = next;
     setSnapshot(next);
   }, []);
 
   useEffect(() => transport.subscribe(consumeSnapshot), [transport, consumeSnapshot]);
   useEffect(() => transport.onReplaced(() => setError('该会话已在其他页面接管')), [transport]);
-  useEffect(() => () => { if (noticeTimer.current) clearTimeout(noticeTimer.current); }, []);
+  useEffect(() => () => {
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    if (interactionTimer.current) clearTimeout(interactionTimer.current);
+  }, []);
 
   useEffect(() => {
     transport.selectGame?.(gameId);
@@ -206,6 +222,13 @@ export function App({ transport: providedTransport }: { readonly transport?: Cli
       throw reason;
     }
   };
+  const sendInteraction = async (target: RoomInteractionTarget, interaction: RoomChatInteraction) => {
+    await sendChat({
+      kind: 'interaction',
+      interaction,
+      target: { nickname: target.nickname, ...(target.seat ? { seat: target.seat } : {}) },
+    });
+  };
   const roomNotice = connectionNotice ? <p className="room-notice" role="status">{connectionNotice}</p> : null;
   if (!snapshot) {
     return <><AccessView gameId={gameId} onGameChange={selectGame} onSubmit={enterRoom} error={error} busy={busy} testMode={testMode} />{roomNotice}</>;
@@ -213,15 +236,15 @@ export function App({ transport: providedTransport }: { readonly transport?: Cli
   const roomChat = <RoomChat messages={snapshot.public.chat ?? []} members={chatMembersFor(snapshot)} ownSeat={snapshot.private.seat} onSend={sendChat} />;
   if (gameId === 'texas' && isTexasSnapshot(snapshot)) {
     if (snapshot.public.phase === 'lobby') {
-      return <><TexasLobbyView snapshot={snapshot.public} ownSeat={snapshot.private.seat} spectator={Boolean(snapshot.private.spectator)} onStart={() => runCommand('start-hand', {})} onRemove={(seat) => runCommand('remove-player', { seat })} onLeave={leaveRoom} testMode={testMode} />{roomNotice}{error ? <p role="alert">{error}</p> : null}{roomChat}</>;
+      return <><TexasLobbyView snapshot={snapshot.public} ownSeat={snapshot.private.seat} spectator={Boolean(snapshot.private.spectator)} onStart={() => runCommand('start-hand', {})} onRemove={(seat) => runCommand('remove-player', { seat })} onLeave={leaveRoom} testMode={testMode} onInteract={sendInteraction} interactionEffect={interactionEffect} />{roomNotice}{error ? <p role="alert">{error}</p> : null}{roomChat}</>;
     }
-    return <><TexasGameView snapshot={snapshot} onCommand={runCommand} onLeave={leaveRoom} testMode={testMode} />{roomNotice}{error ? <p role="alert">{error}</p> : null}{roomChat}</>;
+    return <><TexasGameView snapshot={snapshot} onCommand={runCommand} onLeave={leaveRoom} testMode={testMode} onInteract={sendInteraction} interactionEffect={interactionEffect} />{roomNotice}{error ? <p role="alert">{error}</p> : null}{roomChat}</>;
   }
   if (!isTexasSnapshot(snapshot) && snapshot.public.phase === 'lobby') {
-    return <><LobbyView snapshot={snapshot.public} ownSeat={snapshot.private.seat} spectator={Boolean(snapshot.private.spectator)} onStart={() => runCommand('start-hand', {})} onRemove={(seat) => runCommand('remove-player', { seat })} onLeave={leaveRoom} testMode={testMode} />{roomNotice}{error ? <p role="alert">{error}</p> : null}{roomChat}</>;
+    return <><LobbyView snapshot={snapshot.public} ownSeat={snapshot.private.seat} spectator={Boolean(snapshot.private.spectator)} onStart={() => runCommand('start-hand', {})} onRemove={(seat) => runCommand('remove-player', { seat })} onLeave={leaveRoom} testMode={testMode} onInteract={sendInteraction} interactionEffect={interactionEffect} />{roomNotice}{error ? <p role="alert">{error}</p> : null}{roomChat}</>;
   }
   if (!isTexasSnapshot(snapshot)) {
-    return <><GameView snapshot={snapshot} onCommand={runCommand} onActivity={() => transport.activity()} onReady={() => runCommand('ready', {})} onLeave={leaveRoom} testMode={testMode} />{roomNotice}{error ? <p role="alert">{error}</p> : null}{roomChat}</>;
+    return <><GameView snapshot={snapshot} onCommand={runCommand} onActivity={() => transport.activity()} onReady={() => runCommand('ready', {})} onLeave={leaveRoom} testMode={testMode} onInteract={sendInteraction} interactionEffect={interactionEffect} />{roomNotice}{error ? <p role="alert">{error}</p> : null}{roomChat}</>;
   }
   return null;
 }

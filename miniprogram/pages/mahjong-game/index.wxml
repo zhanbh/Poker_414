@@ -1,36 +1,45 @@
 <view class="page mahjong-game-page">
-  <view class="game-header"><view class="title">麻将对局</view><view class="muted">第 {{snapshot.public.handNumber}} 局 · 剩余牌 {{wallCount}} 张</view><view class="turn-status {{isResponsePhase ? 'response-phase' : isMyTurn ? 'my-turn' : ''}}">{{turnStatus}}</view></view>
-  <view class="room-purpose-notice" role="note"><text class="room-purpose-title">测试学习交流声明</text><text>本房间仅用于游戏测试、学习与交流；虚拟筹码不具有现金或财产价值，不涉及充值、提现、现金输赢或奖励兑换，请勿用于赌博或其他违法活动。</text></view>
+  <view class="game-header"><view class="title">麻将对局</view><view class="muted">第 {{snapshot.public.handNumber}} 局 · 牌墙剩余 {{wallCount}} 张</view><view class="turn-status {{isResponsePhase ? 'response-phase' : isMyTurn ? 'my-turn' : ''}}">{{turnStatus}}</view></view>
+  <view class="room-purpose-notice" role="note"><text class="room-purpose-title">测试学习交流声明</text><text>本房间仅用于游戏测试、学习与交流；虚拟积分仅供娱乐，不具有现金或财产价值。</text></view>
   <view wx:if="{{spectator}}" class="spectator-banner">观战模式 · 查看牌桌状态</view>
-  <view class="mahjong-table">
-    <view class="mahjong-table-center"><view class="mahjong-table-title">麻将</view><view wx:if="{{snapshot.public.lastDiscard}}">上一张：{{snapshot.public.lastDiscard.tile.label}}</view><view wx:else>等待出牌</view><view wx:if="{{snapshot.public.pendingDiscard}}" class="muted">等待其他玩家响应</view></view>
+  <view class="mahjong-table" style="height:{{boardSize}}px">
+    <view wx:for="{{wallSides}}" wx:key="position" class="mahjong-wall mahjong-wall-{{item.position}}"><view wx:for="{{item.tiles}}" wx:for-item="back" wx:key="id" class="tile-back"><view></view></view></view>
+    <view class="mahjong-table-center"><view class="mahjong-table-title">麻将</view><view wx:if="{{diceRoll}}" class="table-dice">骰子 {{diceRoll[0]}} · {{diceRoll[1]}}</view><view wx:else>庄家自动掷骰</view><view wx:if="{{snapshot.public.pendingDiscard}}" class="muted">等待响应 · {{snapshot.public.pendingDiscard.tile.label}}</view></view>
     <view wx:for="{{players}}" wx:key="seat" class="mahjong-seat mahjong-seat-{{item.seat}} {{item.seat === currentTurn && !isResponsePhase ? 'current' : ''}} {{item.seat === ownSeat && canRespondNow ? 'responding' : ''}}">
-      <view class="seat-title">{{item.seatLabel}}{{item.seat === currentTurn && !isResponsePhase ? ' · 出牌' : item.seat === ownSeat && canRespondNow ? ' · 可响应' : ''}}</view><view>{{item.nickname}}{{item.isDealer ? ' · 庄' : ''}}{{item.isListening ? ' · 听牌' : ''}}</view><view class="muted">{{item.score}} 分 · 手牌 {{item.handCount}} 张 · 弃牌 {{item.discards.length}} 张</view>
-      <view class="mahjong-meld-row"><text wx:for="{{item.melds}}" wx:for-item="meld" wx:key="index">{{meld.kind === 'chi' ? '吃' : meld.kind === 'peng' ? '碰' : '杠'}} {{meld.tiles[0].label}} {{meld.tiles[1].label}} {{meld.tiles[2].label}}</text></view>
-      <view class="mahjong-discard-row"><text wx:for="{{item.discards}}" wx:for-item="tile" wx:key="id" class="mini-tile {{tile.tileClass}}">{{tile.label}}</text></view>
+      <view class="seat-heading"><text class="seat-title">{{item.seatLabel}}</text><text class="seat-nickname">{{item.nickname}}{{item.isDealer ? ' · 庄' : ''}}{{item.isListening ? ' · 听' : ''}}{{item.seat === currentTurn && !isResponsePhase ? ' · 出牌' : item.seat === ownSeat && canRespondNow ? ' · 可响应' : ''}}</text><text class="seat-score">{{item.score}}分 · {{item.handCount}}张</text></view>
+      <view wx:if="{{item.melds.length}}" class="mahjong-melds"><view wx:for="{{item.melds}}" wx:for-item="meld" wx:key="index" class="mahjong-meld"><text>{{meld.kind === 'chi' ? '吃' : meld.kind === 'peng' ? '碰' : meld.kind === 'concealed-kong' ? '暗杠' : '杠'}}</text><view class="meld-tiles"><template is="tileFace" wx:for="{{meld.tiles}}" wx:for-item="tile" wx:key="id" data="{{tile}}" /></view></view></view>
+      <view wx:if="{{item.revealedHand.length}}" class="revealed-seat-hand"><template is="tileFace" wx:for="{{item.revealedHand}}" wx:for-item="tile" wx:key="id" data="{{tile}}" /></view>
+      <view wx:elif="{{item.hiddenHand.length}}" class="hidden-seat-hand"><view wx:for="{{item.hiddenHand}}" wx:key="id" class="tile-back"><view></view></view></view>
+      <view wx:if="{{item.discards.length}}" class="seat-river"><template is="tileFace" wx:for="{{item.discards}}" wx:for-item="tile" wx:key="id" data="{{tile}}" /></view><text wx:else class="river-empty">出牌区</text>
     </view>
+    <view wx:if="{{animationStage}}" class="mahjong-animation {{animationStage}}"><view class="dice-cube">{{diceLabel}}</view><text>{{animationStage === 'dice' ? '庄家掷骰' : '正在发牌'}}</text><view wx:if="{{animationStage === 'deal'}}" class="dealing-tiles"><view class="tile-back"><view></view></view><view class="tile-back"><view></view></view><view class="tile-back"><view></view></view><view class="tile-back"><view></view></view></view></view>
   </view>
-  <view wx:if="{{!spectator}}" class="panel hand-panel"><view class="section-title">我的手牌（{{hand.length}}）{{isListening ? ' · 已听牌' : ''}}</view><view class="mahjong-hand"><view wx:for="{{hand}}" wx:key="id" class="mahjong-tile {{item.tileClass}} {{item.selected ? 'selected' : ''}} {{item.listenOption ? 'listen-option' : ''}}" data-id="{{item.id}}" bindtap="onTileTap">{{item.label}}</view></view></view>
-  <view wx:if="{{isListening}}" class="panel mahjong-listen-info"><view class="section-title">已听牌</view><view>可胡：<text wx:for="{{listenWaits}}" wx:key="id">{{item.label}} </text></view><view>宝：{{baoTile.label}}</view></view>
+  <view wx:if="{{!spectator}}" class="panel hand-panel"><view class="section-title">我的手牌（{{hand.length}}）{{isListening ? ' · 已听牌' : ''}}</view><view class="mahjong-hand"><view wx:for="{{hand}}" wx:key="id" class="mahjong-tile-face {{item.tileClass}} {{item.selected ? 'selected' : ''}} {{item.listenOption ? 'listen-option' : ''}}" data-id="{{item.id}}" bindtap="onTileTap"><view wx:if="{{item.isNumbered}}" class="face-rank">{{item.rankDisplay}}</view><view wx:if="{{item.isNumbered && !item.isCharacters}}" class="face-motif"><view wx:for="{{item.motifs}}" wx:for-item="motif" wx:key="id" class="tile-motif {{item.tileClass}}" style="left:{{motif.left}}%;top:{{motif.top}}%"></view></view><view wx:if="{{item.isCharacters}}" class="face-character">萬</view><view wx:if="{{!item.isNumbered}}" class="face-honor">{{item.label}}</view><view class="face-suit">{{item.suitDisplay}}</view></view></view>
+  </view>
+  <view wx:if="{{isListening}}" class="panel mahjong-listen-info"><view class="section-title">已听牌</view><view>结构听口：<text wx:for="{{listenWaits}}" wx:key="id">{{item.label}} </text></view><view>另可胡宝：{{baoTile.label || '—'}}</view></view>
   <view wx:if="{{!spectator && isResponsePhase && (canRespondNow || canPass)}}" class="panel action-row mahjong-actions mahjong-action-prompt" role="alert">
-    <view class="prompt-title">{{canRespondNow ? '你可以选择以下响应' : '等待优先玩家响应；当前没有普通出牌权'}}</view>
+    <view class="prompt-title">{{canRespondNow ? '选择响应' : '等待优先玩家响应；当前没有普通出牌权'}}</view>
     <button wx:if="{{canHu}}" class="primary-button" data-action="hu" bindtap="onAction">胡</button>
     <button wx:if="{{canPeng}}" class="secondary-button" data-action="peng" bindtap="onAction">碰</button>
-    <block wx:if="{{canChi}}"><button wx:for="{{chiOptions}}" wx:for-item="option" wx:key="key" class="secondary-button" data-action="chi" data-index="{{index}}" bindtap="onAction">{{option.label}}</button></block>
+    <view wx:if="{{canChi}}" class="chi-options"><button wx:for="{{chiOptions}}" wx:for-item="option" wx:key="key" class="chi-choice" data-action="chi" data-index="{{index}}" bindtap="onAction"><text>吃</text><view class="chi-tiles"><template is="tileFace" wx:for="{{option.tiles}}" wx:for-item="tile" wx:key="id" data="{{tile}}" /></view></button></view>
     <button wx:if="{{canKong}}" class="secondary-button" data-action="exposed-kong" bindtap="onAction">杠</button>
     <button wx:if="{{canPass}}" class="secondary-button" data-action="pass" bindtap="onAction">过</button>
   </view>
-  <view wx:if="{{!spectator && isMyTurn && snapshot.public.phase === 'playing'}}" class="panel action-row mahjong-actions mahjong-action-prompt">
+  <view wx:if="{{!spectator && isMyTurn && snapshot.public.phase === 'playing' && !isListening}}" class="panel action-row mahjong-actions mahjong-action-prompt">
     <view class="prompt-title">轮到你出牌</view>
     <button class="primary-button" data-action="discard" disabled="{{!selectedTileId || !canDiscard}}" bindtap="onAction">出牌</button>
-    <button wx:if="{{canListen}}" class="primary-button" data-action="listen" disabled="{{!canListenSelected}}" bindtap="onAction">选中高亮手牌后听牌并出牌</button>
-    <button wx:if="{{canHu}}" class="primary-button" data-action="hu" bindtap="onAction">自摸胡</button>
+    <button wx:if="{{canListen}}" class="primary-button" data-action="listen" disabled="{{!canListenSelected}}" bindtap="onAction">听牌并出牌</button>
     <button wx:if="{{canConcealedKong}}" class="secondary-button" data-action="concealed-kong" bindtap="onAction">暗杠</button>
-    <button wx:if="{{canAddedKong}}" class="secondary-button" data-action="added-kong" disabled="{{!selectedTileId}}" bindtap="onAction">选择补杠牌</button>
+    <button wx:if="{{canAddedKong}}" class="secondary-button" data-action="added-kong" disabled="{{!selectedTileId}}" bindtap="onAction">补杠</button>
   </view>
-  <view wx:if="{{opponentHands.length}}" class="panel mahjong-opponent-hands"><view class="section-title">听牌后查看其他玩家手牌</view><view wx:for="{{opponentHands}}" wx:key="seat" class="mahjong-opponent-hand"><view>{{item.nickname}} · {{item.seat}}</view><view class="mahjong-hand"><text wx:for="{{item.hand}}" wx:for-item="tile" wx:key="id" class="mahjong-tile {{tile.tileClass}}">{{tile.label}}</text></view></view></view>
-  <view wx:if="{{settlement}}" class="panel settlement-panel"><view class="section-title">本局结束</view><view wx:if="{{settlement.type === 'draw'}}">流局</view><view wx:else>{{settlement.winnerNickname || settlement.winnerSeat}} 获胜 · {{settlement.winPattern === 'big-wind' ? '大风' : settlement.winPattern === 'bao' ? '胡宝' : settlement.type === 'self-draw' ? '自摸' : '点炮'}}</view><view wx:if="{{paymentRows.length}}" class="mahjong-payment-row"><text wx:for="{{paymentRows}}" wx:key="seat">{{item.nickname}} {{item.amountLabel}} </text></view><button wx:if="{{ownSeat === snapshot.public.hostSeat}}" class="primary-button" data-action="next-hand" bindtap="onAction">开始下一局</button></view>
+  <view wx:if="{{!spectator && isMyTurn && isListening && canHu}}" class="panel action-row mahjong-actions mahjong-action-prompt"><view class="prompt-title">摸到可胡牌</view><button class="primary-button" data-action="hu" bindtap="onAction">胡</button><button class="secondary-button" data-action="pass" bindtap="onAction">过，自动出牌</button></view>
+  <view wx:if="{{autoDiscardPending}}" class="auto-discard-note">听牌自动摸切中…</view>
+  <view wx:if="{{settlement}}" class="panel settlement-panel"><view class="section-title">本局结束</view><view wx:if="{{settlement.type === 'draw'}}">流局 · 原庄家不变，自动掷骰开下一局</view><view wx:else>{{settlement.winnerNickname || settlement.winnerSeat}} 获胜 · {{settlement.winPattern === 'big-wind' ? '大风' : settlement.winPattern === 'bao' ? '胡宝' : settlement.type === 'self-draw' ? '自摸' : '点炮'}}</view><view wx:if="{{paymentRows.length}}" class="mahjong-payment-row"><text wx:for="{{paymentRows}}" wx:key="seat">{{item.nickname}} {{item.amountLabel}} </text></view><button wx:if="{{settlement.type !== 'draw' && ownSeat === snapshot.public.hostSeat}}" class="primary-button" data-action="next-hand" bindtap="onAction">开始下一局</button></view>
   <button class="leave-button" bindtap="onLeave">退出房间</button>
   <room-chat messages="{{chat}}" members="{{chatMembers}}" own-seat="{{ownSeat}}" bind:send="onChatSend" />
   <view wx:if="{{error}}" class="error">{{error}}</view>
 </view>
+
+<template name="tileFace">
+  <view class="mahjong-tile-face compact {{tileClass}}"><view wx:if="{{isNumbered}}" class="face-rank">{{rankDisplay}}</view><view wx:if="{{isNumbered && !isCharacters}}" class="face-motif"><view wx:for="{{motifs}}" wx:for-item="motif" wx:key="id" class="tile-motif {{tileClass}}" style="left:{{motif.left}}%;top:{{motif.top}}%"></view></view><view wx:if="{{isCharacters}}" class="face-character">萬</view><view wx:if="{{!isNumbered}}" class="face-honor">{{label}}</view><view class="face-suit">{{suitDisplay}}</view></view>
+</template>

@@ -310,6 +310,7 @@ export interface MahjongPublicSnapshot {
   readonly pendingDiscard: { readonly seat: MahjongSeat; readonly tile: MahjongTile } | null;
   readonly responseSeats: MahjongSeat[];
   readonly wallCount: number;
+  readonly diceRoll: readonly [number, number] | null;
   readonly lastDiscard: { readonly seat: MahjongSeat; readonly tile: MahjongTile } | null;
   readonly settlement: MahjongSettlement | null;
 }
@@ -323,6 +324,7 @@ export interface MahjongPrivateSnapshot {
   readonly listenTileIds?: string[];
   readonly discardableTileId?: string;
   readonly isListening?: boolean;
+  readonly autoDiscardPending?: boolean;
   readonly listenWaits?: MahjongTile[];
   readonly baoTile?: MahjongTile;
   readonly opponentHands?: Array<{ readonly seat: MahjongSeat; readonly nickname: string; readonly hand: MahjongTile[] }>;

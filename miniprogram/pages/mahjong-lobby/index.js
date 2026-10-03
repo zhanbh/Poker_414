@@ -7,10 +7,12 @@ const SEATS = ['A', 'B', 'C', 'D'];
 const LABELS = { A: '东家', B: '南家', C: '西家', D: '北家' };
 
 Page({
-  data: { snapshot: null, chat: [], chatMembers: [], players: [], spectators: [], ownSeat: null, isHost: false, spectator: false, playerCount: 0, error: '' },
+  data: { snapshot: null, chat: [], chatMembers: [], players: [], spectators: [], ownSeat: null, isHost: false, spectator: false, playerCount: 0, boardSize: 720, error: '' },
 
   onLoad() {
     this.app = getApp();
+    const screenWidth = (wx.getSystemInfoSync && wx.getSystemInfoSync().windowWidth) || 375;
+    this.setData({ boardSize: Math.max(280, screenWidth - 32) });
     this.transport = this.app.getTransport();
     this.unsubscribe = this.transport.subscribe((snapshot) => this.updateSnapshot(snapshot));
     this.updateSnapshot(this.app.getSnapshot());

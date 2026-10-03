@@ -178,17 +178,15 @@ export function mahjongTileKinds(): MahjongTile[] {
   return [...kinds.values()];
 }
 
-export function mahjongWaits(hand: readonly MahjongTile[], meldCount = 0, baoTile?: MahjongTile): MahjongTile[] {
+export function mahjongWaits(hand: readonly MahjongTile[], meldCount = 0): MahjongTile[] {
   if (hand.length !== (4 - meldCount) * 3 + 1) return [];
   return mahjongTileKinds().filter((tile) => isWinningMahjongHand([...hand, tile], meldCount)
-    || isBigWindWin(hand, tile)
-    || Boolean(baoTile && tileKey(tile) === tileKey(baoTile)));
+    || isBigWindWin(hand, tile));
 }
 
-export function hasMahjongListenYao(hand: readonly MahjongTile[], winningTile: MahjongTile, baoTile?: MahjongTile): boolean {
+export function hasMahjongListenYao(hand: readonly MahjongTile[], winningTile: MahjongTile): boolean {
   return hand.some((tile) => isMahjongTerminal(tile) || isRedCenter(tile))
-    || isMahjongTerminal(winningTile)
-    || Boolean(baoTile && tileKey(winningTile) === tileKey(baoTile));
+    || isMahjongTerminal(winningTile);
 }
 
 export function findTilesByKey(hand: readonly MahjongTile[], key: string, count: number): MahjongTile[] {

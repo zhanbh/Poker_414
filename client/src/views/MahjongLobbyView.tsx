@@ -25,7 +25,7 @@ export function MahjongLobbyView({ snapshot, ownSeat, spectator = false, onStart
           const canRemove = Boolean(player && ownPlayer?.isHost && player.seat !== ownSeat);
           return <article className={'mahjong-lobby-seat mahjong-lobby-seat-' + seat + (player ? ' occupied' : '')} key={seat}>
             <strong>{player?.seatLabel ?? ({ A: '东家', B: '南家', C: '西家', D: '北家' }[seat])}</strong>
-            {player ? <><b>{player.nickname}</b>{player.isHost ? <em>房主</em> : null}{!player.connected ? <em className="offline">已断开</em> : null}</> : <span>空位</span>}
+            {player ? <><b>{player.nickname}</b><small>{player.score} 积分</small>{player.isHost ? <em>房主</em> : null}{!player.connected ? <em className="offline">已断开</em> : null}</> : <span>空位</span>}
             {canRemove ? <button type="button" onClick={() => onRemove(seat)}>移除</button> : null}
           </article>;
         })}

@@ -387,6 +387,10 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
     if (changed) sendSnapshots();
   }, config.presenceScanMs);
   presenceTimer.unref();
+  const mahjongActionTimer = setInterval(() => {
+    if (mahjongRoomService.tick()) sendSnapshots();
+  }, 100);
+  mahjongActionTimer.unref();
 
   return {
     app,
@@ -397,6 +401,7 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
     mahjongRoomService,
     close: async () => {
       clearInterval(presenceTimer);
+      clearInterval(mahjongActionTimer);
       await io.close();
       for (const socket of miniProgramSocketServer.clients) socket.close();
       await new Promise<void>((resolve, reject) => {

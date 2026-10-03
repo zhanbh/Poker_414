@@ -9,11 +9,36 @@ function tileClass(tile) {
   return tile.suit === 'characters' ? 'wan' : tile.suit === 'bamboo' ? 'suo' : tile.suit === 'dots' ? 'tong' : 'honor';
 }
 
+const tileDecor = (tile) => ({
+  ...tile,
+  tileClass: tileClass(tile),
+  rankDisplay: typeof tile.rank === 'number' ? String(tile.rank) : '',
+  suitDisplay: tile.suit === 'characters' ? '萬子' : tile.suit === 'bamboo' ? '索子' : tile.suit === 'dots' ? '筒子' : tile.suit === 'winds' ? '風牌' : '箭牌',
+  isCharacters: tile.suit === 'characters',
+  isDots: tile.suit === 'dots',
+  isNumbered: typeof tile.rank === 'number',
+  motifs: typeof tile.rank === 'number' ? makeMotifs(tile.rank) : [],
+});
+
+function makeMotifs(rank) {
+  const layouts = {
+    1: [[50, 50]], 2: [[32, 23], [68, 77]], 3: [[32, 23], [50, 50], [68, 77]],
+    4: [[32, 23], [68, 23], [32, 77], [68, 77]], 5: [[32, 23], [68, 23], [50, 50], [32, 77], [68, 77]],
+    6: [[32, 20], [68, 20], [32, 50], [68, 50], [32, 80], [68, 80]],
+    7: [[32, 15], [68, 15], [32, 42], [68, 42], [32, 69], [68, 69], [50, 92]],
+    8: [[32, 14], [68, 14], [32, 38], [68, 38], [32, 62], [68, 62], [32, 86], [68, 86]],
+    9: [[32, 14], [50, 14], [68, 14], [32, 50], [50, 50], [68, 50], [32, 86], [50, 86], [68, 86]],
+  };
+  return (layouts[rank] || []).map(([left, top], index) => ({ left, top, id: index }));
+}
+
 Page({
-  data: { snapshot: null, chat: [], chatMembers: [], players: [], hand: [], selectedTileId: '', canListenSelected: false, ownSeat: null, currentTurn: null, turnStatus: '', isMyTurn: false, isResponsePhase: false, wallCount: 0, availableActions: [], chiOptions: [], listenTileIds: [], listenWaits: [], baoTile: null, opponentHands: [], paymentRows: [], isListening: false, canDiscard: false, canListen: false, canHu: false, canPeng: false, canChi: false, canKong: false, canAddedKong: false, canConcealedKong: false, canPass: false, canRespondNow: false, spectator: false, settlement: null, error: '' },
+  data: { snapshot: null, chat: [], chatMembers: [], players: [], hand: [], selectedTileId: '', canListenSelected: false, ownSeat: null, currentTurn: null, turnStatus: '', isMyTurn: false, isResponsePhase: false, wallCount: 0, wallSides: [], boardSize: 720, diceRoll: null, diceLabel: '掷骰', animationStage: '', autoDiscardPending: false, availableActions: [], chiOptions: [], listenTileIds: [], listenWaits: [], baoTile: null, opponentHands: [], paymentRows: [], isListening: false, canDiscard: false, canListen: false, canHu: false, canPeng: false, canChi: false, canKong: false, canAddedKong: false, canConcealedKong: false, canPass: false, canRespondNow: false, spectator: false, settlement: null, error: '' },
 
   onLoad() {
     this.app = getApp();
+    const screenWidth = (wx.getSystemInfoSync && wx.getSystemInfoSync().windowWidth) || 375;
+    this.setData({ boardSize: Math.max(280, screenWidth - 24) });
     this.transport = this.app.getTransport();
     this.unsubscribe = this.transport.subscribe((snapshot) => this.updateSnapshot(snapshot));
     this.unsubscribeReplaced = this.transport.onReplaced(() => this.setData({ error: '该会话已在其他页面接管' }));
@@ -23,6 +48,18 @@ Page({
   onUnload() {
     if (this.unsubscribe) this.unsubscribe();
     if (this.unsubscribeReplaced) this.unsubscribeReplaced();
+    clearTimeout(this.diceTimer);
+    clearTimeout(this.dealTimer);
+  },
+
+  playDealAnimation(handNumber) {
+    if (this.animatedHandNumber === handNumber) return;
+    this.animatedHandNumber = handNumber;
+    clearTimeout(this.diceTimer);
+    clearTimeout(this.dealTimer);
+    this.setData({ animationStage: 'dice' });
+    this.diceTimer = setTimeout(() => this.setData({ animationStage: 'deal' }), 850);
+    this.dealTimer = setTimeout(() => this.setData({ animationStage: '' }), 1850);
   },
 
   updateSnapshot(snapshot) {
@@ -40,6 +77,7 @@ Page({
       return;
     }
     const bySeat = new Map(snapshot.public.players.map((player) => [player.seat, player]));
+    if (snapshot.public.phase === 'playing') this.playDealAnimation(snapshot.public.handNumber);
     const selectedTileId = snapshot.private.isListening ? (snapshot.private.discardableTileId || '') : this.data.selectedTileId;
     const availableActions = snapshot.private.availableActions || [];
     const listenTileIds = snapshot.private.listenTileIds || [];
@@ -51,14 +89,12 @@ Page({
         ? '轮到你出牌'
         : currentPlayer ? `轮到${currentPlayer.nickname}出牌` : '等待牌局推进';
     const isMyTurn = !isResponsePhase && snapshot.public.currentTurn === snapshot.private.seat && snapshot.public.awaitingDiscard;
-    const hand = (snapshot.private.hand || []).map((tile) => ({ ...tile, tileClass: tileClass(tile), selected: tile.id === selectedTileId, listenOption: listenTileIds.includes(tile.id) }));
+    const hand = (snapshot.private.hand || []).map((tile) => ({ ...tileDecor(tile), selected: tile.id === selectedTileId, listenOption: listenTileIds.includes(tile.id) }));
     const chiOptions = (snapshot.private.chiOptions || []).map((tileIds) => {
-      const usedLabels = tileIds.slice(0, 2).map((id) => hand.find((tile) => tile.id === id)?.label || '?');
-      const discardTile = tileIds.length > 2 ? hand.find((tile) => tile.id === tileIds[2]) : null;
       return {
         key: tileIds.join('-'),
         tileIds,
-        label: discardTile ? `吃 ${usedLabels.join('、')}，听并打 ${discardTile.label}` : `吃 ${usedLabels.join('、')}`,
+        tiles: [snapshot.public.pendingDiscard && tileDecor(snapshot.public.pendingDiscard.tile), ...tileIds.map((id) => hand.find((tile) => tile.id === id))].filter(Boolean),
       };
     });
     const payments = snapshot.public.settlement && snapshot.public.settlement.payments ? snapshot.public.settlement.payments : {};
@@ -68,10 +104,18 @@ Page({
       amount: payments[seat],
       amountLabel: (payments[seat] > 0 ? '+' : '') + payments[seat] + '分',
     }));
-    const players = SEATS.map((seat) => bySeat.get(seat) || { seat, seatLabel: ({ A: '东家', B: '南家', C: '西家', D: '北家' })[seat], nickname: '空位', connected: false, handCount: 0, melds: [], discards: [], isDealer: false, isHost: false }).map((player) => ({
+    const exposedHands = new Map((snapshot.private.opponentHands || []).map((opponent) => [opponent.seat, opponent.hand]));
+    const players = SEATS.map((seat) => bySeat.get(seat) || { seat, seatLabel: ({ A: '東家', B: '南家', C: '西家', D: '北家' })[seat], nickname: '空位', connected: false, handCount: 0, melds: [], discards: [], isDealer: false, isHost: false }).map((player) => ({
       ...player,
-      discards: (player.discards || []).map((tile) => ({ ...tile, tileClass: tileClass(tile) })),
-      melds: player.melds || [],
+      discards: (player.discards || []).map(tileDecor),
+      melds: (player.melds || []).map((meld) => ({ ...meld, tiles: meld.tiles.map(tileDecor) })),
+      revealedHand: (exposedHands.get(player.seat) || []).map(tileDecor),
+      hiddenHand: Array.from({ length: player.seat === snapshot.private.seat ? 0 : Math.min(player.handCount, 14) }, (_, index) => ({ id: `${player.seat}-hidden-${index}` })),
+    }));
+    const wallCount = snapshot.public.wallCount;
+    const wallSides = Array.from({ length: 4 }, (_, side) => ({
+      position: ['north', 'east', 'south', 'west'][side],
+      tiles: Array.from({ length: Math.floor(wallCount / 4) + (side < wallCount % 4 ? 1 : 0) }, (_, index) => ({ id: `${side}-${index}` })),
     }));
     this.app.setSnapshot(snapshot);
     this.setData({
@@ -87,16 +131,17 @@ Page({
       turnStatus,
       isMyTurn,
       isResponsePhase,
-      wallCount: snapshot.public.wallCount,
+      wallCount,
+      wallSides,
+      diceRoll: snapshot.public.diceRoll,
+      diceLabel: snapshot.public.diceRoll ? `${snapshot.public.diceRoll[0]} · ${snapshot.public.diceRoll[1]}` : '掷骰',
+      autoDiscardPending: Boolean(snapshot.private.autoDiscardPending),
       availableActions,
       chiOptions,
       listenTileIds,
       listenWaits: snapshot.private.listenWaits || [],
       baoTile: snapshot.private.baoTile || null,
-      opponentHands: (snapshot.private.opponentHands || []).map((opponent) => ({
-        ...opponent,
-        hand: opponent.hand.map((tile) => ({ ...tile, tileClass: tileClass(tile) })),
-      })),
+      opponentHands: [],
       isListening: Boolean(snapshot.private.isListening),
       canDiscard: availableActions.includes('discard'),
       canListen: availableActions.includes('listen'),
@@ -117,7 +162,7 @@ Page({
 
   onTileTap(event) {
     const id = event.currentTarget.dataset.id;
-    if (!this.data.availableActions.includes('discard') || this.data.isListening) return;
+    if ((!this.data.availableActions.includes('discard') && !this.data.availableActions.includes('listen')) || this.data.isListening) return;
     this.setData({
       selectedTileId: id,
       canListenSelected: this.data.listenTileIds.includes(id),

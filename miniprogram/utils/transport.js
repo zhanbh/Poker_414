@@ -15,7 +15,7 @@ class MiniProgramTransport {
   }
 
   selectGame(gameId) {
-    this.gameId = gameId === 'texas' ? 'texas' : '414';
+    this.gameId = gameId === 'texas' || gameId === 'mahjong' ? gameId : '414';
   }
 
   connect() {

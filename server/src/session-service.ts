@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { Seat } from '../../shared/src/scoring';
 import { TexasSeat } from '../../shared/src/texas';
+import { MahjongSeat } from '../../shared/src/mahjong';
 
 export const ROOM_INACTIVE_TIMEOUT_MS = 5 * 60 * 1_000;
 
@@ -11,6 +12,7 @@ export interface Session {
   nickname: string | null;
   seat: Seat | null;
   texasSeat: TexasSeat | null;
+  mahjongSeat: MahjongSeat | null;
   connectionId: string | null;
   lastActivityAt: number;
   disconnectedAt: number | null;
@@ -27,6 +29,7 @@ export class SessionService {
       nickname: null,
       seat: null,
       texasSeat: null,
+      mahjongSeat: null,
       connectionId: null,
       lastActivityAt: now,
       disconnectedAt: null,
@@ -49,6 +52,10 @@ export class SessionService {
     this.get(sessionToken).texasSeat = seat;
   }
 
+  setMahjongSeat(sessionToken: string, seat: MahjongSeat | null): void {
+    this.get(sessionToken).mahjongSeat = seat;
+  }
+
   setIdentity(sessionToken: string, role: 'player' | 'spectator', nickname: string): void {
     const session = this.get(sessionToken);
     session.role = role;
@@ -61,6 +68,7 @@ export class SessionService {
     session.nickname = null;
     session.seat = null;
     session.texasSeat = null;
+    session.mahjongSeat = null;
   }
 
   touch(sessionToken: string, now = Date.now()): void {
@@ -109,6 +117,15 @@ export class SessionService {
     const session = this.findByPlayerId(playerId);
     if (session) {
       session.texasSeat = null;
+      session.role = null;
+      session.nickname = null;
+    }
+  }
+
+  clearMahjongSeatForPlayer(playerId: string): void {
+    const session = this.findByPlayerId(playerId);
+    if (session) {
+      session.mahjongSeat = null;
       session.role = null;
       session.nickname = null;
     }

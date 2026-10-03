@@ -1,0 +1,13 @@
+.mahjong-lobby-page { padding-top: 30rpx; }
+.mahjong-lobby-page .game-header { margin-bottom: 18rpx; }
+.mahjong-lobby-table { position: relative; min-height: 720rpx; margin-top: 28rpx; border: 2rpx solid #397a8b; border-radius: 50%; background: radial-gradient(ellipse at center, #1d665d 0%, #15504f 55%, #123844 100%); box-shadow: inset 0 0 0 12rpx rgba(8, 34, 45, .18), 0 18rpx 44rpx rgba(0, 0, 0, .25); }
+.mahjong-lobby-felt { position: absolute; top: 35%; left: 25%; right: 25%; display: flex; flex-direction: column; align-items: center; gap: 12rpx; text-align: center; }
+.mahjong-table-title { color: #ffd166; font-size: 38rpx; font-weight: 800; }
+.mahjong-lobby-felt button { margin-top: 8rpx; }
+.mahjong-lobby-seat { position: absolute; z-index: 2; display: flex; width: 230rpx; min-height: 138rpx; flex-direction: column; gap: 7rpx; padding: 14rpx; background: rgba(29, 75, 94, .96); border: 2rpx solid #397a8b; border-radius: 16rpx; box-shadow: 0 8rpx 18rpx rgba(0, 0, 0, .18); transform: translate(-50%, -50%); }
+.mahjong-lobby-seat-A { top: 5%; left: 50%; }
+.mahjong-lobby-seat-B { top: 50%; left: 95%; transform: translate(-100%, -50%); }
+.mahjong-lobby-seat-C { top: 95%; left: 50%; transform: translate(-50%, -100%); }
+.mahjong-lobby-seat-D { top: 50%; left: 5%; transform: translate(0, -50%); }
+.mahjong-lobby-seat .seat-title, .mahjong-lobby-seat .host { color: #ffd166; font-weight: 700; }
+.mahjong-lobby-seat button { align-self: flex-start; min-height: 52rpx; margin: 0; padding: 0 14rpx; font-size: 22rpx; }

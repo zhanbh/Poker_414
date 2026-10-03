@@ -10,8 +10,10 @@ import {
   GameId,
   GameSnapshot,
   isCommandEnvelope,
+  isMahjongCommandEnvelope,
   isTexasCommandEnvelope,
   MINI_PROGRAM_SOCKET_PATH,
+  MahjongCommandEnvelope,
   TexasCommandEnvelope,
   RoomChatPayload,
 } from '../../shared/src/protocol';
@@ -19,6 +21,7 @@ import { createHttpApp } from './http';
 import { loadConfig, ServerConfig } from './config';
 import { RoomService } from './room-service';
 import { TexasRoomService } from './texas-room-service';
+import { MahjongRoomService } from './mahjong-room-service';
 
 interface MiniProgramSocketState {
   readonly id: string;
@@ -33,7 +36,7 @@ interface MiniProgramMessage {
   readonly payload?: unknown;
 }
 
-type GameService = RoomService | TexasRoomService;
+type GameService = RoomService | TexasRoomService | MahjongRoomService;
 
 export interface RunningServer {
   readonly app: ReturnType<typeof createHttpApp>;
@@ -41,6 +44,7 @@ export interface RunningServer {
   readonly io: SocketServer;
   readonly roomService: RoomService;
   readonly texasRoomService: TexasRoomService;
+  readonly mahjongRoomService: MahjongRoomService;
   close(): Promise<void>;
 }
 
@@ -49,6 +53,10 @@ function acknowledge(ack: unknown, value: unknown): void {
 }
 
 function commandFor(gameId: GameId, value: unknown): AnyCommandEnvelope {
+  if (gameId === 'mahjong') {
+    if (!isMahjongCommandEnvelope(value)) throw new Error('麻将命令格式无效');
+    return value;
+  }
   if (gameId === 'texas') {
     if (!isTexasCommandEnvelope(value)) throw new Error('德州扑克命令格式无效');
     return value;
@@ -60,6 +68,7 @@ function commandFor(gameId: GameId, value: unknown): AnyCommandEnvelope {
 export function createServer(config: ServerConfig = loadConfig()): RunningServer {
   const roomService = new RoomService({ inviteCode: config.inviteCode });
   const texasRoomService = new TexasRoomService({ inviteCode: config.inviteCode });
+  const mahjongRoomService = new MahjongRoomService({ inviteCode: config.inviteCode });
   const app = createHttpApp(roomService, config.clientDist);
   const httpServer = createHttpServer(app);
   const io = new SocketServer(httpServer, { cors: { origin: false } });
@@ -70,7 +79,9 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
   const miniSocketsById = new Map<string, MiniProgramSocketState>();
   const gameByToken = new Map<string, GameId>();
 
-  const serviceFor = (gameId: GameId): GameService => gameId === 'texas' ? texasRoomService : roomService;
+  const serviceFor = (gameId: GameId): GameService => gameId === 'texas'
+    ? texasRoomService
+    : gameId === 'mahjong' ? mahjongRoomService : roomService;
   const gameIdForToken = (sessionToken: string): GameId => gameByToken.get(sessionToken) ?? '414';
 
   const sendMiniMessage = (socket: WebSocket, event: string, payload: unknown, requestId?: string) => {
@@ -170,7 +181,7 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
     try {
       if (event === EVENTS.login) {
         const payload = (message.payload ?? {}) as { inviteCode?: string; sessionToken?: string; gameId?: GameId };
-        const gameId = payload.gameId === 'texas' ? 'texas' : '414';
+        const gameId = payload.gameId === 'texas' || payload.gameId === 'mahjong' ? payload.gameId : '414';
         const service = serviceFor(gameId);
         const auth = payload.sessionToken ? service.resume(payload.sessionToken) : service.login(payload.inviteCode ?? '');
         const attachment = service.attach(auth.sessionToken, state.id);
@@ -184,9 +195,11 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
         const payload = (message.payload ?? {}) as { sessionToken?: string; nickname?: string; roomId?: string; gameId?: GameId };
         const sessionToken = payload.sessionToken ?? state.sessionToken;
         if (!sessionToken) throw new Error('请先登录');
-        const gameId = payload.gameId === 'texas' || state.gameId === 'texas' ? 'texas' : gameIdForToken(sessionToken);
+        const gameId = payload.gameId === 'texas' || payload.gameId === 'mahjong'
+          ? payload.gameId
+          : state.gameId ?? gameIdForToken(sessionToken);
         const service = serviceFor(gameId);
-        const snapshot = service.join(sessionToken, payload.nickname ?? '', payload.roomId ?? (gameId === 'texas' ? 'texas' : '414'));
+        const snapshot = service.join(sessionToken, payload.nickname ?? '', payload.roomId ?? (gameId === 'texas' ? 'texas' : gameId === 'mahjong' ? 'mahjong' : '414'));
         addMiniSocket(state, sessionToken, gameId);
         acknowledgeMini(state, requestId, { ok: true, snapshot });
         sendSnapshots();
@@ -211,7 +224,9 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
         const command = commandFor(gameId, message.payload);
         const result = gameId === 'texas'
           ? texasRoomService.dispatch(sessionToken, command as TexasCommandEnvelope)
-          : roomService.dispatch(sessionToken, command as CommandEnvelope);
+          : gameId === 'mahjong'
+            ? mahjongRoomService.dispatch(sessionToken, command as MahjongCommandEnvelope)
+            : roomService.dispatch(sessionToken, command as CommandEnvelope);
         acknowledgeMini(state, requestId, result);
         sendSnapshots();
         return;
@@ -239,7 +254,7 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
   io.on('connection', (socket) => {
     socket.on(EVENTS.login, (payload: { inviteCode?: string; sessionToken?: string; gameId?: GameId }, ack: unknown) => {
       try {
-        const gameId = payload?.gameId === 'texas' ? 'texas' : '414';
+        const gameId = payload?.gameId === 'texas' || payload?.gameId === 'mahjong' ? payload.gameId : '414';
         const service = serviceFor(gameId);
         const auth = payload?.sessionToken ? service.resume(payload.sessionToken) : service.login(payload?.inviteCode ?? '');
         const attachment = service.attach(auth.sessionToken, socket.id);
@@ -255,9 +270,11 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
       try {
         const sessionToken = payload?.sessionToken ?? socket.data.sessionToken;
         if (typeof sessionToken !== 'string') throw new Error('请先登录');
-        const gameId = payload?.gameId === 'texas' || socket.data.gameId === 'texas' ? 'texas' : '414';
+        const gameId = payload?.gameId === 'texas' || payload?.gameId === 'mahjong'
+          ? payload.gameId
+          : socket.data.gameId ?? gameIdForToken(sessionToken);
         const service = serviceFor(gameId);
-        const snapshot = service.join(sessionToken, payload?.nickname ?? '', payload?.roomId ?? (gameId === 'texas' ? 'texas' : '414'));
+        const snapshot = service.join(sessionToken, payload?.nickname ?? '', payload?.roomId ?? (gameId === 'texas' ? 'texas' : gameId === 'mahjong' ? 'mahjong' : '414'));
         addSocket(sessionToken, socket, gameId);
         acknowledge(ack, { ok: true, snapshot });
         sendSnapshots();
@@ -270,7 +287,7 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
       try {
         const sessionToken = socket.data.sessionToken;
         if (typeof sessionToken !== 'string') throw new Error('请先登录');
-        const gameId = socket.data.gameId === 'texas' ? 'texas' : gameIdForToken(sessionToken);
+        const gameId = socket.data.gameId ?? gameIdForToken(sessionToken);
         const service = serviceFor(gameId);
         if (!service.isConnectionOwner(sessionToken, socket.id)) throw new Error('当前连接已失去操作权');
         service.leave(sessionToken);
@@ -286,13 +303,15 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
       try {
         const sessionToken = socket.data.sessionToken;
         if (typeof sessionToken !== 'string') throw new Error('请先登录');
-        const gameId = socket.data.gameId === 'texas' ? 'texas' : gameIdForToken(sessionToken);
+        const gameId = socket.data.gameId ?? gameIdForToken(sessionToken);
         const service = serviceFor(gameId);
         if (!service.isConnectionOwner(sessionToken, socket.id)) throw new Error('当前连接已失去操作权');
         const validCommand = commandFor(gameId, command);
         const result = gameId === 'texas'
           ? texasRoomService.dispatch(sessionToken, validCommand as TexasCommandEnvelope)
-          : roomService.dispatch(sessionToken, validCommand as CommandEnvelope);
+          : gameId === 'mahjong'
+            ? mahjongRoomService.dispatch(sessionToken, validCommand as MahjongCommandEnvelope)
+            : roomService.dispatch(sessionToken, validCommand as CommandEnvelope);
         acknowledge(ack, result);
         sendSnapshots();
       } catch (error) {
@@ -304,7 +323,7 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
       try {
         const sessionToken = socket.data.sessionToken;
         if (typeof sessionToken !== 'string') throw new Error('请先登录');
-        const gameId = socket.data.gameId === 'texas' ? 'texas' : gameIdForToken(sessionToken);
+        const gameId = socket.data.gameId ?? gameIdForToken(sessionToken);
         const service = serviceFor(gameId);
         if (!service.isConnectionOwner(sessionToken, socket.id)) throw new Error('当前连接已失去操作权');
         const message = service.recordChat(sessionToken, payload);
@@ -318,7 +337,7 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
       try {
         const sessionToken = socket.data.sessionToken;
         if (typeof sessionToken !== 'string') throw new Error('请先登录');
-        const gameId = socket.data.gameId === 'texas' ? 'texas' : gameIdForToken(sessionToken);
+        const gameId = socket.data.gameId ?? gameIdForToken(sessionToken);
         const service = serviceFor(gameId);
         if (!service.isConnectionOwner(sessionToken, socket.id)) throw new Error('当前连接已失去操作权');
         const snapshot = service.recordActivity(sessionToken);
@@ -332,7 +351,7 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
     socket.on('disconnect', () => {
       const sessionToken = socket.data.sessionToken;
       if (typeof sessionToken !== 'string') return;
-      const gameId = socket.data.gameId === 'texas' ? 'texas' : gameIdForToken(sessionToken);
+      const gameId = socket.data.gameId ?? gameIdForToken(sessionToken);
       serviceFor(gameId).disconnect(sessionToken, socket.id);
       removeSocket(sessionToken, socket);
       sendSnapshots();
@@ -363,7 +382,8 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
   const presenceTimer = setInterval(() => {
     const roomChanged = roomService.scan();
     const texasChanged = texasRoomService.scan();
-    const changed = roomChanged || texasChanged;
+    const mahjongChanged = mahjongRoomService.scan();
+    const changed = roomChanged || texasChanged || mahjongChanged;
     if (changed) sendSnapshots();
   }, config.presenceScanMs);
   presenceTimer.unref();
@@ -374,6 +394,7 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
     io,
     roomService,
     texasRoomService,
+    mahjongRoomService,
     close: async () => {
       clearInterval(presenceTimer);
       await io.close();

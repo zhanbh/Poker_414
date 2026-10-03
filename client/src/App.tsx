@@ -6,10 +6,14 @@ import {
   CommandType,
   GameId,
   GameSnapshot,
+  isMahjongSnapshot,
   isTexasSnapshot,
   TexasCommandEnvelope,
   TexasCommandPayload,
   TexasCommandType,
+  MahjongCommandEnvelope,
+  MahjongCommandPayload,
+  MahjongCommandType,
   RoomChatInteraction,
   RoomChatPayload,
 } from '../../shared/src/protocol';
@@ -18,6 +22,8 @@ import { GameView } from './views/GameView';
 import { LobbyView } from './views/LobbyView';
 import { TexasGameView } from './views/TexasGameView';
 import { TexasLobbyView } from './views/TexasLobbyView';
+import { MahjongGameView } from './views/MahjongGameView';
+import { MahjongLobbyView } from './views/MahjongLobbyView';
 import { ClientTransport, createSocketClient } from './transport/socket-client';
 import { RoomChat, RoomChatMember } from './components/RoomChat';
 import { RoomInteractionEffect, RoomInteractionTarget } from './components/InteractionMenu';
@@ -37,7 +43,8 @@ function storageKey(gameId: GameId, kind: 'sessionToken' | 'nickname'): string {
 }
 
 function storedGame(storage: Storage): GameId {
-  return storage.getItem(GAME_KEY) === 'texas' ? 'texas' : '414';
+  const value = storage.getItem(GAME_KEY);
+  return value === 'texas' || value === 'mahjong' ? value : '414';
 }
 
 function disconnectedNames(previous: GameSnapshot | null, next: GameSnapshot): string[] {
@@ -59,6 +66,12 @@ function chatMembersFor(snapshot: GameSnapshot): RoomChatMember[] {
   if (isTexasSnapshot(snapshot)) {
     return [
       ...snapshot.public.players.map((player) => ({ id: player.seat, seat: player.seat, nickname: player.nickname, label: player.positionLabel ?? player.seat + ' 位' })),
+      ...snapshot.public.spectators.map((viewer, index) => ({ id: 'spectator-' + index + '-' + viewer.nickname, nickname: viewer.nickname, label: '观战' })),
+    ];
+  }
+  if (isMahjongSnapshot(snapshot)) {
+    return [
+      ...snapshot.public.players.map((player) => ({ id: player.seat, seat: player.seat, nickname: player.nickname, label: player.seatLabel })),
       ...snapshot.public.spectators.map((viewer, index) => ({ id: 'spectator-' + index + '-' + viewer.nickname, nickname: viewer.nickname, label: '观战' })),
     ];
   }
@@ -127,7 +140,7 @@ export function App({ transport: providedTransport }: { readonly transport?: Cli
     let cancelled = false;
     setBusy(true);
     transport.login('', savedToken)
-      .then(() => transport.join(savedNickname, gameId === 'texas' ? 'texas' : '414'))
+      .then(() => transport.join(savedNickname, gameId === 'texas' ? 'texas' : gameId === 'mahjong' ? 'mahjong' : '414'))
       .then((snap) => { if (!cancelled) consumeSnapshot(snap); })
       .catch(() => {
         storage.removeItem(storageKey(gameId, 'sessionToken'));
@@ -145,7 +158,7 @@ export function App({ transport: providedTransport }: { readonly transport?: Cli
     setError('');
   };
 
-  const runCommand = (type: CommandType | TexasCommandType, payload: CommandPayload | TexasCommandPayload) => {
+  const runCommand = (type: CommandType | TexasCommandType | MahjongCommandType, payload: CommandPayload | TexasCommandPayload | MahjongCommandPayload) => {
     if (!snapshot) return;
     const command: AnyCommandEnvelope = gameId === 'texas'
       ? {
@@ -155,6 +168,14 @@ export function App({ transport: providedTransport }: { readonly transport?: Cli
         stateVersion: snapshot.public.version,
         payload: payload as TexasCommandPayload,
       } as TexasCommandEnvelope
+      : gameId === 'mahjong'
+        ? {
+          type: type as MahjongCommandType,
+          requestId: requestId(),
+          handNumber: snapshot.public.handNumber,
+          stateVersion: snapshot.public.version,
+          payload: payload as MahjongCommandPayload,
+        } as MahjongCommandEnvelope
       : {
         type: type as CommandType,
         requestId: requestId(),
@@ -179,7 +200,7 @@ export function App({ transport: providedTransport }: { readonly transport?: Cli
       storage.setItem(tokenKey, auth.sessionToken);
       storage.setItem(nicknameKey, nickname);
       storage.setItem(GAME_KEY, gameId);
-      consumeSnapshot(await transport.join(nickname, gameId === 'texas' ? 'texas' : '414'));
+      consumeSnapshot(await transport.join(nickname, gameId === 'texas' ? 'texas' : gameId === 'mahjong' ? 'mahjong' : '414'));
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : '进入房间失败');
     } finally {
@@ -239,6 +260,12 @@ export function App({ transport: providedTransport }: { readonly transport?: Cli
       return <><TexasLobbyView snapshot={snapshot.public} ownSeat={snapshot.private.seat} spectator={Boolean(snapshot.private.spectator)} onStart={() => runCommand('start-hand', {})} onRemove={(seat) => runCommand('remove-player', { seat })} onLeave={leaveRoom} testMode={testMode} onInteract={sendInteraction} interactionEffect={interactionEffect} />{roomNotice}{error ? <p role="alert">{error}</p> : null}{roomChat}</>;
     }
     return <><TexasGameView snapshot={snapshot} onCommand={runCommand} onLeave={leaveRoom} testMode={testMode} onInteract={sendInteraction} interactionEffect={interactionEffect} />{roomNotice}{error ? <p role="alert">{error}</p> : null}{roomChat}</>;
+  }
+  if (isMahjongSnapshot(snapshot)) {
+    if (snapshot.public.phase === 'lobby') {
+      return <><MahjongLobbyView snapshot={snapshot.public} ownSeat={snapshot.private.seat} spectator={Boolean(snapshot.private.spectator)} onStart={() => runCommand('start-hand', {})} onRemove={(seat) => runCommand('remove-player', { seat })} onLeave={leaveRoom} testMode={testMode} />{roomNotice}{error ? <p role="alert">{error}</p> : null}{roomChat}</>;
+    }
+    return <><MahjongGameView snapshot={snapshot} onCommand={(type, payload = {}) => runCommand(type, payload)} onLeave={leaveRoom} testMode={testMode} />{roomNotice}{error ? <p role="alert">{error}</p> : null}{roomChat}</>;
   }
   if (!isTexasSnapshot(snapshot) && snapshot.public.phase === 'lobby') {
     return <><LobbyView snapshot={snapshot.public} ownSeat={snapshot.private.seat} spectator={Boolean(snapshot.private.spectator)} onStart={() => runCommand('start-hand', {})} onRemove={(seat) => runCommand('remove-player', { seat })} onLeave={leaveRoom} testMode={testMode} onInteract={sendInteraction} interactionEffect={interactionEffect} />{roomNotice}{error ? <p role="alert">{error}</p> : null}{roomChat}</>;

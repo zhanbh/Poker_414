@@ -17,8 +17,8 @@
   </view>
 
   <view class="panel access-panel">
-    <view class="selected-game-title">{{gameId === 'texas' ? '德州扑克' : '414'}} 内测</view>
-    <view class="muted selected-game-description">{{gameId === 'texas' ? '两人以上即可开局，后加入者等待下一局' : '四人私房扑克牌'}} · 邀请制</view>
+    <view class="selected-game-title">{{gameId === 'texas' ? '德州扑克' : gameId === 'mahjong' ? '麻将' : '414'}} 内测</view>
+    <view class="muted selected-game-description">{{gameId === 'texas' ? '两人以上即可开局，后加入者等待下一局' : gameId === 'mahjong' ? '四人大众麻将基础玩法' : '四人私房扑克牌'}} · 邀请制</view>
     <view class="field-label">邀请码</view>
     <input class="field-input" placeholder="请输入固定邀请码" value="{{inviteCode}}" bindinput="onInviteCodeInput" />
     <view class="field-label">昵称</view>

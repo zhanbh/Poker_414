@@ -4,3 +4,4 @@ export * from './rules';
 export * from './rule-engine';
 export * from './scoring';
 export * from './game-state';
+export * from './mahjong';

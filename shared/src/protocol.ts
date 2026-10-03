@@ -2,6 +2,7 @@ import { Card } from './cards';
 import { HandKind } from './hand-types';
 import { Level, Seat, SettlementMode, SettlementResult, Team } from './scoring';
 import type { TexasSeat } from './texas';
+import type { MahjongMeld, MahjongSeat, MahjongTile } from './mahjong';
 
 export const EVENTS = {
   login: 'auth:login',
@@ -16,7 +17,7 @@ export const EVENTS = {
 
 export const MINI_PROGRAM_SOCKET_PATH = '/414-ws';
 
-export type GameId = '414' | 'texas';
+export type GameId = '414' | 'texas' | 'mahjong';
 
 export type RoomChatInteraction = 'tomato' | 'water' | 'heart' | 'kiss';
 
@@ -45,6 +46,7 @@ export interface GameSelection {
 export const GAME_SELECTIONS: readonly GameSelection[] = [
   { id: '414', name: '414', description: '四人私房扑克牌', maxPlayers: 4 },
   { id: 'texas', name: '德州扑克', description: '两人以上即可开局的无限注德州扑克', maxPlayers: 8 },
+  { id: 'mahjong', name: '麻将', description: '四人大众麻将基础玩法', maxPlayers: 4 },
 ];
 
 
@@ -238,8 +240,103 @@ export interface TexasSnapshot {
   readonly private: TexasPrivateSnapshot;
 }
 
-export type GameSnapshot = RoomSnapshot | TexasSnapshot;
-export type AnyCommandEnvelope = CommandEnvelope | TexasCommandEnvelope;
+export type MahjongCommandType =
+  | 'start-hand'
+  | 'discard'
+  | 'listen'
+  | 'chi'
+  | 'peng'
+  | 'exposed-kong'
+  | 'added-kong'
+  | 'concealed-kong'
+  | 'hu'
+  | 'pass'
+  | 'next-hand'
+  | 'remove-player';
+
+export type MahjongCommandPayload =
+  | Record<string, never>
+  | { readonly tileId: string }
+  | { readonly tileIds: readonly string[]; readonly discardTileId?: string }
+  | { readonly seat: MahjongSeat };
+
+export interface MahjongCommandEnvelope {
+  readonly type: MahjongCommandType;
+  readonly requestId: string;
+  readonly handNumber: number;
+  readonly stateVersion: number;
+  readonly payload: MahjongCommandPayload;
+}
+
+export type MahjongAction = 'discard' | 'listen' | 'chi' | 'peng' | 'exposed-kong' | 'added-kong' | 'concealed-kong' | 'hu' | 'pass';
+
+export interface MahjongPlayerView {
+  readonly seat: MahjongSeat;
+  readonly seatLabel: string;
+  readonly nickname: string;
+  readonly connected: boolean;
+  readonly handCount: number;
+  readonly score: number;
+  readonly isListening: boolean;
+  readonly melds: MahjongMeld[];
+  readonly discards: MahjongTile[];
+  readonly isDealer: boolean;
+  readonly isHost: boolean;
+}
+
+export interface MahjongSettlement {
+  readonly winnerSeat: MahjongSeat | null;
+  readonly winnerNickname?: string;
+  readonly type: 'self-draw' | 'discard-win' | 'draw';
+  readonly winPattern?: 'standard' | 'bao' | 'big-wind';
+  readonly payingSeat?: MahjongSeat;
+  readonly payments?: Partial<Record<MahjongSeat, number>>;
+  readonly winningTile?: MahjongTile;
+}
+
+export interface MahjongPublicSnapshot {
+  readonly gameId: 'mahjong';
+  readonly roomId: string;
+  readonly phase: 'lobby' | 'playing' | 'settled';
+  readonly handNumber: number;
+  readonly version: number;
+  readonly players: MahjongPlayerView[];
+  readonly spectators: Array<{ readonly nickname: string; readonly connected: boolean }>;
+  readonly chat?: RoomChatMessage[];
+  readonly hostSeat: MahjongSeat | null;
+  readonly dealerSeat: MahjongSeat | null;
+  readonly currentTurn: MahjongSeat | null;
+  readonly awaitingDiscard: boolean;
+  readonly pendingDiscard: { readonly seat: MahjongSeat; readonly tile: MahjongTile } | null;
+  readonly responseSeats: MahjongSeat[];
+  readonly wallCount: number;
+  readonly lastDiscard: { readonly seat: MahjongSeat; readonly tile: MahjongTile } | null;
+  readonly settlement: MahjongSettlement | null;
+}
+
+export interface MahjongPrivateSnapshot {
+  readonly seat: MahjongSeat | null;
+  readonly hand: MahjongTile[];
+  readonly availableActions: MahjongAction[];
+  readonly chiOptions?: string[][];
+  readonly chiDiscardIds?: string[];
+  readonly listenTileIds?: string[];
+  readonly discardableTileId?: string;
+  readonly isListening?: boolean;
+  readonly listenWaits?: MahjongTile[];
+  readonly baoTile?: MahjongTile;
+  readonly opponentHands?: Array<{ readonly seat: MahjongSeat; readonly nickname: string; readonly hand: MahjongTile[] }>;
+  readonly spectator?: boolean;
+  readonly spectatorHands?: Array<{ readonly seat: MahjongSeat; readonly nickname: string; readonly hand: MahjongTile[] }>;
+}
+
+export interface MahjongSnapshot {
+  readonly public: MahjongPublicSnapshot;
+  readonly private: MahjongPrivateSnapshot;
+}
+
+export type GameSnapshot = RoomSnapshot | TexasSnapshot | MahjongSnapshot;
+export type AnyCommandEnvelope = CommandEnvelope | TexasCommandEnvelope | MahjongCommandEnvelope;
 
 
 const ROOM_CHAT_INTERACTIONS = new Set<RoomChatInteraction>(['tomato', 'water', 'heart', 'kiss']);
@@ -258,8 +355,16 @@ export function isTexasSnapshot(snapshot: GameSnapshot): snapshot is TexasSnapsh
   return snapshot.public && 'gameId' in snapshot.public && snapshot.public.gameId === 'texas';
 }
 
+export function isMahjongSnapshot(snapshot: GameSnapshot): snapshot is MahjongSnapshot {
+  return snapshot.public && 'gameId' in snapshot.public && snapshot.public.gameId === 'mahjong';
+}
+
 const TEXAS_COMMAND_TYPES = new Set<TexasCommandType>([
   'start-hand', 'fold', 'check', 'call', 'bet', 'raise', 'all-in', 'next-hand', 'remove-player',
+]);
+
+const MAHJONG_COMMAND_TYPES = new Set<MahjongCommandType>([
+  'start-hand', 'discard', 'listen', 'chi', 'peng', 'exposed-kong', 'added-kong', 'concealed-kong', 'hu', 'pass', 'next-hand', 'remove-player',
 ]);
 
 export function isTexasCommandEnvelope(value: unknown): value is TexasCommandEnvelope {
@@ -267,6 +372,23 @@ export function isTexasCommandEnvelope(value: unknown): value is TexasCommandEnv
   const candidate = value as Partial<TexasCommandEnvelope>;
   return typeof candidate.type === 'string'
     && TEXAS_COMMAND_TYPES.has(candidate.type as TexasCommandType)
+    && typeof candidate.requestId === 'string'
+    && candidate.requestId.length > 0
+    && typeof candidate.handNumber === 'number'
+    && Number.isInteger(candidate.handNumber)
+    && candidate.handNumber >= 0
+    && typeof candidate.stateVersion === 'number'
+    && Number.isInteger(candidate.stateVersion)
+    && candidate.stateVersion >= 0
+    && Boolean(candidate.payload)
+    && typeof candidate.payload === 'object';
+}
+
+export function isMahjongCommandEnvelope(value: unknown): value is MahjongCommandEnvelope {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<MahjongCommandEnvelope>;
+  return typeof candidate.type === 'string'
+    && MAHJONG_COMMAND_TYPES.has(candidate.type as MahjongCommandType)
     && typeof candidate.requestId === 'string'
     && candidate.requestId.length > 0
     && typeof candidate.handNumber === 'number'

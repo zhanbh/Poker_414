@@ -1,5 +1,5 @@
 const { getServerOrigin } = require('../../utils/config');
-const { GAME_SELECTIONS, isTexasSnapshot, storageKey } = require('../../utils/games');
+const { GAME_SELECTIONS, isTexasSnapshot, isMahjongSnapshot, storageKey } = require('../../utils/games');
 
 Page({
   data: {
@@ -15,7 +15,8 @@ Page({
   onLoad() {
     this.app = getApp();
     this.transport = this.app.getTransport();
-    const gameId = wx.getStorageSync('414.selectedGame') === 'texas' ? 'texas' : '414';
+    const savedGame = wx.getStorageSync('414.selectedGame');
+    const gameId = savedGame === 'texas' || savedGame === 'mahjong' ? savedGame : '414';
     this.app.setGame(gameId);
     this.setData({ gameId, serverOrigin: getServerOrigin() });
     this.unsubscribe = this.transport.subscribe((snapshot) => this.onSnapshot(snapshot));
@@ -27,7 +28,8 @@ Page({
   },
 
   onGameChange(event) {
-    const gameId = event.currentTarget.dataset.gameId === 'texas' ? 'texas' : '414';
+    const selectedGame = event.currentTarget.dataset.gameId;
+    const gameId = selectedGame === 'texas' || selectedGame === 'mahjong' ? selectedGame : '414';
     this.app.setGame(gameId);
     this.transport.selectGame(gameId);
     this.setData({ gameId, error: '' });
@@ -42,7 +44,7 @@ Page({
   },
 
   roomId() {
-    return this.data.gameId === 'texas' ? 'texas' : '414';
+    return this.data.gameId === 'texas' ? 'texas' : this.data.gameId === 'mahjong' ? 'mahjong' : '414';
   },
 
   async restoreSession() {
@@ -95,8 +97,11 @@ Page({
   enterSnapshot(snapshot) {
     this.app.setSnapshot(snapshot);
     const texas = isTexasSnapshot(snapshot);
+    const mahjong = isMahjongSnapshot(snapshot);
     const page = texas
       ? (snapshot.public.phase === 'lobby' ? '/pages/texas-lobby/index' : '/pages/texas-game/index')
+      : mahjong
+        ? (snapshot.public.phase === 'lobby' ? '/pages/mahjong-lobby/index' : '/pages/mahjong-game/index')
       : (snapshot.public.phase === 'lobby' ? '/pages/lobby/index' : '/pages/game/index');
     wx.reLaunch({ url: page });
   },

@@ -18,7 +18,7 @@ App({
   },
 
   setGame(gameId) {
-    this.globalData.gameId = gameId === 'texas' ? 'texas' : '414';
+    this.globalData.gameId = gameId === 'texas' || gameId === 'mahjong' ? gameId : '414';
     this.getTransport().selectGame(this.globalData.gameId);
     wx.setStorageSync('414.selectedGame', this.globalData.gameId);
   },

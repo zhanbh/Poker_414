@@ -202,7 +202,9 @@ export class MahjongRoomService {
       currentTurn: state.currentTurn,
       awaitingDiscard: state.awaitingDiscard,
       pendingDiscard: state.pending ? { seat: state.pending.seat, tile: state.pending.tile } : null,
-      responseSeats: state.pending ? Object.keys(state.pending.options) as MahjongSeat[] : [],
+      responseSeats: state.pending
+        ? Object.keys(state.pending.options).filter((seat) => !state.pending!.passed.includes(seat as MahjongSeat)) as MahjongSeat[]
+        : [],
       wallCount: state.wall.length + state.replacementWall.length,
       diceRoll: state.diceRoll,
       lastDiscard: state.lastDiscard,
@@ -229,7 +231,7 @@ export class MahjongRoomService {
           .filter((player): player is MahjongPlayer => player !== null && player.seat !== ownPlayer.seat)
           .map((player) => ({ seat: player.seat, nickname: player.nickname, hand: sortMahjongTiles(player.hand) })),
       } : {}),
-      ...(ownPlayer && state.pending ? { chiOptions: this.privateChiOptions(ownPlayer, state.pending) } : {}),
+      ...(ownPlayer && state.pending && available.includes('chi') ? { chiOptions: this.privateChiOptions(ownPlayer, state.pending) } : {}),
       spectator: session.role === 'spectator',
       ...(session.role === 'spectator' && state.phase === 'settled' ? {
         spectatorHands: Object.values(state.players)
@@ -464,7 +466,7 @@ export class MahjongRoomService {
     if (!tile) throw new MahjongRoomServiceError('TILE_NOT_OWNED', '选择的牌不在手牌中');
     if (player.lastDrawnTileId && player.lastDrawnTileId !== tileId) throw new MahjongRoomServiceError('LISTEN_DISCARD', '听牌时必须打出本轮刚摸到的牌');
     const hand = removeTileIds(player.hand, [tileId]);
-    const waits = this.validListenWaits(hand, player.melds.length);
+    const waits = this.validListenWaits(hand, player.melds.length, player.melds);
     if (!player.melds.some((meld) => meld.kind !== 'concealed-kong')) throw new MahjongRoomServiceError('CLOSED_HAND', '听牌前必须开门，先吃、碰或明杠一组牌');
     if (waits.length === 0) throw new MahjongRoomServiceError('NOT_LISTENING', '打出这张牌后不满足听牌条件');
     player.hand = hand;
@@ -493,6 +495,7 @@ export class MahjongRoomService {
       throw new MahjongRoomServiceError('INVALID_ACTION', '当前没有可跳过的操作');
     }
     if (!state.pending.options[seat]) throw new MahjongRoomServiceError('INVALID_ACTION', '当前没有可跳过的操作');
+    if (this.claimPriority(state.pending).seat !== seat) throw new MahjongRoomServiceError('CLAIM_PRIORITY', '有优先级更高的玩家正在响应');
     if (!state.pending.passed.includes(seat)) state.pending.passed.push(seat);
     state.version += 1;
     if (Object.keys(state.pending.options).every((candidate) => state.pending!.passed.includes(candidate as MahjongSeat))) this.advanceAfterNoResponse();
@@ -510,7 +513,7 @@ export class MahjongRoomService {
     const tile = winningTile ?? lastDrawn;
     const waitKeys = new Set(player.listenWaits.map(tileKey));
     const matchingReadyWait = Boolean(tile && waitKeys.has(tileKey(tile)));
-    const bigWind = Boolean(!onDiscard && tile && isBigWindWin(player.hand.filter((handTile) => handTile.id !== tile.id), tile));
+    const bigWind = Boolean(!onDiscard && tile && isBigWindWin(player.hand.filter((handTile) => handTile.id !== tile.id), tile, player.melds));
     const baoWin = Boolean(tile && player.listenBao && tileKey(tile) === tileKey(player.listenBao));
     const allowed = player.isListening
       && Boolean(tile)
@@ -679,7 +682,7 @@ export class MahjongRoomService {
     if (state.pending) {
       if (!state.pending.options[player.seat]) return [];
       const priority = this.claimPriority(state.pending);
-      return priority.seat === player.seat ? [...priority.actions, 'pass'] : ['pass'];
+      return priority.seat === player.seat ? [...priority.actions, 'pass'] : [];
     }
     if (state.currentTurn !== player.seat || !state.awaitingDiscard) return [];
     if (player.isListening) {
@@ -717,8 +720,8 @@ export class MahjongRoomService {
     }
   }
 
-  private validListenWaits(hand: MahjongTile[], meldCount: number): MahjongTile[] {
-    return mahjongWaits(hand, meldCount)
+  private validListenWaits(hand: MahjongTile[], meldCount: number, melds: readonly MahjongMeld[]): MahjongTile[] {
+    return mahjongWaits(hand, meldCount, melds)
       .filter((tile) => hasMahjongListenYao(hand, tile));
   }
 
@@ -727,7 +730,7 @@ export class MahjongRoomService {
     return player.hand.filter((discard) => {
       if (player.lastDrawnTileId && player.lastDrawnTileId !== discard.id) return false;
       const remaining = player.hand.filter((tile) => tile.id !== discard.id);
-      return this.validListenWaits(remaining, player.melds.length).length > 0;
+      return this.validListenWaits(remaining, player.melds.length, player.melds).length > 0;
     });
   }
 
@@ -746,7 +749,7 @@ export class MahjongRoomService {
       const afterClaim = player.hand.filter((tile) => !tiles.some((used) => used.id === tile.id));
       const canListenAfterClaim = afterClaim.some((discardTile) => {
         const afterDiscard = afterClaim.filter((tile) => tile.id !== discardTile.id);
-        return this.validListenWaits(afterDiscard, player.melds.length + 1).length > 0;
+        return this.validListenWaits(afterDiscard, player.melds.length + 1, player.melds).length > 0;
       });
       if (canListenAfterClaim) plans.push({ tiles, requiresListen: true });
     }
@@ -787,7 +790,7 @@ export class MahjongRoomService {
   private canSelfDrawHu(player: MahjongPlayer, tile: MahjongTile): boolean {
     return player.isListening && (
       player.listenWaits.some((wait) => tileKey(wait) === tileKey(tile))
-      || isBigWindWin(player.hand.filter((handTile) => handTile.id !== tile.id), tile)
+      || isBigWindWin(player.hand.filter((handTile) => handTile.id !== tile.id), tile, player.melds)
       || Boolean(player.listenBao && tileKey(player.listenBao) === tileKey(tile))
     );
   }

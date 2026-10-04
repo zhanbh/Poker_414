@@ -5,6 +5,12 @@ const { lostRoomIdentity, clearStoredIdentity } = require('../../utils/session')
 
 const SEATS = ['A', 'B', 'C', 'D'];
 
+function seatPosition(viewerSeat, seat) {
+  const viewerIndex = SEATS.indexOf(viewerSeat || 'A');
+  const offset = (SEATS.indexOf(seat) - viewerIndex + SEATS.length) % SEATS.length;
+  return ['bottom', 'left', 'top', 'right'][offset];
+}
+
 function tileClass(tile) {
   return tile.suit === 'characters' ? 'wan' : tile.suit === 'bamboo' ? 'suo' : tile.suit === 'dots' ? 'tong' : 'honor';
 }
@@ -33,7 +39,7 @@ function makeMotifs(rank) {
 }
 
 Page({
-  data: { snapshot: null, chat: [], chatMembers: [], players: [], hand: [], selectedTileId: '', canListenSelected: false, ownSeat: null, currentTurn: null, turnStatus: '', isMyTurn: false, isResponsePhase: false, wallCount: 0, wallSides: [], boardSize: 720, diceRoll: null, diceLabel: '掷骰', animationStage: '', autoDiscardPending: false, availableActions: [], chiOptions: [], listenTileIds: [], listenWaits: [], baoTile: null, opponentHands: [], paymentRows: [], isListening: false, canDiscard: false, canListen: false, canHu: false, canPeng: false, canChi: false, canKong: false, canAddedKong: false, canConcealedKong: false, canPass: false, canRespondNow: false, spectator: false, settlement: null, error: '' },
+  data: { snapshot: null, chat: [], chatMembers: [], players: [], hand: [], selectedTileId: '', canListenSelected: false, ownSeat: null, currentTurn: null, turnStatus: '', isMyTurn: false, isResponsePhase: false, isWaitingForPriority: false, wallCount: 0, wallSides: [], boardSize: 720, diceRoll: null, diceLabel: '掷骰', animationStage: '', autoDiscardPending: false, availableActions: [], chiOptions: [], listenTileIds: [], opponentHands: [], paymentRows: [], isListening: false, canDiscard: false, canListen: false, canHu: false, canPeng: false, canChi: false, canKong: false, canAddedKong: false, canConcealedKong: false, canPass: false, canRespondNow: false, spectator: false, settlement: null, error: '' },
 
   onLoad() {
     this.app = getApp();
@@ -82,6 +88,7 @@ Page({
     const availableActions = snapshot.private.availableActions || [];
     const listenTileIds = snapshot.private.listenTileIds || [];
     const isResponsePhase = Boolean(snapshot.public.pendingDiscard);
+    const isWaitingForPriority = Boolean(snapshot.private.seat && !snapshot.private.spectator && isResponsePhase && snapshot.public.responseSeats.includes(snapshot.private.seat) && availableActions.length === 0);
     const currentPlayer = bySeat.get(snapshot.public.currentTurn);
     const turnStatus = isResponsePhase
       ? `响应阶段 · 上手打出 ${snapshot.public.pendingDiscard.tile.label}，当前没有普通出牌权`
@@ -107,10 +114,11 @@ Page({
     const exposedHands = new Map((snapshot.private.opponentHands || []).map((opponent) => [opponent.seat, opponent.hand]));
     const players = SEATS.map((seat) => bySeat.get(seat) || { seat, seatLabel: ({ A: '東家', B: '南家', C: '西家', D: '北家' })[seat], nickname: '空位', connected: false, handCount: 0, melds: [], discards: [], isDealer: false, isHost: false }).map((player) => ({
       ...player,
-      discards: (player.discards || []).map(tileDecor),
+      position: seatPosition(snapshot.private.seat, player.seat),
+      avatarLabel: player.nickname ? player.nickname.slice(0, 1) : player.seat,
+      discards: (player.discards || []).map((tile) => ({ ...tileDecor(tile), isPendingDiscard: snapshot.public.pendingDiscard && snapshot.public.pendingDiscard.tile.id === tile.id })),
       melds: (player.melds || []).map((meld) => ({ ...meld, tiles: meld.tiles.map(tileDecor) })),
       revealedHand: (exposedHands.get(player.seat) || []).map(tileDecor),
-      hiddenHand: Array.from({ length: player.seat === snapshot.private.seat ? 0 : Math.min(player.handCount, 14) }, (_, index) => ({ id: `${player.seat}-hidden-${index}` })),
     }));
     const wallCount = snapshot.public.wallCount;
     const wallSides = Array.from({ length: 4 }, (_, side) => ({
@@ -131,6 +139,7 @@ Page({
       turnStatus,
       isMyTurn,
       isResponsePhase,
+      isWaitingForPriority,
       wallCount,
       wallSides,
       diceRoll: snapshot.public.diceRoll,
@@ -139,8 +148,6 @@ Page({
       availableActions,
       chiOptions,
       listenTileIds,
-      listenWaits: snapshot.private.listenWaits || [],
-      baoTile: snapshot.private.baoTile || null,
       opponentHands: [],
       isListening: Boolean(snapshot.private.isListening),
       canDiscard: availableActions.includes('discard'),

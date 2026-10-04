@@ -96,21 +96,17 @@ function isRedCenter(tile: Pick<MahjongTile, 'suit' | 'rank'>): boolean {
 
 function isSevenPairs(tiles: readonly MahjongTile[]): boolean {
   if (tiles.length !== 14) return false;
-  const jokers = tiles.filter(isRedCenter).length;
-  const counts = countsFor(tiles.filter((tile) => !isRedCenter(tile)));
-  const oddCount = [...counts.values()].filter((count) => count % 2 === 1).length;
-  return oddCount <= jokers && (jokers - oddCount) % 2 === 0;
+  const counts = countsFor(tiles);
+  return counts.size === 7 && [...counts.values()].every((count) => count === 2);
 }
 
-function removeMelds(counts: Map<string, number>, orderedKeys: readonly string[], jokers: number): boolean {
+function removeMelds(counts: Map<string, number>, orderedKeys: readonly string[]): boolean {
   const first = orderedKeys.find((key) => (counts.get(key) ?? 0) > 0);
-  if (!first) return jokers % 3 === 0;
+  if (!first) return true;
   const count = counts.get(first) ?? 0;
-  for (let used = 1; used <= Math.min(3, count); used += 1) {
-    const missing = 3 - used;
-    if (missing > jokers) continue;
-    counts.set(first, count - used);
-    if (removeMelds(counts, orderedKeys, jokers - missing)) return true;
+  if (count >= 3) {
+    counts.set(first, count - 3);
+    if (removeMelds(counts, orderedKeys)) return true;
     counts.set(first, count);
   }
   const [suit, rawRank] = first.split(':');
@@ -121,17 +117,16 @@ function removeMelds(counts: Map<string, number>, orderedKeys: readonly string[]
       const sequence = [start, start + 1, start + 2].map((value) => suit + ':' + value);
       if (!sequence.includes(first)) continue;
       const consumed: string[] = [];
-      let missing = 0;
       for (const key of sequence) {
         const available = counts.get(key) ?? 0;
         if (available > 0) {
           counts.set(key, available - 1);
           consumed.push(key);
         } else {
-          missing += 1;
+          break;
         }
       }
-      if (missing <= jokers && removeMelds(counts, orderedKeys, jokers - missing)) return true;
+      if (consumed.length === 3 && removeMelds(counts, orderedKeys)) return true;
       consumed.forEach((key) => counts.set(key, (counts.get(key) ?? 0) + 1));
     }
   }
@@ -142,31 +137,28 @@ export function isWinningMahjongHand(tiles: readonly MahjongTile[], meldCount = 
   const expected = (4 - meldCount) * 3 + 2;
   if (tiles.length !== expected) return false;
   if (meldCount === 0 && isSevenPairs(tiles)) return true;
-  const jokers = tiles.filter(isRedCenter).length;
-  const counts = countsFor(tiles.filter((tile) => !isRedCenter(tile)));
+  const counts = countsFor(tiles);
   const keys = [...counts.keys()].sort((left, right) => {
     const [leftSuit, leftRank] = left.split(':');
     const [rightSuit, rightRank] = right.split(':');
     return (leftSuit + leftRank).localeCompare(rightSuit + rightRank);
   });
   for (const [pairKey, pairCount] of counts) {
-    for (let used = 1; used <= Math.min(2, pairCount); used += 1) {
-      const missing = 2 - used;
-      if (missing > jokers) continue;
-      const remaining = new Map(counts);
-      remaining.set(pairKey, pairCount - used);
-      if (removeMelds(remaining, keys, jokers - missing)) return true;
-    }
+    if (pairCount < 2) continue;
+    const remaining = new Map(counts);
+    remaining.set(pairKey, pairCount - 2);
+    if (removeMelds(remaining, keys)) return true;
   }
-  return jokers >= 2 && removeMelds(new Map(counts), keys, jokers - 2);
+  return false;
 }
 
 export function isMahjongTerminal(tile: Pick<MahjongTile, 'suit' | 'rank'>): boolean {
   return isNumbered(tile) && (tile.rank === 1 || tile.rank === 9);
 }
 
-export function isBigWindWin(hand: readonly MahjongTile[], winningTile: MahjongTile): boolean {
-  return matchingTileCount(hand, winningTile) === 3;
+export function isBigWindWin(hand: readonly MahjongTile[], winningTile: MahjongTile, melds: readonly MahjongMeld[] = []): boolean {
+  const meldTileCount = melds.reduce((count, meld) => count + matchingTileCount(meld.tiles, winningTile), 0);
+  return matchingTileCount(hand, winningTile) + meldTileCount === 3;
 }
 
 export function mahjongTileKinds(): MahjongTile[] {
@@ -178,10 +170,10 @@ export function mahjongTileKinds(): MahjongTile[] {
   return [...kinds.values()];
 }
 
-export function mahjongWaits(hand: readonly MahjongTile[], meldCount = 0): MahjongTile[] {
+export function mahjongWaits(hand: readonly MahjongTile[], meldCount = 0, melds: readonly MahjongMeld[] = []): MahjongTile[] {
   if (hand.length !== (4 - meldCount) * 3 + 1) return [];
   return mahjongTileKinds().filter((tile) => isWinningMahjongHand([...hand, tile], meldCount)
-    || isBigWindWin(hand, tile));
+    || isBigWindWin(hand, tile, melds));
 }
 
 export function hasMahjongListenYao(hand: readonly MahjongTile[], winningTile: MahjongTile): boolean {

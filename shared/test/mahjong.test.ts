@@ -56,6 +56,20 @@ describe('Mahjong shared rules', () => {
     expect(isBigWindWin(hand, tile('dots', 4), pongs)).toBe(false);
   });
 
+  it('does not allow a big-wind tile to make a scattered hand ready', () => {
+    const deck = createMahjongDeck();
+    const tile = (suit: string, rank: number | string, copy = 0) => deck.find((candidate) => candidate.suit === suit && candidate.rank === rank && candidate.id.endsWith('-' + copy))!;
+    const whitePong: MahjongMeld[] = [{ kind: 'peng', tiles: [0, 1, 2].map((copy) => tile('dragons', 'white', copy)) }];
+    const hand = [
+      tile('characters', 3), tile('characters', 3, 1), tile('characters', 5),
+      tile('bamboo', 1), tile('bamboo', 2), tile('bamboo', 3),
+      tile('bamboo', 5), tile('bamboo', 5, 1), tile('bamboo', 6), tile('dots', 3),
+    ];
+
+    expect(isBigWindWin(hand, tile('dragons', 'white', 3), whitePong)).toBe(true);
+    expect(mahjongWaits(hand, 1, whitePong)).toEqual([]);
+  });
+
   it('accepts two pairs or a triplet, but rejects concealed sequences with only one pair', () => {
     const deck = createMahjongDeck();
     const copies = (suit: string, rank: number | string, count: number) => deck

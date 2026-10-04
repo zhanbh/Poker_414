@@ -176,8 +176,11 @@ export function mahjongTileKinds(): MahjongTile[] {
 
 export function mahjongWaits(hand: readonly MahjongTile[], meldCount = 0, melds: readonly MahjongMeld[] = []): MahjongTile[] {
   if (hand.length !== (4 - meldCount) * 3 + 1) return [];
-  return mahjongTileKinds().filter((tile) => isWinningMahjongHand([...hand, tile], meldCount)
-    || isBigWindWin(hand, tile, melds));
+  const kinds = mahjongTileKinds();
+  const structuralWaits = kinds.filter((tile) => isWinningMahjongHand([...hand, tile], meldCount));
+  if (structuralWaits.length === 0) return [];
+  const structuralKeys = new Set(structuralWaits.map(tileKey));
+  return kinds.filter((tile) => structuralKeys.has(tileKey(tile)) || isBigWindWin(hand, tile, melds));
 }
 
 /** The custom rules require two concealed pairs or a concealed triplet. */

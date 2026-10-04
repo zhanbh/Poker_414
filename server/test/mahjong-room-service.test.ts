@@ -112,6 +112,38 @@ describe('MahjongRoomService', () => {
       .toThrow('打出这张牌后不满足听牌条件');
   });
 
+  it('白板碰牌不能让散牌凭大风听口听牌', () => {
+    const room = new MahjongRoomService({ inviteCode: 'inner-414', random: () => 0.42 });
+    const players = ['甲', '乙', '丙', '丁'].map((nickname) => {
+      const auth = room.login('inner-414');
+      room.join(auth.sessionToken, nickname, 'mahjong');
+      return auth;
+    });
+    const lobby = room.getSnapshot(players[0].sessionToken);
+    room.dispatch(players[0].sessionToken, command('start-hand', lobby.public.handNumber, lobby.public.version));
+
+    const deck = createMahjongDeck();
+    const tile = (suit: string, rank: number | string, copy = 0) => deck.find((candidate) => candidate.suit === suit && candidate.rank === rank && candidate.id.endsWith('-' + copy))!;
+    const east = tile('winds', 'east');
+    const internals = room as unknown as {
+      state: { players: Record<MahjongSeat, { hand: MahjongTile[]; melds: MahjongMeld[]; lastDrawnTileId: string | null } | null> };
+    };
+    const player = internals.state.players.A!;
+    player.hand = [
+      tile('characters', 3), tile('characters', 3, 1), tile('characters', 5),
+      tile('bamboo', 1), tile('bamboo', 2), tile('bamboo', 3),
+      tile('bamboo', 5), tile('bamboo', 5, 1), tile('bamboo', 6), tile('dots', 3), east,
+    ];
+    player.melds = [{ kind: 'peng', tiles: [0, 1, 2].map((copy) => tile('dragons', 'white', copy)) }];
+    player.lastDrawnTileId = east.id;
+
+    const view = room.getSnapshot(players[0].sessionToken);
+    expect(view.private.listenOptions).toBeUndefined();
+    expect(view.private.availableActions).not.toContain('listen');
+    expect(() => room.dispatch(players[0].sessionToken, command('listen', view.public.handNumber, view.public.version, { tileId: east.id })))
+      .toThrow('打出这张牌后不满足听牌条件');
+  });
+
   it('出牌后没有响应时按顺序摸牌并把牌权交给下一位', () => {
     const room = new MahjongRoomService({ inviteCode: 'inner-414', random: () => 0.42 });
     const players = ['甲', '乙', '丙', '丁'].map((nickname) => {

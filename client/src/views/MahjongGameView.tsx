@@ -3,16 +3,7 @@ import { MahjongCommandPayload, MahjongCommandType, MahjongSnapshot } from '../.
 import { MAHJONG_SEATS, MahjongSeat, MahjongTile } from '../../../shared/src/mahjong';
 import { RoomPurposeNotice } from '../components/RoomPurposeNotice';
 
-const PIPS: Record<number, Array<[number, number]>> = {
-  1: [[15, 18]], 2: [[8, 8], [22, 28]], 3: [[8, 8], [15, 18], [22, 28]],
-  4: [[8, 8], [22, 8], [8, 28], [22, 28]], 5: [[8, 8], [22, 8], [15, 18], [8, 28], [22, 28]],
-  6: [[8, 7], [22, 7], [8, 18], [22, 18], [8, 29], [22, 29]],
-  7: [[8, 5], [22, 5], [8, 16], [22, 16], [8, 27], [22, 27], [15, 35]],
-  8: [[8, 5], [22, 5], [8, 15], [22, 15], [8, 25], [22, 25], [8, 35], [22, 35]],
-  9: [[8, 5], [15, 5], [22, 5], [8, 18], [15, 18], [22, 18], [8, 31], [15, 31], [22, 31]],
-};
-const PIP_COLORS = ['#20835a', '#276bb2', '#c52d2d'];
-const HAN_NUMERALS: Record<number, string> = { 1: '一', 2: '二', 3: '三', 4: '四', 5: '五', 6: '六', 7: '七', 8: '八', 9: '九' };
+const HONOR_SPRITE_COLUMNS: Record<string, number> = { east: 0, south: 1, west: 2, north: 3, red: 4, green: 5, white: 6 };
 
 function tileClass(tile: MahjongTile): string {
   if (tile.suit === 'characters') return 'wan';
@@ -32,15 +23,9 @@ function TileFace({ tile, selected = false, listenOption = false, pending = fals
   readonly onPointerMove?: (event: PointerEvent<HTMLButtonElement>) => void;
   readonly onPointerUp?: (event: PointerEvent<HTMLButtonElement>) => void;
 }) {
-  const numbered = typeof tile.rank === 'number';
-  const face = <>
-    <span className="mahjong-face-top">{numbered ? tile.rank : ''}</span>
-    {numbered && tile.suit === 'dots' ? <svg className="mahjong-dot-art" viewBox="0 0 30 40" aria-hidden="true">{(PIPS[tile.rank] ?? []).map(([x, y], index) => <g key={index} className={`pip pip-${index % PIP_COLORS.length}`} style={{ color: PIP_COLORS[index % PIP_COLORS.length] }}><circle className="dot-outline" cx={x} cy={y} r="4.1" /><circle className="dot-center" cx={x} cy={y} r="1.5" /></g>)}</svg> : null}
-    {numbered && tile.suit === 'bamboo' ? <svg className="mahjong-bamboo-art" viewBox="0 0 30 40" aria-hidden="true">{Array.from({ length: Math.min(tile.rank, 5) }, (_, index) => <g key={index} transform={`translate(${5 + (index % 3) * 10} ${3 + Math.floor(index / 3) * 13})`} className={`pip pip-${index % PIP_COLORS.length}`} style={{ color: PIP_COLORS[index % PIP_COLORS.length] }}><path d="M5 1v10" /><path d="M5 4 1 2M5 7l4-3" /><path d="M5 2 3 0M5 5 7 3" /></g>)}</svg> : null}
-    {numbered && tile.suit === 'characters' ? <span className="mahjong-char-art"><span>{HAN_NUMERALS[tile.rank]}</span><b>萬</b></span> : null}
-    {!numbered ? <span className="mahjong-honor-art">{tile.label}</span> : null}
-    <span className="mahjong-face-bottom">{numbered ? (tile.suit === 'characters' ? '萬子' : tile.suit === 'bamboo' ? '索子' : '筒子') : tile.suit === 'winds' ? '風牌' : '箭牌'}</span>
-  </>;
+  const row = tile.suit === 'dots' ? 0 : tile.suit === 'bamboo' ? 1 : tile.suit === 'characters' ? 2 : 3;
+  const column = typeof tile.rank === 'number' ? tile.rank - 1 : HONOR_SPRITE_COLUMNS[tile.rank];
+  const face = <span className="mahjong-face-art" aria-hidden="true"><img src="/assets/mahjong-tiles.png" alt="" draggable={false} style={{ left: `${-column * 100}%`, top: `${-row * 100}%` }} /></span>;
   const className = `mahjong-face ${tileClass(tile)}${selected ? ' selected' : ''}${listenOption ? ' listen-option' : ''}${pending ? ' pending-discard' : ''}${drawn ? ' drawn' : ''}`;
   return onClick
     ? <button type="button" className={className} onClick={onClick} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} aria-label={tile.label}>{face}</button>
@@ -205,7 +190,7 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode }: {
       <RoomPurposeNotice />
       <section ref={tableRef} onClick={handleTableClick} className={`mahjong-table${settlement ? ' is-settled' : ''}${selectedTileId ? ' has-selected-tile' : ''}`} aria-label="方形麻将桌">
         {wallSides.map(({ seat, position, stacks }) => <div className={`mahjong-wall mahjong-wall-${position}`} aria-label={`${players.get(seat)?.nickname ?? '玩家'}面前剩余牌墙`} key={seat}>
-          {stacks.map((stack) => <span className="mahjong-wall-stack" key={stack.id}>{stack.tiles.map((tile) => <TileBack key={tile.id} replacement={tile.replacement} />)}</span>)}
+          {stacks.map((stack) => <span className={`mahjong-wall-stack${stack.tiles.length === 2 ? ' double' : ''}`} key={stack.id}><TileBack replacement={stack.tiles.some((tile) => tile.replacement)} /></span>)}
         </div>)}
         {MAHJONG_SEATS.map((seat) => {
           const position = seatPosition(viewerSeat, seat);
@@ -218,12 +203,13 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode }: {
           return <article className={`mahjong-seat mahjong-seat-${position}${isCurrentTurn ? ' current' : ''}${canRespond ? ' responding' : ''}${isOwnSeat ? ' own' : ''}`} key={seat} aria-label={player.nickname}>
             <div className="mahjong-player-card">
               <span className="mahjong-player-avatar">{player.nickname.slice(0, 1)}</span>
-              <div className="mahjong-player-meta"><strong>{player.nickname}</strong></div>
+              <div className="mahjong-player-meta"><strong>{player.nickname}</strong><span>{player.score} 分</span></div>
               {player.isDealer ? <span className="mahjong-player-badge dealer" aria-label="庄家">庄</span> : null}
               {player.isListening ? <span className="mahjong-player-badge listening" aria-label="听牌标识">听</span> : null}
             </div>
             {player.melds.length ? <div className="mahjong-seat-melds">{player.melds.map((meld, index) => <MeldTiles meld={meld} key={`${seat}-${index}`} />)}</div> : null}
             {!isOwnSeat && visibleHand ? <div className="mahjong-revealed-hand" aria-label={`${player.nickname}的明牌`}>{visibleHand.map((tile) => <TileFace tile={tile} key={tile.id} />)}</div> : null}
+            {!isOwnSeat && !visibleHand && player.handCount > 0 ? <div className="mahjong-concealed-hand" aria-label={`${player.nickname}的未公开手牌`}>{Array.from({ length: player.handCount }, (_, index) => <TileBack key={`${seat}-hand-${index}`} />)}</div> : null}
             {isOwnSeat ? <>
               <div className="mahjong-own-hand" aria-label="我的手牌">{displayHand.map((tile) => <TileFace key={tile.id} tile={tile} drawn={tile.id === drawnTileId} selected={tile.id === selectedTileId} listenOption={listenTileIds.has(tile.id)} pending={tile.id === draggingTileId} onClick={isMyTurn && !snapshot.private.isListening ? () => {
                 if (suppressTileClickRef.current) { suppressTileClickRef.current = false; return; }

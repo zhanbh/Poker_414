@@ -74,6 +74,10 @@ describe('MahjongGameView discard interaction', () => {
     const table = container.querySelector('.mahjong-table')!;
     const tile = container.querySelector('.mahjong-own-hand .mahjong-face')!;
 
+    expect(table.querySelectorAll('.mahjong-seat-right .mahjong-concealed-hand .mahjong-tile-back')).toHaveLength(13);
+    expect(table.querySelector('.mahjong-seat-right .mahjong-player-meta')?.textContent).toContain('1000 分');
+    expect(table.querySelectorAll('.mahjong-wall-stack .mahjong-tile-back')).toHaveLength(42);
+
     fireEvent.click(tile);
     fireEvent.click(table);
 

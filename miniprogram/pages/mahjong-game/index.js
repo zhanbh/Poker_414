@@ -4,6 +4,7 @@ const { commandFor } = require('../../utils/commands');
 const { lostRoomIdentity, clearStoredIdentity } = require('../../utils/session');
 
 const SEATS = ['A', 'B', 'C', 'D'];
+const HONOR_SPRITE_COLUMNS = { east: 0, south: 1, west: 2, north: 3, red: 4, green: 5, white: 6 };
 
 function seatPosition(viewerSeat, seat) {
   const viewerIndex = SEATS.indexOf(viewerSeat || 'A');
@@ -18,29 +19,11 @@ function tileClass(tile) {
   return tile.suit === 'winds' ? 'honor wind' : `honor dragon-${tile.rank}`;
 }
 
-const tileDecor = (tile) => ({
-  ...tile,
-  tileClass: tileClass(tile),
-  rankDisplay: typeof tile.rank === 'number' ? String(tile.rank) : '',
-  rankChinese: typeof tile.rank === 'number' ? ['','一','二','三','四','五','六','七','八','九'][tile.rank] : '',
-  suitDisplay: tile.suit === 'characters' ? '萬子' : tile.suit === 'bamboo' ? '索子' : tile.suit === 'dots' ? '筒子' : tile.suit === 'winds' ? '風牌' : '箭牌',
-  isCharacters: tile.suit === 'characters',
-  isDots: tile.suit === 'dots',
-  isNumbered: typeof tile.rank === 'number',
-  motifs: typeof tile.rank === 'number' ? makeMotifs(tile.rank) : [],
-});
-
-function makeMotifs(rank) {
-  const layouts = {
-    1: [[50, 50]], 2: [[32, 23], [68, 77]], 3: [[32, 23], [50, 50], [68, 77]],
-    4: [[32, 23], [68, 23], [32, 77], [68, 77]], 5: [[32, 23], [68, 23], [50, 50], [32, 77], [68, 77]],
-    6: [[32, 20], [68, 20], [32, 50], [68, 50], [32, 80], [68, 80]],
-    7: [[32, 15], [68, 15], [32, 42], [68, 42], [32, 69], [68, 69], [50, 92]],
-    8: [[32, 14], [68, 14], [32, 38], [68, 38], [32, 62], [68, 62], [32, 86], [68, 86]],
-    9: [[32, 14], [50, 14], [68, 14], [32, 50], [50, 50], [68, 50], [32, 86], [50, 86], [68, 86]],
-  };
-  return (layouts[rank] || []).map(([left, top], index) => ({ left, top, id: index, color: ['green', 'blue', 'red'][index % 3] }));
-}
+const tileDecor = (tile) => {
+  const row = tile.suit === 'dots' ? 0 : tile.suit === 'bamboo' ? 1 : tile.suit === 'characters' ? 2 : 3;
+  const column = typeof tile.rank === 'number' ? tile.rank - 1 : HONOR_SPRITE_COLUMNS[tile.rank];
+  return { ...tile, tileClass: tileClass(tile), spriteLeft: -column * 100, spriteTop: -row * 100 };
+};
 
 Page({
   data: { snapshot: null, chat: [], chatMembers: [], players: [], hand: [], discardRiver: [], selectedTileId: '', canListenSelected: false, listenOptions: [], listenPreview: null, ownSeat: null, currentTurn: null, turnStatus: '', isMyTurn: false, isResponsePhase: false, isWaitingForPriority: false, wallCount: 0, wallSides: [], boardSize: 720, diceRoll: null, diceLabel: '掷骰', animationStage: '', autoDiscardPending: false, availableActions: [], chiOptions: [], chiPickerOpen: false, listenTileIds: [], opponentHands: [], paymentRows: [], isListening: false, canDiscard: false, canListen: false, canHu: false, canPeng: false, canChi: false, canKong: false, canAddedKong: false, canConcealedKong: false, canPass: false, canRespondNow: false, spectator: false, settlement: null, settlementDescription: '', error: '' },
@@ -134,13 +117,14 @@ Page({
       ...(snapshot.private.opponentHands || []),
       ...(snapshot.public.revealedHands || []),
     ].map((opponent) => [opponent.seat, opponent.hand]));
-    const players = SEATS.map((seat) => bySeat.get(seat) || { seat, seatLabel: ({ A: '東家', B: '南家', C: '西家', D: '北家' })[seat], nickname: '空位', connected: false, handCount: 0, melds: [], discards: [], isDealer: false, isHost: false }).map((player) => ({
+    const players = SEATS.map((seat) => bySeat.get(seat) || { seat, seatLabel: ({ A: '東家', B: '南家', C: '西家', D: '北家' })[seat], nickname: '空位', connected: false, handCount: 0, score: 0, melds: [], discards: [], isDealer: false, isHost: false }).map((player) => ({
       ...player,
       position: seatPosition(snapshot.private.seat, player.seat),
       avatarLabel: player.nickname ? player.nickname.slice(0, 1) : player.seat,
       discards: (player.discards || []).map((tile) => ({ ...tileDecor(tile), isPendingDiscard: snapshot.public.pendingDiscard && snapshot.public.pendingDiscard.tile.id === tile.id })),
       melds: (player.melds || []).map((meld) => ({ ...meld, tiles: meld.tiles.map(tileDecor) })),
       revealedHand: (exposedHands.get(player.seat) || []).map(tileDecor),
+      concealedTiles: Array.from({ length: player.handCount || 0 }, (_, index) => `${player.seat}-hand-${index}`),
     }));
     const discardRiver = (snapshot.public.discardRiver || []).map((discard) => ({
       ...tileDecor(discard.tile),
@@ -161,10 +145,10 @@ Page({
         position: seatPosition(snapshot.private.seat, side.seat),
         seat: side.seat,
         isBreakSide: snapshot.public.wallLayout.breakSide === side.seat,
-        stacks: Array.from({ length: Math.ceil(tiles.length / 2) }, (_, index) => ({
-          id: `${side.seat}-stack-${index}`,
-          tiles: tiles.slice(index * 2, index * 2 + 2),
-        })),
+        stacks: Array.from({ length: Math.ceil(tiles.length / 2) }, (_, index) => {
+          const stackTiles = tiles.slice(index * 2, index * 2 + 2);
+          return { id: `${side.seat}-stack-${index}`, isDouble: stackTiles.length === 2, replacement: stackTiles.some((tile) => tile.replacement) };
+        }),
       };
     });
     this.app.setSnapshot(snapshot);

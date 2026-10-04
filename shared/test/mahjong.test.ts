@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { createMahjongDeck, isBigWindWin, isWinningMahjongHand, mahjongWaits, MahjongMeld, sortMahjongTiles } from '../src/mahjong';
+import { createMahjongDeck, hasMahjongPairStructure, isBigWindWin, isWinningMahjongHand, mahjongWaits, MahjongMeld, sortMahjongTiles } from '../src/mahjong';
 
 describe('Mahjong shared rules', () => {
-  it('creates a 128-tile deck without green and white dragons', () => {
+  it('creates the standard 136-tile deck including green and white dragons', () => {
     const deck = createMahjongDeck();
-    expect(deck).toHaveLength(128);
-    expect(new Set(deck.map((tile) => tile.id)).size).toBe(128);
+    expect(deck).toHaveLength(136);
+    expect(new Set(deck.map((tile) => tile.id)).size).toBe(136);
+    expect(deck.some((tile) => tile.label === '發')).toBe(true);
+    expect(deck.some((tile) => tile.label === '白')).toBe(true);
   });
 
   it('recognizes a standard hand and seven pairs', () => {
@@ -52,5 +54,23 @@ describe('Mahjong shared rules', () => {
     expect(waits).toEqual(expect.arrayContaining(['1条', '2筒', '3条', '6筒']));
     expect(isBigWindWin(hand, tile('dots', 2, 3), pongs)).toBe(true);
     expect(isBigWindWin(hand, tile('dots', 4), pongs)).toBe(false);
+  });
+
+  it('accepts two pairs or a triplet, but rejects concealed sequences with only one pair', () => {
+    const deck = createMahjongDeck();
+    const copies = (suit: string, rank: number | string, count: number) => deck
+      .filter((tile) => tile.suit === suit && tile.rank === rank).slice(0, count);
+    const twoPairs = [...copies('characters', 2, 2), ...copies('dots', 7, 2), ...copies('bamboo', 1, 1)];
+    const triplet = copies('dragons', 'green', 3);
+    const allSequences = [
+      ...copies('characters', 1, 1), ...copies('characters', 2, 1), ...copies('characters', 3, 1),
+      ...copies('bamboo', 4, 1), ...copies('bamboo', 5, 1), ...copies('bamboo', 6, 1),
+      ...copies('dots', 1, 1), ...copies('dots', 2, 1), ...copies('dots', 3, 1), ...copies('winds', 'east', 2),
+    ];
+    const onePairPlusChiTile = [copies('winds', 'east', 2)[0]!, copies('winds', 'east', 2)[1]!, copies('characters', 1, 2)[1]!];
+    expect(hasMahjongPairStructure(twoPairs)).toBe(true);
+    expect(hasMahjongPairStructure(triplet)).toBe(true);
+    expect(hasMahjongPairStructure(allSequences)).toBe(false);
+    expect(hasMahjongPairStructure(onePairPlusChiTile)).toBe(false);
   });
 });

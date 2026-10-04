@@ -68,9 +68,13 @@ Page({
 
   async onSubmit() {
     const inviteCode = this.data.inviteCode.trim();
-    const nickname = this.data.nickname.trim();
+    const nickname = this.data.nickname;
     if (!inviteCode || !nickname) {
       this.setData({ error: '请输入邀请码和昵称' });
+      return;
+    }
+    if (!/^[A-Za-z0-9_〇㐀-䶿一-鿿]{1,12}$/.test(nickname)) {
+      this.setData({ error: '昵称限12位内，仅支持中文、字母、数字和下划线，不能包含空格' });
       return;
     }
     const gameId = this.data.gameId;
@@ -79,9 +83,9 @@ Page({
     this.setData({ busy: true, error: '' });
     try {
       const auth = await this.transport.login(inviteCode);
+      const snapshot = await this.transport.join(nickname, this.roomId());
       wx.setStorageSync(storageKey(gameId, 'sessionToken'), auth.sessionToken);
       wx.setStorageSync(storageKey(gameId, 'nickname'), nickname);
-      const snapshot = await this.transport.join(nickname, this.roomId());
       this.enterSnapshot(snapshot);
     } catch (error) {
       this.setData({ error: error.message || '进入房间失败' });

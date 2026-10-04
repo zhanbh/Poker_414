@@ -23,6 +23,7 @@ import {
   TexasSeat,
 } from '../../shared/src/texas';
 import { appendRoomChatMessage, createRoomChatMessage } from './room-chat';
+import { isValidNickname } from '../../shared/src/validation';
 import { Session, SessionService } from './session-service';
 
 export interface TexasRoomServiceOptions {
@@ -118,7 +119,7 @@ export class TexasRoomService {
   join(sessionToken: string, nickname: string, roomId: string): TexasSnapshot {
     const session = this.sessions.get(sessionToken);
     if (roomId !== 'texas') throw new TexasRoomServiceError('ROOM_NOT_FOUND', '德州扑克房间不存在');
-    if (!nickname.trim()) throw new TexasRoomServiceError('INVALID_NICKNAME', '昵称不能为空');
+    if (!isValidNickname(nickname)) throw new TexasRoomServiceError('INVALID_NICKNAME', '昵称仅支持1–12位中文、字母、数字或下划线');
     if (session.texasSeat || session.role === 'spectator') return this.getSnapshot(sessionToken);
 
     if (!this.state) {

@@ -9,7 +9,7 @@ export const MAHJONG_SEAT_LABELS: Readonly<Record<MahjongSeat, string>> = {
 };
 
 export type MahjongSuit = 'characters' | 'bamboo' | 'dots' | 'winds' | 'dragons';
-export type MahjongRank = number | 'east' | 'south' | 'west' | 'north' | 'red';
+export type MahjongRank = number | 'east' | 'south' | 'west' | 'north' | 'red' | 'green' | 'white';
 
 export interface MahjongTile {
   readonly id: string;
@@ -40,6 +40,8 @@ const HONOR_LABELS: Readonly<Record<Exclude<MahjongRank, number>, string>> = {
   west: '西',
   north: '北',
   red: '中',
+  green: '發',
+  white: '白',
 };
 
 const HONOR_ORDER: ReadonlyArray<{ readonly suit: 'winds' | 'dragons'; readonly rank: Exclude<MahjongRank, number> }> = [
@@ -48,6 +50,8 @@ const HONOR_ORDER: ReadonlyArray<{ readonly suit: 'winds' | 'dragons'; readonly 
   { suit: 'winds', rank: 'west' },
   { suit: 'winds', rank: 'north' },
   { suit: 'dragons', rank: 'red' },
+  { suit: 'dragons', rank: 'green' },
+  { suit: 'dragons', rank: 'white' },
 ];
 
 export function tileKey(tile: Pick<MahjongTile, 'suit' | 'rank'>): string {
@@ -174,6 +178,18 @@ export function mahjongWaits(hand: readonly MahjongTile[], meldCount = 0, melds:
   if (hand.length !== (4 - meldCount) * 3 + 1) return [];
   return mahjongTileKinds().filter((tile) => isWinningMahjongHand([...hand, tile], meldCount)
     || isBigWindWin(hand, tile, melds));
+}
+
+/** The custom rules require two concealed pairs or a concealed triplet. */
+export function hasMahjongPairStructure(hand: readonly MahjongTile[]): boolean {
+  const counts = countsFor(hand);
+  let pairs = 0;
+  for (const count of counts.values()) {
+    if (count >= 3) return true;
+    if (count === 2) pairs += 1;
+    if (pairs >= 2) return true;
+  }
+  return false;
 }
 
 export function hasMahjongListenYao(hand: readonly MahjongTile[], winningTile: MahjongTile): boolean {

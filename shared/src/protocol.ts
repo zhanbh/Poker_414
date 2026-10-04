@@ -312,6 +312,8 @@ export interface MahjongPublicSnapshot {
   readonly wallCount: number;
   readonly diceRoll: readonly [number, number] | null;
   readonly lastDiscard: { readonly seat: MahjongSeat; readonly tile: MahjongTile } | null;
+  readonly discardRiver: ReadonlyArray<{ readonly seat: MahjongSeat; readonly tile: MahjongTile }>;
+  readonly revealedHands?: ReadonlyArray<{ readonly seat: MahjongSeat; readonly nickname: string; readonly hand: MahjongTile[] }>;
   readonly settlement: MahjongSettlement | null;
 }
 
@@ -322,6 +324,8 @@ export interface MahjongPrivateSnapshot {
   readonly chiOptions?: string[][];
   readonly chiDiscardIds?: string[];
   readonly listenTileIds?: string[];
+  readonly listenOptions?: Array<{ readonly discardTileId: string; readonly waits: MahjongTile[]; readonly baoTile?: MahjongTile }>;
+  readonly drawnTileId?: string;
   readonly discardableTileId?: string;
   readonly isListening?: boolean;
   readonly autoDiscardPending?: boolean;

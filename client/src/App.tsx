@@ -71,7 +71,7 @@ function chatMembersFor(snapshot: GameSnapshot): RoomChatMember[] {
   }
   if (isMahjongSnapshot(snapshot)) {
     return [
-      ...snapshot.public.players.map((player) => ({ id: player.seat, seat: player.seat, nickname: player.nickname, label: player.seatLabel })),
+      ...snapshot.public.players.map((player) => ({ id: player.seat, seat: player.seat, nickname: player.nickname, label: '' })),
       ...snapshot.public.spectators.map((viewer, index) => ({ id: 'spectator-' + index + '-' + viewer.nickname, nickname: viewer.nickname, label: '观战' })),
     ];
   }

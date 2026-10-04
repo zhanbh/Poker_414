@@ -68,9 +68,9 @@ describe('登录路径', () => {
     };
     render(<App transport={transport} />);
 
-    expect(screen.getByRole('status')).toHaveTextContent('独立玩家会话');
+    expect(screen.getByRole('status')).toHaveTextContent('使用独立玩家身份');
     fireEvent.change(screen.getByLabelText('邀请码'), { target: { value: 'inner-414' } });
-    fireEvent.change(screen.getByLabelText('昵称'), { target: { value: '测试 A' } });
+    fireEvent.change(screen.getByLabelText('昵称'), { target: { value: '测试_A' } });
     fireEvent.click(screen.getByRole('button', { name: '进入房间' }));
     await waitFor(() => expect(screen.getByText('等待开局')).toBeInTheDocument());
 

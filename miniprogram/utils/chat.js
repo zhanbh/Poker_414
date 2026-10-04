@@ -3,7 +3,7 @@ function chatMembers(snapshot) {
     id: player.seat,
     seat: player.seat,
     nickname: player.nickname,
-    label: player.positionLabel || player.seatLabel || player.seat + ' 位',
+    label: snapshot.public.gameId === 'mahjong' ? '' : player.positionLabel || player.seatLabel || player.seat + ' 位',
   }));
   const spectators = (snapshot.public.spectators || []).map((viewer, index) => ({
     id: 'spectator-' + index + '-' + viewer.nickname,

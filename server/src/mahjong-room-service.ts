@@ -14,6 +14,7 @@ import {
   findChiOptions,
   findTilesByKey,
   hasMahjongListenYao,
+  hasMahjongPairStructure,
   isBigWindWin,
   isWinningMahjongHand,
   mahjongWaits,
@@ -28,6 +29,7 @@ import {
   sortMahjongTiles,
   tileKey,
 } from '../../shared/src/mahjong';
+import { isValidNickname } from '../../shared/src/validation';
 import { appendRoomChatMessage, createRoomChatMessage } from './room-chat';
 import { Session, SessionService } from './session-service';
 
@@ -97,11 +99,12 @@ interface MahjongState {
   nextHandAt: number | null;
   pending: PendingResponses | null;
   lastDiscard: { seat: MahjongSeat; tile: MahjongTile } | null;
+  discardRiver: Array<{ seat: MahjongSeat; tile: MahjongTile }>;
   settlement: MahjongSettlement | null;
 }
 
 const MAX_SPECTATORS = 4;
-const TOTAL_TILE_COUNT = 128;
+const TOTAL_TILE_COUNT = 136;
 const FLOW_WALL_THRESHOLD = Math.ceil(TOTAL_TILE_COUNT * 0.15);
 const LISTENING_DISCARD_DELAY_MS = 1_000;
 const DRAW_RESTART_DELAY_MS = 2_000;
@@ -153,7 +156,7 @@ export class MahjongRoomService {
   join(sessionToken: string, nickname: string, roomId: string): MahjongSnapshot {
     const session = this.sessions.get(sessionToken);
     if (roomId !== 'mahjong') throw new MahjongRoomServiceError('ROOM_NOT_FOUND', '麻将房间不存在');
-    if (!nickname.trim()) throw new MahjongRoomServiceError('INVALID_NICKNAME', '昵称不能为空');
+    if (!isValidNickname(nickname)) throw new MahjongRoomServiceError('INVALID_NICKNAME', '昵称仅支持1–12位中文、字母、数字或下划线');
     if (session.mahjongSeat || session.role === 'spectator') return this.getSnapshot(sessionToken);
     if (!this.state) this.state = this.emptyState(roomId, session.playerId);
     if (Object.values(this.state.players).some((player) => player?.nickname === nickname.trim())) {
@@ -208,18 +211,34 @@ export class MahjongRoomService {
       wallCount: state.wall.length + state.replacementWall.length,
       diceRoll: state.diceRoll,
       lastDiscard: state.lastDiscard,
+      discardRiver: state.discardRiver.map((discard) => ({ ...discard })),
+      ...(state.phase === 'settled' ? {
+        revealedHands: Object.values(state.players)
+          .filter((player): player is MahjongPlayer => player !== null)
+          .map((player) => {
+            const winningTile = state.settlement?.type === 'discard-win' && state.settlement.winnerSeat === player.seat
+              ? state.settlement.winningTile
+              : undefined;
+            return { seat: player.seat, nickname: player.nickname, hand: sortMahjongTiles([...player.hand, ...(winningTile ? [winningTile] : [])]) };
+          }),
+      } : {}),
       settlement: state.settlement,
     };
     const ownPlayer = session.mahjongSeat ? state.players[session.mahjongSeat] : null;
     const available = ownPlayer ? this.availableActions(ownPlayer) : [];
+    const listenOptions = ownPlayer && state.phase === 'playing' && state.currentTurn === ownPlayer.seat && state.awaitingDiscard
+      && !state.pending && !ownPlayer.isListening && this.canDeclareListen(ownPlayer)
+      ? this.listenPreviews(ownPlayer)
+      : [];
     const privateSnapshot: MahjongPrivateSnapshot = {
       seat: session.mahjongSeat,
       hand: ownPlayer ? sortMahjongTiles(ownPlayer.hand) : [],
       availableActions: available,
-      ...(ownPlayer && state.phase === 'playing' && state.currentTurn === ownPlayer.seat && state.awaitingDiscard
-        && !state.pending && !ownPlayer.isListening && this.canDeclareListen(ownPlayer)
-        ? { listenTileIds: this.listenDiscardOptions(ownPlayer).map((tile) => tile.id) }
-        : {}),
+      ...(listenOptions.length ? {
+        listenTileIds: listenOptions.map((option) => option.discardTileId),
+        listenOptions,
+      } : {}),
+      ...(ownPlayer?.lastDrawnTileId ? { drawnTileId: ownPlayer.lastDrawnTileId } : {}),
       ...(ownPlayer ? { isListening: ownPlayer.isListening } : {}),
       ...(ownPlayer ? { autoDiscardPending: state.phase === 'playing'
         && state.autoDiscardAt !== null && state.currentTurn === ownPlayer.seat } : {}),
@@ -414,6 +433,7 @@ export class MahjongRoomService {
       players[seat]!.listenBao = null;
       players[seat]!.lastDrawnTileId = null;
     }
+    this.state.discardRiver = [];
     const dealer = this.state.dealerSeat;
     const dealerTile = deck.shift()!;
     players[dealer]!.hand.push(dealerTile);
@@ -449,6 +469,7 @@ export class MahjongRoomService {
     player.lastDrawnTileId = null;
     state.autoDiscardAt = null;
     player.discards.push(tile);
+    state.discardRiver.push({ seat, tile });
     this.refreshListenerBao();
     state.lastDiscard = { seat, tile };
     state.awaitingDiscard = false;
@@ -464,7 +485,6 @@ export class MahjongRoomService {
     if (player.isListening) throw new MahjongRoomServiceError('ALREADY_LISTENING', '已经听牌');
     const tile = player.hand.find((candidate) => candidate.id === tileId);
     if (!tile) throw new MahjongRoomServiceError('TILE_NOT_OWNED', '选择的牌不在手牌中');
-    if (player.lastDrawnTileId && player.lastDrawnTileId !== tileId) throw new MahjongRoomServiceError('LISTEN_DISCARD', '听牌时必须打出本轮刚摸到的牌');
     const hand = removeTileIds(player.hand, [tileId]);
     const waits = this.validListenWaits(hand, player.melds.length, player.melds);
     if (!player.melds.some((meld) => meld.kind !== 'concealed-kong')) throw new MahjongRoomServiceError('CLOSED_HAND', '听牌前必须开门，先吃、碰或明杠一组牌');
@@ -475,6 +495,7 @@ export class MahjongRoomService {
     player.listenWaits = waits;
     player.lastDrawnTileId = null;
     player.discards.push(tile);
+    state.discardRiver.push({ seat, tile });
     this.refreshListenerBao();
     state.lastDiscard = { seat, tile };
     state.awaitingDiscard = false;
@@ -517,11 +538,13 @@ export class MahjongRoomService {
     const baoWin = Boolean(tile && player.listenBao && tileKey(tile) === tileKey(player.listenBao));
     const allowed = player.isListening
       && Boolean(tile)
+      && hasMahjongPairStructure(player.hand.filter((handTile) => handTile.id !== tile?.id))
       && (onDiscard
         ? Boolean(state.pending?.options[seat]?.includes('hu'))
         : state.currentTurn === seat && state.awaitingDiscard && (matchingReadyWait || bigWind || baoWin));
     if (!allowed) throw new MahjongRoomServiceError('INVALID_ACTION', '当前不能胡牌');
     const winPattern = bigWind ? 'big-wind' : baoWin ? 'bao' : 'standard';
+    if (onDiscard && state.pending) this.removeClaimedDiscard(state.pending);
     this.settle({
       winnerSeat: seat,
       winnerNickname: player.nickname,
@@ -571,8 +594,8 @@ export class MahjongRoomService {
 
   private removeClaimedDiscard(pending: PendingResponses): void {
     const source = this.state?.players[pending.seat];
-    if (!source) return;
-    source.discards = source.discards.filter((tile) => tile.id !== pending.tile.id);
+    if (source) source.discards = source.discards.filter((tile) => tile.id !== pending.tile.id);
+    if (this.state) this.state.discardRiver = this.state.discardRiver.filter((discard) => discard.tile.id !== pending.tile.id);
   }
 
   private concealedKong(seat: MahjongSeat, tileIds?: readonly string[]): void {
@@ -615,7 +638,7 @@ export class MahjongRoomService {
       const structuralWait = player.listenWaits.some((wait) => tileKey(wait) === tileKey(tile))
         && isWinningMahjongHand([...player.hand, tile], player.melds.length);
       const baoWait = Boolean(player.listenBao && tileKey(player.listenBao) === tileKey(tile));
-      if (player.isListening && (structuralWait || baoWait)) actions.push('hu');
+      if (player.isListening && hasMahjongPairStructure(player.hand) && (structuralWait || baoWait)) actions.push('hu');
       if (!player.isListening && matchingTileCount(player.hand, tile) >= 3) actions.push('exposed-kong');
       else if (!player.isListening && matchingTileCount(player.hand, tile) >= 2) actions.push('peng');
       if (!player.isListening && this.chiPlans(player, tile, seat).length > 0) actions.push('chi');
@@ -698,13 +721,13 @@ export class MahjongRoomService {
     return actions;
   }
 
-  private baoForPlayer(player: MahjongPlayer): MahjongTile | null {
+  private baoForPlayer(player: MahjongPlayer, playerHand: readonly MahjongTile[] = player.hand): MahjongTile | null {
     const state = this.state;
     if (!state) return null;
     const visibleTiles = Object.values(state.players).flatMap((candidate) => candidate
       ? [...candidate.discards, ...candidate.melds.flatMap((meld) => meld.tiles)]
       : []);
-    const knownTiles = [...visibleTiles, ...player.hand];
+    const knownTiles = [...visibleTiles, ...playerHand];
     for (let index = state.replacementWall.length - 1; index >= 0; index -= 1) {
       const candidate = state.replacementWall[index]!;
       const visibleCopies = knownTiles.filter((tile) => tileKey(tile) === tileKey(candidate)).length;
@@ -721,16 +744,25 @@ export class MahjongRoomService {
   }
 
   private validListenWaits(hand: MahjongTile[], meldCount: number, melds: readonly MahjongMeld[]): MahjongTile[] {
+    if (!hasMahjongPairStructure(hand)) return [];
     return mahjongWaits(hand, meldCount, melds)
       .filter((tile) => hasMahjongListenYao(hand, tile));
   }
 
   private listenDiscardOptions(player: MahjongPlayer): MahjongTile[] {
+    return this.listenPreviews(player)
+      .map((option) => player.hand.find((tile) => tile.id === option.discardTileId))
+      .filter((tile): tile is MahjongTile => Boolean(tile));
+  }
+
+  private listenPreviews(player: MahjongPlayer): NonNullable<MahjongPrivateSnapshot['listenOptions']> {
     if (!this.state || player.isListening || !player.melds.some((meld) => meld.kind !== 'concealed-kong')) return [];
-    return player.hand.filter((discard) => {
-      if (player.lastDrawnTileId && player.lastDrawnTileId !== discard.id) return false;
+    return player.hand.flatMap((discard) => {
       const remaining = player.hand.filter((tile) => tile.id !== discard.id);
-      return this.validListenWaits(remaining, player.melds.length, player.melds).length > 0;
+      const waits = this.validListenWaits(remaining, player.melds.length, player.melds);
+      if (waits.length === 0) return [];
+      const baoTile = this.baoForPlayer(player, remaining) ?? undefined;
+      return [{ discardTileId: discard.id, waits, ...(baoTile ? { baoTile } : {}) }];
     });
   }
 
@@ -788,11 +820,13 @@ export class MahjongRoomService {
   }
 
   private canSelfDrawHu(player: MahjongPlayer, tile: MahjongTile): boolean {
-    return player.isListening && (
-      player.listenWaits.some((wait) => tileKey(wait) === tileKey(tile))
-      || isBigWindWin(player.hand.filter((handTile) => handTile.id !== tile.id), tile, player.melds)
-      || Boolean(player.listenBao && tileKey(player.listenBao) === tileKey(tile))
-    );
+    return player.isListening
+      && hasMahjongPairStructure(player.hand.filter((handTile) => handTile.id !== tile.id))
+      && (
+        player.listenWaits.some((wait) => tileKey(wait) === tileKey(tile))
+        || isBigWindWin(player.hand.filter((handTile) => handTile.id !== tile.id), tile, player.melds)
+        || Boolean(player.listenBao && tileKey(player.listenBao) === tileKey(tile))
+      );
   }
 
   private settle(settlement: MahjongSettlement): void {
@@ -915,6 +949,7 @@ export class MahjongRoomService {
       nextHandAt: null,
       pending: null,
       lastDiscard: null,
+      discardRiver: [],
       settlement: null,
     };
   }
@@ -923,7 +958,7 @@ export class MahjongRoomService {
     return {
       gameId: 'mahjong', roomId: 'mahjong', phase: 'lobby', handNumber: 0, version: 0, players: [], spectators: [], chat: [],
       hostSeat: null, dealerSeat: null, currentTurn: null, awaitingDiscard: false, pendingDiscard: null, responseSeats: [], wallCount: 0, diceRoll: null,
-      lastDiscard: null, settlement: null,
+      lastDiscard: null, discardRiver: [], settlement: null,
     };
   }
 

@@ -77,7 +77,7 @@ export function RoomChat({ messages, members, ownSeat, onSend }: {
             <p className="room-chat-target-hint">也可以直接点击牌桌上的玩家卡片</p>
             {targets.map((member) => (
               <div className="room-chat-target" key={member.id}>
-                <strong>{member.label} · {member.nickname}</strong>
+                <strong>{member.label ? `${member.label} · ` : ''}{member.nickname}</strong>
                 <InteractionMenu target={member} onInteract={sendInteraction} />
               </div>
             ))}

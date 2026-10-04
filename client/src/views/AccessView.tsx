@@ -32,7 +32,7 @@ export function AccessView({ onSubmit, error, busy, testMode, gameId = '414', on
       <p>{selected.description} · 邀请制</p>
       <form onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); onSubmit(String(form.get('inviteCode') ?? ''), String(form.get('nickname') ?? '')); }}>
         <label>邀请码<input name="inviteCode" aria-label="邀请码" autoComplete="off" required /></label>
-        <label>昵称<input name="nickname" aria-label="昵称" maxLength={12} required /></label>
+        <label>昵称<input name="nickname" aria-label="昵称" maxLength={12} pattern="[A-Za-z0-9_〇㐀-䶿一-鿿]{1,12}" title="昵称限12位内，仅支持中文、字母、数字和下划线" required /></label>
         <p className="join-mode-hint">有空位自动成为玩家；牌局中加入优先占空位并等待下一局</p>
         <button type="submit" disabled={busy}>进入房间</button>
       </form>

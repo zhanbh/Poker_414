@@ -29,6 +29,7 @@ import { HandKind } from '../../shared/src/hand-types';
 import { findBurstCandidates } from '../../shared/src/rule-engine';
 import { RoomChatMessage, RoomChatPayload } from '../../shared/src/protocol';
 import { appendRoomChatMessage, createRoomChatMessage } from './room-chat';
+import { isValidNickname } from '../../shared/src/validation';
 import { ROOM_INACTIVE_TIMEOUT_MS, Session, SessionService } from './session-service';
 
 export interface RoomServiceOptions {
@@ -90,7 +91,7 @@ export class RoomService {
   join(sessionToken: string, nickname: string, roomId: string): RoomSnapshot {
     const session = this.sessions.get(sessionToken);
     if (roomId !== '414') throw new RoomServiceError('ROOM_NOT_FOUND', '房间号不存在');
-    if (!nickname.trim()) throw new RoomServiceError('INVALID_NICKNAME', '昵称不能为空');
+    if (!isValidNickname(nickname)) throw new RoomServiceError('INVALID_NICKNAME', '昵称仅支持1–12位中文、字母、数字或下划线');
 
     if (session.seat || session.role === 'spectator') return this.getSnapshot(sessionToken);
     if (!this.state) this.state = createGameState(roomId, session.playerId);

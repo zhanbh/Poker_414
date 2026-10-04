@@ -10,7 +10,7 @@
   <view class="room-chat-targets">
     <text class="chat-target-label">点击玩家互动</text>
     <view wx:for="{{members}}" wx:for-item="member" wx:key="id" wx:if="{{!member.seat || member.seat !== ownSeat}}" class="room-chat-target">
-      <text class="chat-target-name">{{member.label}} · {{member.nickname}}</text>
+      <text class="chat-target-name"><text wx:if="{{member.label}}">{{member.label}} · </text>{{member.nickname}}</text>
       <button size="mini" data-kind="tomato" data-seat="{{member.seat}}" data-nickname="{{member.nickname}}" bindtap="onInteraction">🍅</button>
       <button size="mini" data-kind="water" data-seat="{{member.seat}}" data-nickname="{{member.nickname}}" bindtap="onInteraction">💦</button>
       <button size="mini" data-kind="heart" data-seat="{{member.seat}}" data-nickname="{{member.nickname}}" bindtap="onInteraction">💖</button>

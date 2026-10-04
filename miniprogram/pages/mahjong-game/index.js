@@ -12,13 +12,17 @@ function seatPosition(viewerSeat, seat) {
 }
 
 function tileClass(tile) {
-  return tile.suit === 'characters' ? 'wan' : tile.suit === 'bamboo' ? 'suo' : tile.suit === 'dots' ? 'tong' : 'honor';
+  if (tile.suit === 'characters') return 'wan';
+  if (tile.suit === 'bamboo') return 'suo';
+  if (tile.suit === 'dots') return 'tong';
+  return tile.suit === 'winds' ? 'honor wind' : `honor dragon-${tile.rank}`;
 }
 
 const tileDecor = (tile) => ({
   ...tile,
   tileClass: tileClass(tile),
   rankDisplay: typeof tile.rank === 'number' ? String(tile.rank) : '',
+  rankChinese: typeof tile.rank === 'number' ? ['','一','二','三','四','五','六','七','八','九'][tile.rank] : '',
   suitDisplay: tile.suit === 'characters' ? '萬子' : tile.suit === 'bamboo' ? '索子' : tile.suit === 'dots' ? '筒子' : tile.suit === 'winds' ? '風牌' : '箭牌',
   isCharacters: tile.suit === 'characters',
   isDots: tile.suit === 'dots',
@@ -35,11 +39,11 @@ function makeMotifs(rank) {
     8: [[32, 14], [68, 14], [32, 38], [68, 38], [32, 62], [68, 62], [32, 86], [68, 86]],
     9: [[32, 14], [50, 14], [68, 14], [32, 50], [50, 50], [68, 50], [32, 86], [50, 86], [68, 86]],
   };
-  return (layouts[rank] || []).map(([left, top], index) => ({ left, top, id: index }));
+  return (layouts[rank] || []).map(([left, top], index) => ({ left, top, id: index, color: ['green', 'blue', 'red'][index % 3] }));
 }
 
 Page({
-  data: { snapshot: null, chat: [], chatMembers: [], players: [], hand: [], selectedTileId: '', canListenSelected: false, ownSeat: null, currentTurn: null, turnStatus: '', isMyTurn: false, isResponsePhase: false, isWaitingForPriority: false, wallCount: 0, wallSides: [], boardSize: 720, diceRoll: null, diceLabel: '掷骰', animationStage: '', autoDiscardPending: false, availableActions: [], chiOptions: [], listenTileIds: [], opponentHands: [], paymentRows: [], isListening: false, canDiscard: false, canListen: false, canHu: false, canPeng: false, canChi: false, canKong: false, canAddedKong: false, canConcealedKong: false, canPass: false, canRespondNow: false, spectator: false, settlement: null, error: '' },
+  data: { snapshot: null, chat: [], chatMembers: [], players: [], hand: [], discardRiver: [], selectedTileId: '', canListenSelected: false, listenOptions: [], listenPreview: null, ownSeat: null, currentTurn: null, turnStatus: '', isMyTurn: false, isResponsePhase: false, isWaitingForPriority: false, wallCount: 0, wallSides: [], boardSize: 720, diceRoll: null, diceLabel: '掷骰', animationStage: '', autoDiscardPending: false, availableActions: [], chiOptions: [], listenTileIds: [], opponentHands: [], paymentRows: [], isListening: false, canDiscard: false, canListen: false, canHu: false, canPeng: false, canChi: false, canKong: false, canAddedKong: false, canConcealedKong: false, canPass: false, canRespondNow: false, spectator: false, settlement: null, settlementDescription: '', error: '' },
 
   onLoad() {
     this.app = getApp();
@@ -87,6 +91,11 @@ Page({
     const selectedTileId = snapshot.private.isListening ? (snapshot.private.discardableTileId || '') : this.data.selectedTileId;
     const availableActions = snapshot.private.availableActions || [];
     const listenTileIds = snapshot.private.listenTileIds || [];
+    const listenOptions = (snapshot.private.listenOptions || []).map((option) => ({
+      discardTileId: option.discardTileId,
+      waits: option.waits.map(tileDecor),
+      baoTile: option.baoTile ? tileDecor(option.baoTile) : null,
+    }));
     const isResponsePhase = Boolean(snapshot.public.pendingDiscard);
     const isWaitingForPriority = Boolean(snapshot.private.seat && !snapshot.private.spectator && isResponsePhase && snapshot.public.responseSeats.includes(snapshot.private.seat) && availableActions.length === 0);
     const currentPlayer = bySeat.get(snapshot.public.currentTurn);
@@ -96,7 +105,12 @@ Page({
         ? '轮到你出牌'
         : currentPlayer ? `轮到${currentPlayer.nickname}出牌` : '等待牌局推进';
     const isMyTurn = !isResponsePhase && snapshot.public.currentTurn === snapshot.private.seat && snapshot.public.awaitingDiscard;
-    const hand = (snapshot.private.hand || []).map((tile) => ({ ...tileDecor(tile), selected: tile.id === selectedTileId, listenOption: listenTileIds.includes(tile.id) }));
+    const drawnTileId = snapshot.private.drawnTileId || '';
+    const rawHand = snapshot.private.hand || [];
+    const drawnTile = rawHand.find((tile) => tile.id === drawnTileId);
+    const orderedHand = drawnTile ? [...rawHand.filter((tile) => tile.id !== drawnTileId), drawnTile] : rawHand;
+    const hand = orderedHand.map((tile) => ({ ...tileDecor(tile), selected: tile.id === selectedTileId, listenOption: listenTileIds.includes(tile.id), drawn: tile.id === drawnTileId }));
+    const listenPreview = listenOptions.find((option) => option.discardTileId === selectedTileId) || null;
     const chiOptions = (snapshot.private.chiOptions || []).map((tileIds) => {
       return {
         key: tileIds.join('-'),
@@ -111,7 +125,10 @@ Page({
       amount: payments[seat],
       amountLabel: (payments[seat] > 0 ? '+' : '') + payments[seat] + '分',
     }));
-    const exposedHands = new Map((snapshot.private.opponentHands || []).map((opponent) => [opponent.seat, opponent.hand]));
+    const exposedHands = new Map([
+      ...(snapshot.private.opponentHands || []),
+      ...(snapshot.public.revealedHands || []),
+    ].map((opponent) => [opponent.seat, opponent.hand]));
     const players = SEATS.map((seat) => bySeat.get(seat) || { seat, seatLabel: ({ A: '東家', B: '南家', C: '西家', D: '北家' })[seat], nickname: '空位', connected: false, handCount: 0, melds: [], discards: [], isDealer: false, isHost: false }).map((player) => ({
       ...player,
       position: seatPosition(snapshot.private.seat, player.seat),
@@ -120,6 +137,15 @@ Page({
       melds: (player.melds || []).map((meld) => ({ ...meld, tiles: meld.tiles.map(tileDecor) })),
       revealedHand: (exposedHands.get(player.seat) || []).map(tileDecor),
     }));
+    const discardRiver = (snapshot.public.discardRiver || []).map((discard) => ({
+      ...tileDecor(discard.tile),
+      isPendingDiscard: snapshot.public.pendingDiscard && snapshot.public.pendingDiscard.tile.id === discard.tile.id,
+    }));
+    const settlementDescription = snapshot.public.settlement && snapshot.public.settlement.type === 'draw'
+      ? '流局 · 原庄家不变'
+      : snapshot.public.settlement
+        ? `${snapshot.public.settlement.winnerNickname || snapshot.public.settlement.winnerSeat} 获胜 · ${snapshot.public.settlement.winPattern === 'big-wind' ? '大风' : snapshot.public.settlement.winPattern === 'bao' ? '胡宝' : snapshot.public.settlement.type === 'self-draw' ? '自摸' : '点炮'}`
+        : '';
     const wallCount = snapshot.public.wallCount;
     const wallSides = Array.from({ length: 4 }, (_, side) => ({
       position: ['north', 'east', 'south', 'west'][side],
@@ -132,6 +158,7 @@ Page({
       chatMembers: chatMembers(snapshot),
       players,
       hand,
+      discardRiver,
       selectedTileId,
       canListenSelected: (snapshot.private.listenTileIds || []).includes(selectedTileId),
       ownSeat: snapshot.private.seat,
@@ -148,6 +175,8 @@ Page({
       availableActions,
       chiOptions,
       listenTileIds,
+      listenOptions,
+      listenPreview,
       opponentHands: [],
       isListening: Boolean(snapshot.private.isListening),
       canDiscard: availableActions.includes('discard'),
@@ -162,6 +191,7 @@ Page({
       canRespondNow: availableActions.some((action) => ['hu', 'peng', 'chi', 'exposed-kong'].includes(action)),
       spectator: Boolean(snapshot.private.spectator),
       settlement: snapshot.public.settlement,
+      settlementDescription,
       paymentRows,
       error: '',
     });
@@ -173,6 +203,7 @@ Page({
     this.setData({
       selectedTileId: id,
       canListenSelected: this.data.listenTileIds.includes(id),
+      listenPreview: this.data.listenOptions.find((option) => option.discardTileId === id) || null,
       hand: this.data.hand.map((tile) => ({ ...tile, selected: tile.id === id })),
     });
   },
@@ -197,7 +228,7 @@ Page({
     if (type === 'listen') {
       if (!this.data.selectedTileId || !this.data.listenTileIds.includes(this.data.selectedTileId)) return;
       this.runCommand('listen', { tileId: this.data.selectedTileId });
-      this.setData({ selectedTileId: '', canListenSelected: false });
+      this.setData({ selectedTileId: '', canListenSelected: false, listenPreview: null });
       return;
     }
     if (type === 'added-kong') {

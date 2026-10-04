@@ -185,19 +185,22 @@
 .mahjong-wall-top { top: 23%; right: 18%; left: 18%; }
 .mahjong-wall-bottom { right: 18%; bottom: 17%; left: 18%; }
 .mahjong-wall-left, .mahjong-wall-right { top: 15%; bottom: 15%; }
-.mahjong-wall-left { left: 32%; }
-.mahjong-wall-right { right: 32%; }
+.mahjong-wall-left { left: 26%; }
+.mahjong-wall-right { right: 26%; }
 .mahjong-wall-stack { position: relative; display: block; }
 .mahjong-wall-stack.double::before { position: absolute; top: 3rpx; right: -2rpx; bottom: -3rpx; left: 2rpx; content: ''; background: #b8ab90; border: 1rpx solid #95896f; border-radius: 3rpx; box-shadow: 0 2rpx 3rpx rgba(0, 0, 0, .24); }
+.mahjong-wall-left .mahjong-wall-stack.double::before { top: 2rpx; right: -3rpx; bottom: 0; left: 2rpx; }
+.mahjong-wall-right .mahjong-wall-stack.double::before { top: 2rpx; right: 2rpx; bottom: 0; left: -3rpx; }
 .mahjong-wall-stack .tile-back { position: relative; }
-.mahjong-wall-left .tile-back, .mahjong-wall-right .tile-back { width: 16rpx; height: 23rpx; transform: rotate(90deg); }
+.mahjong-wall-left .mahjong-wall-stack, .mahjong-wall-right .mahjong-wall-stack { width: 30rpx; height: 21rpx; }
+.mahjong-wall-left .tile-back, .mahjong-wall-right .tile-back { width: 30rpx; height: 21rpx; padding: 2rpx; }
+.tile-edge { display: block; flex: 0 0 auto; width: 16rpx; height: 9rpx; background: linear-gradient(#fffdf5, #d5cebb); border: 1rpx solid #afa790; border-bottom: 2rpx solid #938a74; border-radius: 2rpx; box-shadow: 0 1rpx 2rpx rgba(0, 0, 0, .22); box-sizing: border-box; }
 .concealed-seat-hand { position: absolute; z-index: 2; display: flex; gap: 2rpx; align-items: center; pointer-events: none; }
 .mahjong-seat-top .concealed-seat-hand { top: 10%; left: 50%; transform: translateX(-50%); }
-.mahjong-seat-top .concealed-seat-hand .tile-back { width: 16rpx; height: 23rpx; padding: 1rpx; }
 .mahjong-seat-left .concealed-seat-hand, .mahjong-seat-right .concealed-seat-hand { top: 50%; flex-direction: column; gap: 1rpx; transform: translateY(-50%); }
 .mahjong-seat-left .concealed-seat-hand { left: 24%; }
 .mahjong-seat-right .concealed-seat-hand { right: 24%; }
-.mahjong-seat-left .concealed-seat-hand .tile-back, .mahjong-seat-right .concealed-seat-hand .tile-back { width: 14rpx; height: 21rpx; padding: 1rpx; transform: rotate(90deg); }
+.mahjong-seat-left .concealed-seat-hand .tile-edge, .mahjong-seat-right .concealed-seat-hand .tile-edge { width: 9rpx; height: 16rpx; border-right-width: 2rpx; border-bottom-width: 1rpx; }
 .mahjong-seat-top .revealed-seat-hand { top: 10%; }
 .mahjong-seat-left .revealed-seat-hand, .mahjong-seat-right .revealed-seat-hand { top: 50%; bottom: auto; max-height: 70%; overflow-y: auto; transform: translateY(-50%); }
 .mahjong-seat-left .revealed-seat-hand { left: 24%; }
@@ -205,7 +208,7 @@
 .mahjong-seat-left .revealed-seat-hand .mahjong-tile-face, .mahjong-seat-right .revealed-seat-hand .mahjong-tile-face { width: 19rpx; height: 27rpx; }
 .mahjong-seat-left .player-card, .mahjong-seat-right .player-card { width: 22%; }
 .mahjong-seat-left .player-subtitle, .mahjong-seat-right .player-subtitle { font-size: 17rpx; }
-.mahjong-discard-pile { right: 36%; left: 36%; }
+.mahjong-discard-pile { right: 37%; left: 37%; }
 .mahjong-table-drop-zone { right: 32%; left: 32%; }
 
 @keyframes mahjong-action-appear { from { opacity: 0; transform: translateY(12rpx) scale(.88); } to { opacity: 1; transform: translateY(0) scale(1); } }
@@ -216,3 +219,16 @@
 .mahjong-action-circle.secondary { background: linear-gradient(145deg, #47636b, #182f38 75%); animation: mahjong-action-appear .26s ease-out; }
 .mahjong-action-circle:active { transform: scale(.94); }
 .mahjong-action-circle[disabled] { animation: none; }
+@media screen and (max-width: 520px) {
+  .mahjong-wall-top { top: 25%; }
+  .mahjong-wall-bottom { bottom: 25%; }
+  .mahjong-wall-left, .mahjong-wall-right { top: 25%; bottom: 25%; }
+  .mahjong-wall-left { left: 28%; }
+  .mahjong-wall-right { right: 28%; }
+  .mahjong-wall .tile-back { width: 20rpx; height: 28rpx; }
+  .mahjong-wall-left .mahjong-wall-stack, .mahjong-wall-right .mahjong-wall-stack { width: 28rpx; height: 20rpx; }
+  .mahjong-wall-left .tile-back, .mahjong-wall-right .tile-back { width: 28rpx; height: 20rpx; }
+  .mahjong-seat-top .concealed-seat-hand { top: 17%; }
+  .mahjong-discard-pile { right: 37%; left: 37%; }
+  .mahjong-table.is-settled .mahjong-discard-pile { top: 33%; }
+}

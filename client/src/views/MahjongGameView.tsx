@@ -36,6 +36,10 @@ function TileBack({ replacement = false }: { readonly replacement?: boolean }) {
   return <span className={`mahjong-tile-back${replacement ? ' replacement' : ''}`} aria-hidden="true"><span /></span>;
 }
 
+function TileEdge() {
+  return <span className="mahjong-tile-edge" aria-hidden="true" />;
+}
+
 type SeatPosition = 'bottom' | 'left' | 'top' | 'right';
 
 function seatPosition(viewer: MahjongSeat, seat: MahjongSeat): SeatPosition {
@@ -209,7 +213,7 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode }: {
             </div>
             {player.melds.length ? <div className="mahjong-seat-melds">{player.melds.map((meld, index) => <MeldTiles meld={meld} key={`${seat}-${index}`} />)}</div> : null}
             {!isOwnSeat && visibleHand ? <div className="mahjong-revealed-hand" aria-label={`${player.nickname}的明牌`}>{visibleHand.map((tile) => <TileFace tile={tile} key={tile.id} />)}</div> : null}
-            {!isOwnSeat && !visibleHand && player.handCount > 0 ? <div className="mahjong-concealed-hand" aria-label={`${player.nickname}的未公开手牌`}>{Array.from({ length: player.handCount }, (_, index) => <TileBack key={`${seat}-hand-${index}`} />)}</div> : null}
+            {!isOwnSeat && !visibleHand && player.handCount > 0 ? <div className="mahjong-concealed-hand" aria-label={`${player.nickname}的未公开手牌`}>{Array.from({ length: player.handCount }, (_, index) => <TileEdge key={`${seat}-hand-${index}`} />)}</div> : null}
             {isOwnSeat ? <>
               <div className="mahjong-own-hand" aria-label="我的手牌">{displayHand.map((tile) => <TileFace key={tile.id} tile={tile} drawn={tile.id === drawnTileId} selected={tile.id === selectedTileId} listenOption={listenTileIds.has(tile.id)} pending={tile.id === draggingTileId} onClick={isMyTurn && !snapshot.private.isListening ? () => {
                 if (suppressTileClickRef.current) { suppressTileClickRef.current = false; return; }
@@ -219,10 +223,9 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode }: {
             </> : null}
           </article>;
         })}
-        {snapshot.public.discardRiver.length ? <div className="mahjong-discard-pile" aria-label="公共弃牌区">
-          <strong>公共牌河</strong>
+        <div className="mahjong-discard-pile" aria-label="公共弃牌区">
           <div className="mahjong-discard-tiles">{snapshot.public.discardRiver.map(({ tile }) => <TileFace tile={tile} key={tile.id} pending={snapshot.public.pendingDiscard?.tile.id === tile.id} />)}</div>
-        </div> : null}
+        </div>
         {actionDock}
         {settlement ? <section className="mahjong-settlement mahjong-table-settlement" role="status" aria-label="本局结算">
           <h2>本局结束</h2>

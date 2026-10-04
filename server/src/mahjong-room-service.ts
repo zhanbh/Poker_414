@@ -811,7 +811,7 @@ export class MahjongRoomService {
   private validListenWaits(hand: MahjongTile[], meldCount: number, melds: readonly MahjongMeld[]): MahjongTile[] {
     if (!hasMahjongPairStructure(hand)) return [];
     return mahjongWaits(hand, meldCount, melds)
-      .filter((tile) => hasMahjongListenYao(hand, tile));
+      .filter((tile) => hasMahjongListenYao(hand, tile, melds));
   }
 
   private listenDiscardOptions(player: MahjongPlayer): MahjongTile[] {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createMahjongDeck, hasMahjongPairStructure, isBigWindWin, isWinningMahjongHand, mahjongWaits, MahjongMeld, sortMahjongTiles } from '../src/mahjong';
+import { createMahjongDeck, hasMahjongListenYao, hasMahjongPairStructure, isBigWindWin, isWinningMahjongHand, mahjongWaits, MahjongMeld, sortMahjongTiles } from '../src/mahjong';
 
 describe('Mahjong shared rules', () => {
   it('creates the standard 136-tile deck including green and white dragons', () => {
@@ -38,6 +38,17 @@ describe('Mahjong shared rules', () => {
     const falseSevenPairs = ['1万', '1万', '2万', '2万', '3万', '3万', '4万', '4万', '5万', '5万', '6万', '6万', '东', '中']
       .map((label) => byLabel.get(label)!.shift()!);
     expect(isWinningMahjongHand(falseSevenPairs)).toBe(false);
+  });
+
+  it('counts a terminal tile in an exposed chi toward the listening requirement', () => {
+    const deck = createMahjongDeck();
+    const tile = (suit: string, rank: number | string) => deck.find((candidate) => candidate.suit === suit && candidate.rank === rank)!;
+    const hand = [tile('characters', 5), tile('characters', 6), tile('characters', 7)];
+    const chi: MahjongMeld = { kind: 'chi', tiles: [tile('dots', 1), tile('dots', 2), tile('dots', 3)] };
+
+    expect(hasMahjongListenYao(hand, tile('bamboo', 2))).toBe(false);
+    expect(hasMahjongListenYao(hand, tile('bamboo', 2), [chi])).toBe(true);
+    expect(hasMahjongListenYao(hand, tile('dragons', 'red'))).toBe(true);
   });
 
   it('includes waits that complete an exposed pong as big-wind self-draws', () => {

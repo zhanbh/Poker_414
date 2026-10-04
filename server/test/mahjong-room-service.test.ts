@@ -79,6 +79,42 @@ describe('MahjongRoomService', () => {
     expect(room.getSnapshot(players[1].sessionToken).private).not.toHaveProperty('baoTile');
   });
 
+  it('已吃出的幺牌满足听牌条件，暗手有两对时摸牌后可选择听牌', () => {
+    const room = new MahjongRoomService({ inviteCode: 'inner-414', random: () => 0.42 });
+    const players = ['甲', '乙', '丙', '丁'].map((nickname) => {
+      const auth = room.login('inner-414');
+      room.join(auth.sessionToken, nickname, 'mahjong');
+      return auth;
+    });
+    const lobby = room.getSnapshot(players[0].sessionToken);
+    room.dispatch(players[0].sessionToken, command('start-hand', lobby.public.handNumber, lobby.public.version));
+
+    const deck = createMahjongDeck();
+    const tile = (suit: string, rank: number | string, copy = 0) => deck.find((candidate) => candidate.suit === suit && candidate.rank === rank && candidate.id.endsWith('-' + copy))!;
+    const drawnEast = tile('winds', 'east');
+    const internals = room as unknown as {
+      state: { players: Record<MahjongSeat, { hand: MahjongTile[]; melds: MahjongMeld[]; lastDrawnTileId: string | null } | null> };
+    };
+    const player = internals.state.players.A!;
+    player.hand = [
+      tile('characters', 5), tile('characters', 6), tile('characters', 7),
+      tile('bamboo', 2), tile('bamboo', 2, 1), tile('bamboo', 5), tile('bamboo', 5, 1),
+      drawnEast,
+    ];
+    player.melds = [
+      { kind: 'chi', tiles: [tile('dots', 1), tile('dots', 2), tile('dots', 3)] },
+      { kind: 'chi', tiles: [tile('characters', 1), tile('characters', 2), tile('characters', 3)] },
+    ];
+    player.lastDrawnTileId = drawnEast.id;
+
+    const view = room.getSnapshot(players[0].sessionToken);
+    expect(view.private.availableActions).toContain('listen');
+    expect(view.private.listenOptions?.find((option) => option.discardTileId === drawnEast.id)?.waits.map((wait) => wait.label))
+      .toEqual(expect.arrayContaining(['2条', '5条']));
+    const listened = room.dispatch(players[0].sessionToken, command('listen', view.public.handNumber, view.public.version, { tileId: drawnEast.id }));
+    expect(listened.snapshot.private.isListening).toBe(true);
+  });
+
   it('多个缺口不能误判为听牌：打出5条后万子和筒子都无法组成完整牌型', () => {
     const room = new MahjongRoomService({ inviteCode: 'inner-414', random: () => 0.42 });
     const players = ['甲', '乙', '丙', '丁'].map((nickname) => {

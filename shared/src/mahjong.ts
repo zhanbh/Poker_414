@@ -195,9 +195,9 @@ export function hasMahjongPairStructure(hand: readonly MahjongTile[]): boolean {
   return false;
 }
 
-export function hasMahjongListenYao(hand: readonly MahjongTile[], winningTile: MahjongTile): boolean {
-  return hand.some((tile) => isMahjongTerminal(tile) || isRedCenter(tile))
-    || isMahjongTerminal(winningTile);
+export function hasMahjongListenYao(hand: readonly MahjongTile[], winningTile: MahjongTile, melds: readonly MahjongMeld[] = []): boolean {
+  return [...hand, ...melds.flatMap((meld) => meld.tiles)].some((tile) => isMahjongTerminal(tile) || isRedCenter(tile))
+    || isMahjongTerminal(winningTile) || isRedCenter(winningTile);
 }
 
 export function findTilesByKey(hand: readonly MahjongTile[], key: string, count: number): MahjongTile[] {

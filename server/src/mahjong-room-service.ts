@@ -4,6 +4,7 @@ import {
   MahjongCommandType,
   MahjongPrivateSnapshot,
   MahjongPublicSnapshot,
+  MahjongWallLayout,
   MahjongSettlement,
   MahjongSnapshot,
   RoomChatMessage,
@@ -94,6 +95,10 @@ interface MahjongState {
   awaitingDiscard: boolean;
   wall: MahjongTile[];
   replacementWall: MahjongTile[];
+  liveWallBySide: Record<MahjongSeat, number>;
+  wallBreakSide: MahjongSeat | null;
+  replacementWallSide: MahjongSeat | null;
+  nextLiveWallSide: MahjongSeat | null;
   diceRoll: [number, number] | null;
   autoDiscardAt: number | null;
   nextHandAt: number | null;
@@ -125,6 +130,29 @@ function removeTileIds(hand: MahjongTile[], ids: readonly string[]): MahjongTile
     throw new MahjongRoomServiceError('TILE_NOT_OWNED', '选择的牌不在手牌中');
   }
   return hand.filter((tile) => !selected.has(tile.id));
+}
+
+function makeInitialWallLayout(dealerSeat: MahjongSeat, diceRoll: readonly [number, number]): Pick<MahjongState, 'liveWallBySide' | 'wallBreakSide' | 'replacementWallSide' | 'nextLiveWallSide'> {
+  const breakOffset = (diceRoll[0] + diceRoll[1] - 1) % MAHJONG_SEATS.length;
+  const wallBreakSide = MAHJONG_SEATS[(MAHJONG_SEATS.indexOf(dealerSeat) + breakOffset) % MAHJONG_SEATS.length]!;
+  const liveWallBySide: Record<MahjongSeat, number> = { A: 34, B: 34, C: 34, D: 34 };
+  let dealSide = wallBreakSide;
+  let tilesToDeal = 53;
+  while (tilesToDeal > 0) {
+    const count = Math.min(liveWallBySide[dealSide], tilesToDeal);
+    liveWallBySide[dealSide] -= count;
+    tilesToDeal -= count;
+    if (liveWallBySide[dealSide] === 0) dealSide = nextMahjongSeat(dealSide);
+  }
+
+  const replacementWallSide = dealSide;
+  liveWallBySide[replacementWallSide] -= 4;
+  return {
+    liveWallBySide,
+    wallBreakSide,
+    replacementWallSide,
+    nextLiveWallSide: replacementWallSide,
+  };
 }
 
 export class MahjongRoomService {
@@ -209,6 +237,7 @@ export class MahjongRoomService {
         ? Object.keys(state.pending.options).filter((seat) => !state.pending!.passed.includes(seat as MahjongSeat)) as MahjongSeat[]
         : [],
       wallCount: state.wall.length + state.replacementWall.length,
+      wallLayout: this.wallLayout(state),
       diceRoll: state.diceRoll,
       lastDiscard: state.lastDiscard,
       discardRiver: state.discardRiver.map((discard) => ({ ...discard })),
@@ -259,6 +288,39 @@ export class MahjongRoomService {
       } : {}),
     };
     return { public: publicSnapshot, private: privateSnapshot };
+  }
+
+  private wallLayout(state: MahjongState): MahjongWallLayout {
+    return {
+      breakSide: state.wallBreakSide,
+      replacementSide: state.replacementWallSide,
+      sides: MAHJONG_SEATS.map((seat) => ({
+        seat,
+        liveTiles: state.liveWallBySide[seat],
+        replacementTiles: state.replacementWallSide === seat ? state.replacementWall.length : 0,
+      })),
+    };
+  }
+
+  private consumeLiveWallPosition(): void {
+    if (!this.state) return;
+    let side = this.state.nextLiveWallSide ?? this.state.wallBreakSide;
+    if (!side) return;
+    for (let visited = 0; visited < MAHJONG_SEATS.length; visited += 1) {
+      if (this.state.liveWallBySide[side] > 0) {
+        this.state.liveWallBySide[side] -= 1;
+        if (this.state.liveWallBySide[side] > 0) {
+          this.state.nextLiveWallSide = side;
+        } else {
+          let next = nextMahjongSeat(side);
+          for (let search = 0; search < MAHJONG_SEATS.length && this.state.liveWallBySide[next] === 0; search += 1) next = nextMahjongSeat(next);
+          this.state.nextLiveWallSide = this.state.liveWallBySide[next] > 0 ? next : null;
+        }
+        return;
+      }
+      side = nextMahjongSeat(side);
+    }
+    this.state.nextLiveWallSide = null;
   }
 
   attach(sessionToken: string, connectionId: string): { previousConnectionId: string | null } {
@@ -439,6 +501,7 @@ export class MahjongRoomService {
     players[dealer]!.hand.push(dealerTile);
     players[dealer]!.lastDrawnTileId = dealerTile.id;
     const replacementWall = deck.splice(-4);
+    const diceRoll: [number, number] = [1 + Math.floor(this.random() * 6), 1 + Math.floor(this.random() * 6)];
     this.state = {
       ...this.state,
       phase: 'playing',
@@ -446,9 +509,10 @@ export class MahjongRoomService {
       handNumber: this.state.handNumber + 1,
       wall: deck,
       replacementWall,
+      ...makeInitialWallLayout(dealer, diceRoll),
       currentTurn: dealer,
       awaitingDiscard: true,
-      diceRoll: [1 + Math.floor(this.random() * 6), 1 + Math.floor(this.random() * 6)],
+      diceRoll,
       autoDiscardAt: null,
       nextHandAt: null,
       pending: null,
@@ -670,6 +734,7 @@ export class MahjongRoomService {
       this.settle({ winnerSeat: null, type: 'draw' });
       return;
     }
+    this.consumeLiveWallPosition();
     player.hand.push(tile);
     player.hand = sortMahjongTiles(player.hand);
     player.lastDrawnTileId = tile.id;
@@ -761,8 +826,7 @@ export class MahjongRoomService {
       const remaining = player.hand.filter((tile) => tile.id !== discard.id);
       const waits = this.validListenWaits(remaining, player.melds.length, player.melds);
       if (waits.length === 0) return [];
-      const baoTile = this.baoForPlayer(player, remaining) ?? undefined;
-      return [{ discardTileId: discard.id, waits, ...(baoTile ? { baoTile } : {}) }];
+      return [{ discardTileId: discard.id, waits }];
     });
   }
 
@@ -944,6 +1008,10 @@ export class MahjongRoomService {
       awaitingDiscard: false,
       wall: [],
       replacementWall: [],
+      liveWallBySide: { A: 0, B: 0, C: 0, D: 0 },
+      wallBreakSide: null,
+      replacementWallSide: null,
+      nextLiveWallSide: null,
       diceRoll: null,
       autoDiscardAt: null,
       nextHandAt: null,
@@ -957,7 +1025,8 @@ export class MahjongRoomService {
   private emptyPublicSnapshot(): MahjongPublicSnapshot {
     return {
       gameId: 'mahjong', roomId: 'mahjong', phase: 'lobby', handNumber: 0, version: 0, players: [], spectators: [], chat: [],
-      hostSeat: null, dealerSeat: null, currentTurn: null, awaitingDiscard: false, pendingDiscard: null, responseSeats: [], wallCount: 0, diceRoll: null,
+      hostSeat: null, dealerSeat: null, currentTurn: null, awaitingDiscard: false, pendingDiscard: null, responseSeats: [], wallCount: 0,
+      wallLayout: { breakSide: null, replacementSide: null, sides: MAHJONG_SEATS.map((seat) => ({ seat, liveTiles: 0, replacementTiles: 0 })) }, diceRoll: null,
       lastDiscard: null, discardRiver: [], settlement: null,
     };
   }

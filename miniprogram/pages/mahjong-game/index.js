@@ -43,7 +43,7 @@ function makeMotifs(rank) {
 }
 
 Page({
-  data: { snapshot: null, chat: [], chatMembers: [], players: [], hand: [], discardRiver: [], selectedTileId: '', canListenSelected: false, listenOptions: [], listenPreview: null, ownSeat: null, currentTurn: null, turnStatus: '', isMyTurn: false, isResponsePhase: false, isWaitingForPriority: false, wallCount: 0, wallSides: [], boardSize: 720, diceRoll: null, diceLabel: '掷骰', animationStage: '', autoDiscardPending: false, availableActions: [], chiOptions: [], listenTileIds: [], opponentHands: [], paymentRows: [], isListening: false, canDiscard: false, canListen: false, canHu: false, canPeng: false, canChi: false, canKong: false, canAddedKong: false, canConcealedKong: false, canPass: false, canRespondNow: false, spectator: false, settlement: null, settlementDescription: '', error: '' },
+  data: { snapshot: null, chat: [], chatMembers: [], players: [], hand: [], discardRiver: [], selectedTileId: '', canListenSelected: false, listenOptions: [], listenPreview: null, ownSeat: null, currentTurn: null, turnStatus: '', isMyTurn: false, isResponsePhase: false, isWaitingForPriority: false, wallCount: 0, wallSides: [], boardSize: 720, diceRoll: null, diceLabel: '掷骰', animationStage: '', autoDiscardPending: false, availableActions: [], chiOptions: [], chiPickerOpen: false, listenTileIds: [], opponentHands: [], paymentRows: [], isListening: false, canDiscard: false, canListen: false, canHu: false, canPeng: false, canChi: false, canKong: false, canAddedKong: false, canConcealedKong: false, canPass: false, canRespondNow: false, spectator: false, settlement: null, settlementDescription: '', error: '' },
 
   onLoad() {
     this.app = getApp();
@@ -94,8 +94,8 @@ Page({
     const listenOptions = (snapshot.private.listenOptions || []).map((option) => ({
       discardTileId: option.discardTileId,
       waits: option.waits.map(tileDecor),
-      baoTile: option.baoTile ? tileDecor(option.baoTile) : null,
     }));
+    const isListening = Boolean(snapshot.private.isListening);
     const isResponsePhase = Boolean(snapshot.public.pendingDiscard);
     const isWaitingForPriority = Boolean(snapshot.private.seat && !snapshot.private.spectator && isResponsePhase && snapshot.public.responseSeats.includes(snapshot.private.seat) && availableActions.length === 0);
     const currentPlayer = bySeat.get(snapshot.public.currentTurn);
@@ -110,7 +110,12 @@ Page({
     const drawnTile = rawHand.find((tile) => tile.id === drawnTileId);
     const orderedHand = drawnTile ? [...rawHand.filter((tile) => tile.id !== drawnTileId), drawnTile] : rawHand;
     const hand = orderedHand.map((tile) => ({ ...tileDecor(tile), selected: tile.id === selectedTileId, listenOption: listenTileIds.includes(tile.id), drawn: tile.id === drawnTileId }));
-    const listenPreview = listenOptions.find((option) => option.discardTileId === selectedTileId) || null;
+    const listenPreview = isListening
+      ? {
+        waits: (snapshot.private.listenWaits || []).map(tileDecor),
+        baoTile: snapshot.private.baoTile ? tileDecor(snapshot.private.baoTile) : null,
+      }
+      : listenOptions.find((option) => option.discardTileId === selectedTileId) || null;
     const chiOptions = (snapshot.private.chiOptions || []).map((tileIds) => {
       return {
         key: tileIds.join('-'),
@@ -147,10 +152,21 @@ Page({
         ? `${snapshot.public.settlement.winnerNickname || snapshot.public.settlement.winnerSeat} 获胜 · ${snapshot.public.settlement.winPattern === 'big-wind' ? '大风' : snapshot.public.settlement.winPattern === 'bao' ? '胡宝' : snapshot.public.settlement.type === 'self-draw' ? '自摸' : '点炮'}`
         : '';
     const wallCount = snapshot.public.wallCount;
-    const wallSides = Array.from({ length: 4 }, (_, side) => ({
-      position: ['north', 'east', 'south', 'west'][side],
-      tiles: Array.from({ length: Math.floor(wallCount / 4) + (side < wallCount % 4 ? 1 : 0) }, (_, index) => ({ id: `${side}-${index}` })),
-    }));
+    const wallSides = (snapshot.public.wallLayout && snapshot.public.wallLayout.sides || []).map((side) => {
+      const tiles = [
+        ...Array.from({ length: side.liveTiles }, (_, index) => ({ id: `${side.seat}-live-${index}`, replacement: false })),
+        ...Array.from({ length: side.replacementTiles }, (_, index) => ({ id: `${side.seat}-replacement-${index}`, replacement: true })),
+      ];
+      return {
+        position: seatPosition(snapshot.private.seat, side.seat),
+        seat: side.seat,
+        isBreakSide: snapshot.public.wallLayout.breakSide === side.seat,
+        stacks: Array.from({ length: Math.ceil(tiles.length / 2) }, (_, index) => ({
+          id: `${side.seat}-stack-${index}`,
+          tiles: tiles.slice(index * 2, index * 2 + 2),
+        })),
+      };
+    });
     this.app.setSnapshot(snapshot);
     this.setData({
       snapshot,
@@ -174,11 +190,12 @@ Page({
       autoDiscardPending: Boolean(snapshot.private.autoDiscardPending),
       availableActions,
       chiOptions,
+      chiPickerOpen: false,
       listenTileIds,
       listenOptions,
       listenPreview,
       opponentHands: [],
-      isListening: Boolean(snapshot.private.isListening),
+      isListening,
       canDiscard: availableActions.includes('discard'),
       canListen: availableActions.includes('listen'),
       canHu: availableActions.includes('hu'),
@@ -208,6 +225,36 @@ Page({
     });
   },
 
+  onTileTouchStart(event) {
+    const touch = event.touches && event.touches[0];
+    if (!touch || !this.data.isMyTurn || this.data.isListening) return;
+    this.tileDrag = { id: event.currentTarget.dataset.id, x: touch.clientX, y: touch.clientY, moved: false };
+  },
+
+  onTileTouchMove(event) {
+    const drag = this.tileDrag;
+    const touch = event.touches && event.touches[0];
+    if (drag && touch && Math.hypot(touch.clientX - drag.x, touch.clientY - drag.y) > 14) drag.moved = true;
+  },
+
+  onTileTouchEnd(event) {
+    const drag = this.tileDrag;
+    this.tileDrag = null;
+    const touch = event.changedTouches && event.changedTouches[0];
+    if (!drag || !drag.moved || !touch || !this.data.isMyTurn || this.data.isListening || !this.data.canDiscard) return;
+    wx.createSelectorQuery().select('.mahjong-table').boundingClientRect((rect) => {
+      if (!rect || touch.clientX < rect.left || touch.clientX > rect.right || touch.clientY < rect.top || touch.clientY > rect.bottom) return;
+      this.runCommand('discard', { tileId: drag.id });
+      this.setData({ selectedTileId: '', hand: this.data.hand.map((tile) => ({ ...tile, selected: false })) });
+    }).exec();
+  },
+
+  onTableTap() {
+    if (!this.data.isMyTurn || this.data.isListening || !this.data.canDiscard || !this.data.selectedTileId) return;
+    this.runCommand('discard', { tileId: this.data.selectedTileId });
+    this.setData({ selectedTileId: '', hand: this.data.hand.map((tile) => ({ ...tile, selected: false })) });
+  },
+
   runCommand(type, payload) {
     const snapshot = this.data.snapshot;
     if (!snapshot) return;
@@ -219,6 +266,7 @@ Page({
 
   onAction(event) {
     const type = event.currentTarget.dataset.action;
+    if (type !== 'chi-intent') this.setData({ chiPickerOpen: false });
     if (type === 'discard') {
       if (!this.data.selectedTileId) return;
       this.runCommand('discard', { tileId: this.data.selectedTileId });
@@ -239,6 +287,15 @@ Page({
     if (type === 'chi') {
       const option = this.data.chiOptions[Number(event.currentTarget.dataset.index) || 0];
       if (option) this.runCommand('chi', { tileIds: option.tileIds });
+      this.setData({ chiPickerOpen: false });
+      return;
+    }
+    if (type === 'chi-intent') {
+      if (this.data.chiOptions.length === 1) {
+        this.runCommand('chi', { tileIds: this.data.chiOptions[0].tileIds });
+        return;
+      }
+      this.setData({ chiPickerOpen: !this.data.chiPickerOpen });
       return;
     }
     this.runCommand(type, {});

@@ -31,6 +31,10 @@ describe('MahjongRoomService', () => {
     expect(started.snapshot.public.phase).toBe('playing');
     expect(started.snapshot.public.dealerSeat).toBe('A');
     expect(started.snapshot.public.currentTurn).toBe('A');
+    expect(started.snapshot.public.wallCount).toBe(83);
+    expect(started.snapshot.public.wallLayout.sides.reduce((total, side) => total + side.liveTiles + side.replacementTiles, 0)).toBe(83);
+    expect(started.snapshot.public.wallLayout.sides.reduce((total, side) => total + side.replacementTiles, 0)).toBe(4);
+    expect(started.snapshot.public.wallLayout.breakSide).not.toBeNull();
     expect(room.getSnapshot(players[0].sessionToken).private.hand).toHaveLength(14);
     expect(room.getSnapshot(players[1].sessionToken).private.hand).toHaveLength(13);
   });
@@ -64,10 +68,48 @@ describe('MahjongRoomService', () => {
     player.lastDrawnTileId = drawn.id;
 
     const before = room.getSnapshot(players[0].sessionToken);
-    expect(before.private.listenOptions?.find((option) => option.discardTileId === selected.id)?.waits.map((wait) => wait.label)).toContain('4万');
+    const listenPreview = before.private.listenOptions?.find((option) => option.discardTileId === selected.id);
+    expect(listenPreview?.waits.map((wait) => wait.label)).toContain('4万');
+    expect(listenPreview).not.toHaveProperty('baoTile');
+    expect(before.private).not.toHaveProperty('baoTile');
     const listened = room.dispatch(players[0].sessionToken, command('listen', before.public.handNumber, before.public.version, { tileId: selected.id }));
     expect(listened.snapshot.private.isListening).toBe(true);
     expect(listened.snapshot.private.listenWaits?.map((wait) => wait.label)).toContain('4万');
+    expect(listened.snapshot.private.baoTile).toBeDefined();
+    expect(room.getSnapshot(players[1].sessionToken).private).not.toHaveProperty('baoTile');
+  });
+
+  it('多个缺口不能误判为听牌：打出5条后万子和筒子都无法组成完整牌型', () => {
+    const room = new MahjongRoomService({ inviteCode: 'inner-414', random: () => 0.42 });
+    const players = ['甲', '乙', '丙', '丁'].map((nickname) => {
+      const auth = room.login('inner-414');
+      room.join(auth.sessionToken, nickname, 'mahjong');
+      return auth;
+    });
+    const lobby = room.getSnapshot(players[0].sessionToken);
+    room.dispatch(players[0].sessionToken, command('start-hand', lobby.public.handNumber, lobby.public.version));
+
+    const deck = createMahjongDeck();
+    const tile = (suit: string, rank: number | string, copy = 0) => deck.find((candidate) => candidate.suit === suit && candidate.rank === rank && candidate.id.endsWith('-' + copy))!;
+    const discard = tile('bamboo', 5);
+    const internals = room as unknown as {
+      state: {
+        players: Record<MahjongSeat, { hand: MahjongTile[]; melds: MahjongMeld[]; lastDrawnTileId: string | null } | null>;
+      };
+    };
+    const player = internals.state.players.A!;
+    player.hand = [
+      tile('characters', 2), tile('characters', 4), tile('characters', 8), tile('characters', 9), discard,
+      tile('dots', 4), tile('dots', 4, 1), tile('dots', 8), tile('dots', 8, 1), tile('dots', 9), tile('dots', 9, 1),
+    ];
+    player.melds = [{ kind: 'chi', tiles: [tile('bamboo', 1), tile('bamboo', 2), tile('bamboo', 3)] }];
+    player.lastDrawnTileId = discard.id;
+
+    const view = room.getSnapshot(players[0].sessionToken);
+    expect(view.private.availableActions).not.toContain('listen');
+    expect(view.private.listenOptions).toBeUndefined();
+    expect(() => room.dispatch(players[0].sessionToken, command('listen', view.public.handNumber, view.public.version, { tileId: discard.id })))
+      .toThrow('打出这张牌后不满足听牌条件');
   });
 
   it('出牌后没有响应时按顺序摸牌并把牌权交给下一位', () => {
@@ -80,6 +122,9 @@ describe('MahjongRoomService', () => {
     const lobby = room.getSnapshot(players[0].sessionToken);
     room.dispatch(players[0].sessionToken, command('start-hand', lobby.public.handNumber, lobby.public.version));
     const dealerView = room.getSnapshot(players[0].sessionToken);
+    const startingWallCount = dealerView.public.wallCount;
+    const firstLiveWallSide = dealerView.public.wallLayout.replacementSide!;
+    const firstLiveWallCount = dealerView.public.wallLayout.sides.find((side) => side.seat === firstLiveWallSide)!.liveTiles;
     const tile = dealerView.private.hand[0]!;
     let next = room.dispatch(players[0].sessionToken, command('discard', dealerView.public.handNumber, dealerView.public.version, { tileId: tile.id })).snapshot;
     while (next.public.pendingDiscard) {
@@ -92,6 +137,9 @@ describe('MahjongRoomService', () => {
     expect(next.public.currentTurn).toBe('B');
     expect(next.public.pendingDiscard).toBeNull();
     expect(next.public.lastDiscard?.tile.id).toBe(tile.id);
+    expect(next.public.wallCount).toBe(startingWallCount - 1);
+    expect(next.public.wallLayout.sides.reduce((total, side) => total + side.liveTiles + side.replacementTiles, 0)).toBe(next.public.wallCount);
+    expect(next.public.wallLayout.sides.find((side) => side.seat === firstLiveWallSide)!.liveTiles).toBe(firstLiveWallCount - 1);
     expect(room.getSnapshot(players[1].sessionToken).private.hand).toHaveLength(14);
     expect(room.getSnapshot(players[1].sessionToken).private.drawnTileId).toBeTruthy();
   });

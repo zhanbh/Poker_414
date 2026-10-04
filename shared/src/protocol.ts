@@ -294,6 +294,16 @@ export interface MahjongSettlement {
   readonly winningTile?: MahjongTile;
 }
 
+export interface MahjongWallLayout {
+  readonly breakSide: MahjongSeat | null;
+  readonly replacementSide: MahjongSeat | null;
+  readonly sides: ReadonlyArray<{
+    readonly seat: MahjongSeat;
+    readonly liveTiles: number;
+    readonly replacementTiles: number;
+  }>;
+}
+
 export interface MahjongPublicSnapshot {
   readonly gameId: 'mahjong';
   readonly roomId: string;
@@ -310,6 +320,7 @@ export interface MahjongPublicSnapshot {
   readonly pendingDiscard: { readonly seat: MahjongSeat; readonly tile: MahjongTile } | null;
   readonly responseSeats: MahjongSeat[];
   readonly wallCount: number;
+  readonly wallLayout: MahjongWallLayout;
   readonly diceRoll: readonly [number, number] | null;
   readonly lastDiscard: { readonly seat: MahjongSeat; readonly tile: MahjongTile } | null;
   readonly discardRiver: ReadonlyArray<{ readonly seat: MahjongSeat; readonly tile: MahjongTile }>;
@@ -324,7 +335,7 @@ export interface MahjongPrivateSnapshot {
   readonly chiOptions?: string[][];
   readonly chiDiscardIds?: string[];
   readonly listenTileIds?: string[];
-  readonly listenOptions?: Array<{ readonly discardTileId: string; readonly waits: MahjongTile[]; readonly baoTile?: MahjongTile }>;
+  readonly listenOptions?: Array<{ readonly discardTileId: string; readonly waits: MahjongTile[] }>;
   readonly drawnTileId?: string;
   readonly discardableTileId?: string;
   readonly isListening?: boolean;

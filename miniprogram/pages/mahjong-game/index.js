@@ -26,7 +26,7 @@ const tileDecor = (tile) => {
 };
 
 Page({
-  data: { snapshot: null, chat: [], chatMembers: [], players: [], hand: [], discardRiver: [], selectedTileId: '', canListenSelected: false, listenOptions: [], listenPreview: null, postDiscardListenWaits: [], ownSeat: null, currentTurn: null, turnStatus: '', isMyTurn: false, isResponsePhase: false, isWaitingForPriority: false, wallCount: 0, wallSides: [], boardSize: 720, diceRoll: null, diceLabel: '掷骰', animationStage: '', autoDiscardPending: false, availableActions: [], chiOptions: [], chiPickerOpen: false, listenTileIds: [], opponentHands: [], paymentRows: [], isListening: false, canDiscard: false, canListen: false, canHu: false, canPeng: false, canChi: false, canKong: false, canAddedKong: false, canConcealedKong: false, canPass: false, canRespondNow: false, spectator: false, settlement: null, settlementDescription: '', error: '' },
+  data: { snapshot: null, chat: [], chatMembers: [], players: [], hand: [], discardRiver: [], selectedTileId: '', canListenSelected: false, listenOptions: [], listenPreview: null, postDiscardListenWaits: [], ownSeat: null, currentTurn: null, turnStatus: '', isMyTurn: false, isResponsePhase: false, isWaitingForPriority: false, wallCount: 0, wallSides: [], boardSize: 720, diceRoll: null, diceLabel: '掷骰', animationStage: '', autoDiscardPending: false, availableActions: [], chiOptions: [], chiPickerOpen: false, listenTileIds: [], opponentHands: [], paymentRows: [], winAnnouncement: null, isListening: false, canDiscard: false, canListen: false, canHu: false, canPeng: false, canChi: false, canKong: false, canAddedKong: false, canConcealedKong: false, canPass: false, canRespondNow: false, spectator: false, settlement: null, settlementDescription: '', error: '' },
 
   onLoad() {
     this.app = getApp();
@@ -83,7 +83,9 @@ Page({
     const isResponsePhase = Boolean(snapshot.public.pendingDiscard);
     const isWaitingForPriority = Boolean(snapshot.private.seat && !snapshot.private.spectator && isResponsePhase && snapshot.public.responseSeats.includes(snapshot.private.seat) && availableActions.length === 0);
     const currentPlayer = bySeat.get(snapshot.public.currentTurn);
-    const turnStatus = postDiscardListenWaits.length > 0
+    const turnStatus = snapshot.public.winAnnouncement
+      ? `${snapshot.public.winAnnouncement.winnerNickname} 胡牌！`
+      : postDiscardListenWaits.length > 0
       ? '已出牌，请选择听或暂不听'
       : isResponsePhase
       ? `响应阶段 · 上手打出 ${snapshot.public.pendingDiscard.tile.label}，当前没有普通出牌权`
@@ -112,12 +114,23 @@ Page({
       };
     });
     const payments = snapshot.public.settlement && snapshot.public.settlement.payments ? snapshot.public.settlement.payments : {};
-    const paymentRows = Object.keys(payments).map((seat) => ({
-      seat,
-      nickname: (bySeat.get(seat) || {}).nickname || seat,
-      amount: payments[seat],
-      amountLabel: (payments[seat] > 0 ? '+' : '') + payments[seat] + '分',
-    }));
+    const transfers = snapshot.public.settlement && snapshot.public.settlement.transfers || [];
+    const transferDetail = (transfer) => transfer.fan && snapshot.public.settlement.baseScore
+      ? `${transfer.fan}番×${snapshot.public.settlement.baseScore}=${transfer.amount}分`
+      : `${transfer.amount}`;
+    const paymentRows = snapshot.public.settlement ? snapshot.public.players.map((player) => ({
+      seat: player.seat,
+      nickname: player.nickname,
+      mine: player.seat === snapshot.private.seat,
+      before: player.score - (payments[player.seat] || 0),
+      after: player.score,
+      positive: (payments[player.seat] || 0) >= 0,
+      amountLabel: ((payments[player.seat] || 0) > 0 ? '+' : '') + (payments[player.seat] || 0) + '分',
+      flow: [
+        ...transfers.filter((transfer) => transfer.to === player.seat).map((transfer) => `收 ${(bySeat.get(transfer.from) || {}).nickname || transfer.from} ${transferDetail(transfer)}`),
+        ...transfers.filter((transfer) => transfer.from === player.seat).map((transfer) => `付 ${(bySeat.get(transfer.to) || {}).nickname || transfer.to} ${transferDetail(transfer)}`),
+      ].join(' · ') || '无积分变化',
+    })) : [];
     const exposedHands = new Map([
       ...(snapshot.private.opponentHands || []),
       ...(snapshot.public.revealedHands || []),
@@ -126,6 +139,7 @@ Page({
       ...player,
       position: seatPosition(snapshot.private.seat, player.seat),
       avatarLabel: player.nickname ? player.nickname.slice(0, 1) : player.seat,
+      isWinner: Boolean(snapshot.public.winAnnouncement && snapshot.public.winAnnouncement.winnerSeat === player.seat),
       discards: (player.discards || []).map((tile) => ({ ...tileDecor(tile), isPendingDiscard: snapshot.public.pendingDiscard && snapshot.public.pendingDiscard.tile.id === tile.id })),
       melds: (player.melds || []).map((meld) => ({
         ...meld,
@@ -142,22 +156,24 @@ Page({
     const settlementDescription = snapshot.public.settlement && snapshot.public.settlement.type === 'draw'
       ? '流局 · 原庄家不变'
       : snapshot.public.settlement
-        ? `${snapshot.public.settlement.winnerNickname || snapshot.public.settlement.winnerSeat} 获胜 · ${snapshot.public.settlement.winPattern === 'big-wind' ? '大风' : snapshot.public.settlement.winPattern === 'bao' ? '胡宝' : snapshot.public.settlement.type === 'self-draw' ? '自摸' : '点炮'}`
+        ? `${snapshot.public.settlement.winnerNickname || snapshot.public.settlement.winnerSeat} 获胜 · ${snapshot.public.settlement.isBaoZhongBao ? '宝中宝' : snapshot.public.settlement.winPattern === 'big-wind' ? '大风' : snapshot.public.settlement.winPattern === 'bao' ? '摸宝' : snapshot.public.settlement.type === 'self-draw' ? '自摸' : '平和'}${snapshot.public.settlement.isCardang && !snapshot.public.settlement.isBaoZhongBao ? ' · 卡当' : ''}`
         : '';
     const wallCount = snapshot.public.wallCount;
     const wallSides = (snapshot.public.wallLayout && snapshot.public.wallLayout.sides || []).map((side) => {
-      const tiles = [
-        ...Array.from({ length: side.liveTiles }, (_, index) => ({ id: `${side.seat}-live-${index}`, replacement: false })),
-        ...Array.from({ length: side.replacementTiles }, (_, index) => ({ id: `${side.seat}-replacement-${index}`, replacement: true })),
-      ];
+      const position = seatPosition(snapshot.private.seat, side.seat);
+      const stacks = side.stacks
+        ? side.stacks.map((stack) => ({ id: `${side.seat}-stack-${stack.index}`, count: stack.liveTiles + stack.replacementTiles, isDouble: stack.liveTiles + stack.replacementTiles === 2, replacement: stack.replacementTiles > 0 }))
+        : Array.from({ length: Math.ceil((side.liveTiles + side.replacementTiles) / 2) }, (_, index) => ({
+          id: `${side.seat}-stack-${index}`,
+          count: Math.min(2, side.liveTiles + side.replacementTiles - index * 2),
+          isDouble: index * 2 + 1 < side.liveTiles + side.replacementTiles,
+          replacement: index * 2 >= side.liveTiles,
+        }));
       return {
-        position: seatPosition(snapshot.private.seat, side.seat),
+        position,
         seat: side.seat,
         isBreakSide: snapshot.public.wallLayout.breakSide === side.seat,
-        stacks: Array.from({ length: Math.ceil(tiles.length / 2) }, (_, index) => {
-          const stackTiles = tiles.slice(index * 2, index * 2 + 2);
-          return { id: `${side.seat}-stack-${index}`, isDouble: stackTiles.length === 2, replacement: stackTiles.some((tile) => tile.replacement) };
-        }),
+        stacks: position === 'bottom' || position === 'left' ? stacks.reverse() : stacks,
       };
     });
     this.app.setSnapshot(snapshot);
@@ -204,6 +220,7 @@ Page({
       settlement: snapshot.public.settlement,
       settlementDescription,
       paymentRows,
+      winAnnouncement: snapshot.public.winAnnouncement || null,
       error: '',
     });
   },

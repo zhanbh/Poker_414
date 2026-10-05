@@ -21,7 +21,7 @@ describe('MahjongGameView settlement', () => {
           nickname: ['甲', '乙', '丙', '丁'][index]!,
           connected: true,
           handCount: hands[index]!.length,
-          score: 1_000,
+          score: index === 1 ? 1_003 : 999,
           isListening: false,
           melds: index === 0 ? [{ kind: 'concealed-kong', tiles: [...meldTiles, deck[65]!] }]
             : index === 1 ? [{ kind: 'concealed-kong', tiles: [] }] : [],
@@ -35,15 +35,35 @@ describe('MahjongGameView settlement', () => {
         diceRoll: [2, 5], lastDiscard: null,
         discardRiver: [{ seat: 'A', tile: discards[0]! }, { seat: 'B', tile: discards[1]! }],
         revealedHands: seats.map((seat, index) => ({ seat, nickname: ['甲', '乙', '丙', '丁'][index]!, hand: hands[index]! })),
-        settlement: { winnerSeat: 'B', winnerNickname: '乙', type: 'self-draw', payments: { A: -1, B: 3, C: -1, D: -1 } },
+        settlement: { winnerSeat: 'B', winnerNickname: '乙', type: 'self-draw', payments: { A: -1, B: 3, C: -1, D: -1 }, transfers: [
+          { from: 'A', to: 'B', amount: 1 }, { from: 'C', to: 'B', amount: 1 }, { from: 'D', to: 'B', amount: 1 },
+        ] },
       },
       private: { seat: 'A', hand: hands[0]!, availableActions: [], spectator: false },
     };
 
-    const { container } = render(<MahjongGameView snapshot={snapshot} onCommand={vi.fn()} onLeave={vi.fn()} testMode={false} />);
+    const announcing: MahjongSnapshot = {
+      ...snapshot,
+      public: {
+        ...snapshot.public, phase: 'playing', version: 11, settlement: null, revealedHands: undefined,
+        players: snapshot.public.players.map((player) => ({ ...player, score: 1000 })),
+        winAnnouncement: { winnerSeat: 'B', winnerNickname: '乙', type: 'self-draw', winPattern: 'standard' },
+      },
+    };
+    const props = { onCommand: vi.fn(), onLeave: vi.fn(), testMode: false };
+    const { container, rerender } = render(<MahjongGameView snapshot={announcing} {...props} />);
+    expect(container.querySelector('.mahjong-seat-left.winner-announced .mahjong-win-badge')?.textContent).toBe('胡!');
+    expect(container.querySelector('.mahjong-win-announcement')?.textContent).toContain('乙');
+    expect(container.querySelector('.mahjong-table-settlement')).toBeNull();
+
+    rerender(<MahjongGameView snapshot={snapshot} {...props} />);
     const table = container.querySelector('.mahjong-table');
     expect(table?.querySelector('.mahjong-table-settlement')?.textContent).toContain('本局结束');
     expect(table?.querySelector('.mahjong-table-settlement')?.textContent).toContain('乙 获胜 · 自摸');
+    expect(table?.querySelectorAll('.mahjong-score-row')).toHaveLength(4);
+    expect(table?.querySelector('.mahjong-score-row.mine')?.textContent).toContain('1000 → 999');
+    expect(table?.querySelector('.mahjong-score-row.mine')?.textContent).toContain('付 乙 1');
+    expect(table?.querySelectorAll('.mahjong-score-row')[1]?.textContent).toContain('收 甲 1 · 收 丙 1 · 收 丁 1');
     expect(table?.querySelectorAll('.mahjong-own-hand .mahjong-face, .mahjong-revealed-hand .mahjong-face')).toHaveLength(52);
     expect(Array.from(table?.querySelectorAll('.mahjong-discard-tiles .mahjong-face') ?? []).map((tile) => tile.getAttribute('aria-label')))
       .toEqual(discards.map((tile) => tile.label));
@@ -74,7 +94,7 @@ describe('MahjongGameView discard interaction', () => {
       private: { seat: 'A', hand: hands[0]!, availableActions: ['discard', 'listen'], spectator: false },
     };
     const onCommand = vi.fn();
-    const { container } = render(<MahjongGameView snapshot={snapshot} onCommand={onCommand} onLeave={vi.fn()} testMode={false} />);
+    const { container, rerender } = render(<MahjongGameView snapshot={snapshot} onCommand={onCommand} onLeave={vi.fn()} testMode={false} />);
     const table = container.querySelector('.mahjong-table')!;
     const tile = container.querySelector('.mahjong-own-hand .mahjong-face')!;
 
@@ -97,6 +117,38 @@ describe('MahjongGameView discard interaction', () => {
     expect(onCommand).not.toHaveBeenCalled();
     fireEvent.click(tile);
     expect(onCommand).toHaveBeenCalledExactlyOnceWith('discard', { tileId: hands[0]![0]!.id });
+
+    const physicalWall = {
+      ...snapshot,
+      public: {
+        ...snapshot.public,
+        wallLayout: {
+          breakSide: 'C' as const,
+          replacementSide: 'C' as const,
+          breakStack: 2,
+          sides: seats.map((seat) => ({
+            seat,
+            liveTiles: seat === 'C' ? 2 : 0,
+            replacementTiles: seat === 'C' ? 2 : 0,
+            stacks: Array.from({ length: 17 }, (_, index) => ({
+              index,
+              liveTiles: seat === 'C' && index === 2 ? 2 : 0,
+              replacementTiles: seat === 'C' && index === 0 ? 2 : 0,
+            })),
+          })),
+        },
+      },
+    } satisfies MahjongSnapshot;
+    rerender(<MahjongGameView snapshot={physicalWall} onCommand={onCommand} onLeave={vi.fn()} testMode={false} />);
+    const topStacks = container.querySelectorAll('.mahjong-wall-top .mahjong-wall-stack');
+    expect(topStacks).toHaveLength(17);
+    expect(topStacks[0]?.querySelector('.replacement')).not.toBeNull();
+    expect(topStacks[1]?.classList.contains('empty')).toBe(true);
+    expect(topStacks[2]?.querySelector('.mahjong-tile-back')).not.toBeNull();
+    rerender(<MahjongGameView snapshot={{ ...physicalWall, private: { ...physicalWall.private, seat: 'C' } }} onCommand={onCommand} onLeave={vi.fn()} testMode={false} />);
+    const bottomStacks = container.querySelectorAll('.mahjong-wall-bottom .mahjong-wall-stack');
+    expect(bottomStacks).toHaveLength(17);
+    expect(bottomStacks[16]?.querySelector('.replacement')).not.toBeNull();
   });
 
   it('discards a hand tile dragged onto the table', () => {

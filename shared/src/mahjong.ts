@@ -183,6 +183,45 @@ export function mahjongWaits(hand: readonly MahjongTile[], meldCount = 0, melds:
   return kinds.filter((tile) => structuralKeys.has(tileKey(tile)) || isBigWindWin(hand, tile, melds));
 }
 
+/** A true closed middle wait: no other structural winning tile or alternative grouping. */
+export function isMahjongCardangWait(hand: readonly MahjongTile[], winningTile: MahjongTile, meldCount = 0): boolean {
+  if (!isNumbered(winningTile) || winningTile.rank < 2 || winningTile.rank > 8) return false;
+  if (!isWinningMahjongHand([...hand, winningTile], meldCount)) return false;
+  if (meldCount === 0 && isSevenPairs([...hand, winningTile])) return false;
+  if (mahjongTileKinds().filter((tile) => isWinningMahjongHand([...hand, tile], meldCount)).length !== 1) return false;
+
+  const without = (keys: readonly string[]): MahjongTile[] | null => {
+    const remaining = [...hand];
+    for (const key of keys) {
+      const index = remaining.findIndex((tile) => tileKey(tile) === key);
+      if (index < 0) return null;
+      remaining.splice(index, 1);
+    }
+    return remaining;
+  };
+  const suit = winningTile.suit;
+  const rank = winningTile.rank;
+  const key = tileKey(winningTile);
+  const gap = without([`${suit}:${rank - 1}`, `${suit}:${rank + 1}`]);
+  if (!gap || !isWinningMahjongHand(gap, meldCount + 1)) return false;
+
+  const pair = without([key]);
+  if (pair) {
+    const counts = countsFor(pair);
+    if (removeMelds(counts, [...counts.keys()].sort())) return false;
+  }
+  const pong = without([key, key]);
+  if (pong && isWinningMahjongHand(pong, meldCount + 1)) return false;
+  for (const neighbors of [
+    [`${suit}:${rank - 2}`, `${suit}:${rank - 1}`],
+    [`${suit}:${rank + 1}`, `${suit}:${rank + 2}`],
+  ]) {
+    const remainder = without(neighbors);
+    if (remainder && isWinningMahjongHand(remainder, meldCount + 1)) return false;
+  }
+  return true;
+}
+
 /** Two pairs in hand, or a triplet/kong in hand or an already declared meld. */
 export function hasMahjongPairStructure(hand: readonly MahjongTile[], melds: readonly MahjongMeld[] = []): boolean {
   if (melds.some((meld) => meld.kind !== 'chi' && meld.tiles.length >= 3)) return true;
@@ -194,6 +233,20 @@ export function hasMahjongPairStructure(hand: readonly MahjongTile[], melds: rea
     if (pairs >= 2) return true;
   }
   return false;
+}
+
+/** A complete numbered sequence already held in the hand or exposed as a chi. */
+export function hasMahjongSequence(hand: readonly MahjongTile[], melds: readonly MahjongMeld[] = []): boolean {
+  const hasSequence = (tiles: readonly MahjongTile[]): boolean => {
+    const counts = countsFor(tiles);
+    for (const suit of ['characters', 'bamboo', 'dots'] as const) {
+      for (let start = 1; start <= 7; start += 1) {
+        if ([start, start + 1, start + 2].every((rank) => (counts.get(`${suit}:${rank}`) ?? 0) > 0)) return true;
+      }
+    }
+    return false;
+  };
+  return hasSequence(hand) || melds.some((meld) => meld.kind === 'chi' && hasSequence(meld.tiles));
 }
 
 export function hasMahjongListenYao(hand: readonly MahjongTile[], winningTile: MahjongTile, melds: readonly MahjongMeld[] = []): boolean {

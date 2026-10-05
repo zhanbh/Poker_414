@@ -144,9 +144,22 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode }: {
   const settlementDescription = settlement?.type === 'draw'
     ? '流局 · 原庄家不变'
     : settlement
-      ? `${settlement.winnerNickname ?? settlement.winnerSeat ?? ''} 获胜 · ${settlement.winPattern === 'big-wind' ? '大风' : settlement.winPattern === 'bao' ? '胡宝' : settlement.type === 'self-draw' ? '自摸' : '点炮'}`
+      ? `${settlement.winnerNickname ?? settlement.winnerSeat ?? ''} 获胜 · ${settlement.isBaoZhongBao ? '宝中宝' : settlement.winPattern === 'big-wind' ? '大风' : settlement.winPattern === 'bao' ? '摸宝' : settlement.type === 'self-draw' ? '自摸' : '平和'}${settlement.isCardang && !settlement.isBaoZhongBao ? ' · 卡当' : ''}`
       : '';
   const players = new Map(snapshot.public.players.map((player) => [player.seat, player]));
+  const winAnnouncement = snapshot.public.winAnnouncement;
+  const transfers = settlement?.transfers ?? [];
+  const transferDetail = (transfer: typeof transfers[number]) => transfer.fan && settlement?.baseScore
+    ? `${transfer.fan}番×${settlement.baseScore}=${transfer.amount}分`
+    : `${transfer.amount}`;
+  const scoreRows = settlement ? snapshot.public.players.map((player) => {
+    const change = settlement.payments?.[player.seat] ?? 0;
+    const received = transfers.filter((transfer) => transfer.to === player.seat)
+      .map((transfer) => `收 ${players.get(transfer.from)?.nickname ?? transfer.from} ${transferDetail(transfer)}`);
+    const paid = transfers.filter((transfer) => transfer.from === player.seat)
+      .map((transfer) => `付 ${players.get(transfer.to)?.nickname ?? transfer.to} ${transferDetail(transfer)}`);
+    return { seat: player.seat, nickname: player.nickname, before: player.score - change, after: player.score, change, flow: [...received, ...paid].join(' · ') || '无积分变化' };
+  }) : [];
   const revealedHands = new Map([
     ...(snapshot.private.opponentHands ?? []),
     ...(snapshot.public.revealedHands ?? []),
@@ -154,14 +167,22 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode }: {
   const wallCount = snapshot.public.wallCount;
   const viewerSeat = ownSeat ?? 'A';
   const wallSides = snapshot.public.wallLayout.sides.map((side) => {
-    const tiles = [
-      ...Array.from({ length: side.liveTiles }, (_, index) => ({ id: `${side.seat}-live-${index}`, replacement: false })),
-      ...Array.from({ length: side.replacementTiles }, (_, index) => ({ id: `${side.seat}-replacement-${index}`, replacement: true })),
-    ];
+    const position = seatPosition(viewerSeat, side.seat);
+    const stacks = side.stacks
+      ? side.stacks.map((stack) => ({
+        id: `${side.seat}-stack-${stack.index}`,
+        count: stack.liveTiles + stack.replacementTiles,
+        replacement: stack.replacementTiles > 0,
+      }))
+      : Array.from({ length: Math.ceil((side.liveTiles + side.replacementTiles) / 2) }, (_, index) => ({
+        id: `${side.seat}-stack-${index}`,
+        count: Math.min(2, side.liveTiles + side.replacementTiles - index * 2),
+        replacement: index * 2 >= side.liveTiles,
+      }));
     return {
       seat: side.seat,
-      position: seatPosition(viewerSeat, side.seat),
-      stacks: Array.from({ length: Math.ceil(tiles.length / 2) }, (_, index) => ({ id: `${side.seat}-stack-${index}`, tiles: tiles.slice(index * 2, index * 2 + 2) })),
+      position,
+      stacks: position === 'bottom' || position === 'left' ? stacks.reverse() : stacks,
     };
   });
   const showPostDiscardListenDock = !isSpectator && snapshot.public.phase === 'playing' && postDiscardListenWaits.length > 0;
@@ -210,11 +231,11 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode }: {
     <main className="mahjong-game">
       {testMode ? <div className="test-mode-banner" role="status">单机四人测试模式 · 每个标签页都是独立玩家</div> : null}
       {isSpectator ? <div className="spectator-banner">观战模式 · 可查看牌桌状态</div> : null}
-      <header className="mahjong-header"><div><h1>麻将对局</h1><p>{snapshot.public.phase === 'settled' ? '本局已结算' : showPostDiscardListenDock ? '已出牌 · 请确认是否听牌' : isResponsePhase ? '响应阶段 · 等待可操作玩家' : snapshot.public.currentTurn ? `轮到${players.get(snapshot.public.currentTurn)?.nickname ?? snapshot.public.currentTurn}出牌` : '牌局进行中'} · 牌墙剩余 {wallCount}</p></div><button type="button" className="leave-room-button" onClick={onLeave}>退出房间</button></header>
+      <header className="mahjong-header"><div><h1>麻将对局</h1><p>{snapshot.public.phase === 'settled' ? '本局已结算' : winAnnouncement ? `${winAnnouncement.winnerNickname} 胡牌！` : showPostDiscardListenDock ? '已出牌 · 请确认是否听牌' : isResponsePhase ? '响应阶段 · 等待可操作玩家' : snapshot.public.currentTurn ? `轮到${players.get(snapshot.public.currentTurn)?.nickname ?? snapshot.public.currentTurn}出牌` : '牌局进行中'} · 牌墙剩余 {wallCount}</p></div><button type="button" className="leave-room-button" onClick={onLeave}>退出房间</button></header>
       <RoomPurposeNotice />
       <section ref={tableRef} onClick={handleTableClick} className={`mahjong-table${settlement ? ' is-settled' : ''}${selectedTileId ? ' has-selected-tile' : ''}`} aria-label="方形麻将桌">
         {wallSides.map(({ seat, position, stacks }) => <div className={`mahjong-wall mahjong-wall-${position}`} aria-label={`${players.get(seat)?.nickname ?? '玩家'}面前剩余牌墙`} key={seat}>
-          {stacks.map((stack) => <span className={`mahjong-wall-stack${stack.tiles.length === 2 ? ' double' : ''}`} key={stack.id}><TileBack replacement={stack.tiles.some((tile) => tile.replacement)} /></span>)}
+          {stacks.map((stack) => <span className={`mahjong-wall-stack${stack.count === 2 ? ' double' : ''}${stack.count === 0 ? ' empty' : ''}`} key={stack.id}>{stack.count > 0 ? <TileBack replacement={stack.replacement} /> : null}</span>)}
         </div>)}
         {MAHJONG_SEATS.map((seat) => {
           const position = seatPosition(viewerSeat, seat);
@@ -224,12 +245,13 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode }: {
           const canRespond = isResponsePhase && seat === ownSeat && responseActions.length > 0;
           const visibleHand = seat === ownSeat ? null : revealedHands.get(seat);
           const isOwnSeat = seat === ownSeat && !isSpectator;
-          return <article className={`mahjong-seat mahjong-seat-${position}${isCurrentTurn ? ' current' : ''}${canRespond ? ' responding' : ''}${isOwnSeat ? ' own' : ''}`} key={seat} aria-label={player.nickname}>
+          return <article className={`mahjong-seat mahjong-seat-${position}${isCurrentTurn ? ' current' : ''}${canRespond ? ' responding' : ''}${isOwnSeat ? ' own' : ''}${winAnnouncement?.winnerSeat === seat ? ' winner-announced' : ''}`} key={seat} aria-label={player.nickname}>
             <div className="mahjong-player-card">
               <span className="mahjong-player-avatar">{player.nickname.slice(0, 1)}</span>
               <div className="mahjong-player-meta"><strong>{player.nickname}</strong><span>{player.score} 分</span></div>
               {player.isDealer ? <span className="mahjong-player-badge dealer" aria-label="庄家">庄</span> : null}
               {player.isListening ? <span className="mahjong-player-badge listening" aria-label="听牌标识">听</span> : null}
+              {winAnnouncement?.winnerSeat === seat ? <span className="mahjong-win-badge" aria-label="胡牌玩家">胡!</span> : null}
             </div>
             {player.melds.length ? <div className="mahjong-seat-melds">{player.melds.map((meld, index) => <MeldTiles meld={meld} key={`${seat}-${index}`} />)}</div> : null}
             {!isOwnSeat && visibleHand ? <div className="mahjong-revealed-hand" aria-label={`${player.nickname}的明牌`}>{visibleHand.map((tile) => <TileFace tile={tile} key={tile.id} />)}</div> : null}
@@ -244,10 +266,11 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode }: {
           <div className="mahjong-discard-tiles">{snapshot.public.discardRiver.map(({ tile }) => <TileFace tile={tile} key={tile.id} pending={snapshot.public.pendingDiscard?.tile.id === tile.id} />)}</div>
         </div>
         {actionDock}
+        {winAnnouncement ? <div className="mahjong-win-announcement" role="status" aria-label={`${winAnnouncement.winnerNickname}胡牌`}><strong>胡!</strong><span>{winAnnouncement.winnerNickname} · {winAnnouncement.winPattern === 'big-wind' ? '大风' : winAnnouncement.winPattern === 'bao' ? '胡宝' : winAnnouncement.type === 'self-draw' ? '自摸' : '点炮'}</span></div> : null}
         {settlement ? <section className="mahjong-settlement mahjong-table-settlement" role="status" aria-label="本局结算">
           <h2>本局结束</h2>
           <p>{settlementDescription}</p>
-          {settlement.payments ? <div className="mahjong-score-changes">{Object.entries(settlement.payments).map(([seat, amount]) => <span key={seat}>{players.get(seat as MahjongSeat)?.nickname ?? seat}：{amount > 0 ? '+' : ''}{amount} 分</span>)}</div> : null}
+          <div className="mahjong-score-ledger" aria-label="本局积分流水">{scoreRows.map((row) => <div className={`mahjong-score-row${row.seat === ownSeat ? ' mine' : ''}`} key={row.seat}><strong>{row.nickname}{row.seat === ownSeat ? '（我）' : ''}</strong><span>{row.before} → {row.after}</span><b className={row.change >= 0 ? 'positive' : 'negative'}>{row.change > 0 ? '+' : ''}{row.change} 分</b><small>{row.flow}</small></div>)}</div>
           {settlement.type !== 'draw' && snapshot.public.hostSeat === ownSeat ? <button type="button" onClick={() => action('next-hand')}>开始下一局</button> : settlement.type !== 'draw' ? <small>等待房主开始下一局</small> : <small>即将开始下一局</small>}
         </section> : null}
         {animationStage ? <div className={`mahjong-deal-overlay ${animationStage}`} role="status"><div className="mahjong-dice-cube">{snapshot.public.diceRoll?.join(' · ') ?? '掷骰'}</div><strong>{animationStage === 'dice' ? '庄家掷骰' : '正在发牌'}</strong>{animationStage === 'deal' ? <div className="dealing-tiles"><TileBack /><TileBack /><TileBack /><TileBack /></div> : null}</div> : null}

@@ -16,7 +16,9 @@ import {
   findTilesByKey,
   hasMahjongListenYao,
   hasMahjongPairStructure,
+  hasMahjongSequence,
   isBigWindWin,
+  isMahjongCardangWait,
   isWinningMahjongHand,
   mahjongWaits,
   MahjongMeldKind,
@@ -79,6 +81,7 @@ interface MahjongPlayer {
 interface PendingResponses {
   readonly seat: MahjongSeat;
   readonly tile: MahjongTile;
+  readonly discarderWasListening: boolean;
   readonly options: Partial<Record<MahjongSeat, MahjongAction[]>>;
   readonly passed: MahjongSeat[];
 }
@@ -87,6 +90,19 @@ interface PendingListenDecision {
   readonly seat: MahjongSeat;
   readonly tile: MahjongTile;
   readonly waits: MahjongTile[];
+}
+
+interface PendingWin {
+  readonly settlement: MahjongSettlement;
+  readonly announceAt: number;
+  settleAt: number;
+  announced: boolean;
+}
+
+interface WallPosition {
+  readonly seat: MahjongSeat;
+  readonly stack: number;
+  readonly layer: 0 | 1;
 }
 
 interface MahjongState {
@@ -101,15 +117,17 @@ interface MahjongState {
   awaitingDiscard: boolean;
   wall: MahjongTile[];
   replacementWall: MahjongTile[];
-  liveWallBySide: Record<MahjongSeat, number>;
+  wallPositions: WallPosition[];
+  replacementPositions: WallPosition[];
   wallBreakSide: MahjongSeat | null;
   replacementWallSide: MahjongSeat | null;
-  nextLiveWallSide: MahjongSeat | null;
+  wallBreakStack: number | null;
   diceRoll: [number, number] | null;
   autoDiscardAt: number | null;
   nextHandAt: number | null;
   pending: PendingResponses | null;
   pendingListen: PendingListenDecision | null;
+  pendingWin: PendingWin | null;
   lastDiscard: { seat: MahjongSeat; tile: MahjongTile } | null;
   discardRiver: Array<{ seat: MahjongSeat; tile: MahjongTile }>;
   settlement: MahjongSettlement | null;
@@ -119,6 +137,8 @@ const MAX_SPECTATORS = 4;
 const TOTAL_TILE_COUNT = 136;
 const FLOW_WALL_THRESHOLD = Math.ceil(TOTAL_TILE_COUNT * 0.15);
 const LISTENING_DISCARD_DELAY_MS = 1_000;
+const WIN_ANNOUNCE_DELAY_MS = 1_000;
+const WIN_EFFECT_DURATION_MS = 900;
 const DRAW_RESTART_DELAY_MS = 2_000;
 
 function shuffle<T>(items: readonly T[], random: () => number): T[] {
@@ -139,26 +159,29 @@ function removeTileIds(hand: MahjongTile[], ids: readonly string[]): MahjongTile
   return hand.filter((tile) => !selected.has(tile.id));
 }
 
-function makeInitialWallLayout(dealerSeat: MahjongSeat, diceRoll: readonly [number, number]): Pick<MahjongState, 'liveWallBySide' | 'wallBreakSide' | 'replacementWallSide' | 'nextLiveWallSide'> {
-  const breakOffset = (diceRoll[0] + diceRoll[1] - 1) % MAHJONG_SEATS.length;
-  const wallBreakSide = MAHJONG_SEATS[(MAHJONG_SEATS.indexOf(dealerSeat) + breakOffset) % MAHJONG_SEATS.length]!;
-  const liveWallBySide: Record<MahjongSeat, number> = { A: 34, B: 34, C: 34, D: 34 };
-  let dealSide = wallBreakSide;
-  let tilesToDeal = 53;
-  while (tilesToDeal > 0) {
-    const count = Math.min(liveWallBySide[dealSide], tilesToDeal);
-    liveWallBySide[dealSide] -= count;
-    tilesToDeal -= count;
-    if (liveWallBySide[dealSide] === 0) dealSide = nextMahjongSeat(dealSide);
+function makeInitialWallLayout(dealerSeat: MahjongSeat, diceRoll: readonly [number, number]): Pick<MahjongState, 'wallPositions' | 'replacementPositions' | 'wallBreakSide' | 'replacementWallSide' | 'wallBreakStack'> {
+  // From the dealer's view, count stacks left-to-right on the opposite wall.
+  // Dealing and ordinary draws move clockwise from the cut; kong draws and bao
+  // inspection approach that same cut from the reserved segment's far end.
+  const wallBreakSide = MAHJONG_SEATS[(MAHJONG_SEATS.indexOf(dealerSeat) + 2) % MAHJONG_SEATS.length]!;
+  const wallBreakStack = diceRoll[0] + diceRoll[1];
+  const positions = (seat: MahjongSeat, start: number, end: number): WallPosition[] =>
+    Array.from({ length: end - start }, (_, offset) => [
+      { seat, stack: start + offset, layer: 0 as const },
+      { seat, stack: start + offset, layer: 1 as const },
+    ]).flat();
+  const wallPositions = positions(wallBreakSide, wallBreakStack, 17);
+  let side = nextMahjongSeat(wallBreakSide);
+  for (let count = 0; count < 3; count += 1) {
+    wallPositions.push(...positions(side, 0, 17));
+    side = nextMahjongSeat(side);
   }
-
-  const replacementWallSide = dealSide;
-  liveWallBySide[replacementWallSide] -= 4;
   return {
-    liveWallBySide,
+    wallPositions,
+    replacementPositions: positions(wallBreakSide, 0, wallBreakStack),
     wallBreakSide,
-    replacementWallSide,
-    nextLiveWallSide: replacementWallSide,
+    replacementWallSide: wallBreakSide,
+    wallBreakStack,
   };
 }
 
@@ -244,7 +267,7 @@ export class MahjongRoomService {
       currentTurn: state.currentTurn,
       awaitingDiscard: state.awaitingDiscard,
       pendingDiscard: visiblePending ? { seat: visiblePending.seat, tile: visiblePending.tile } : null,
-      responseSeats: state.pending && !state.pendingListen
+      responseSeats: state.pending && !state.pendingListen && !state.pendingWin
         ? Object.keys(state.pending.options).filter((seat) => !state.pending!.passed.includes(seat as MahjongSeat)) as MahjongSeat[]
         : [],
       wallCount: state.wall.length + state.replacementWall.length,
@@ -252,6 +275,14 @@ export class MahjongRoomService {
       diceRoll: state.diceRoll,
       lastDiscard: state.lastDiscard,
       discardRiver: state.discardRiver.map((discard) => ({ ...discard })),
+      winAnnouncement: state.pendingWin?.announced && state.pendingWin.settlement.winnerSeat
+        ? {
+          winnerSeat: state.pendingWin.settlement.winnerSeat,
+          winnerNickname: state.pendingWin.settlement.winnerNickname ?? state.pendingWin.settlement.winnerSeat,
+          type: state.pendingWin.settlement.type as 'self-draw' | 'discard-win',
+          winPattern: state.pendingWin.settlement.winPattern ?? 'standard',
+        }
+        : null,
       ...(state.phase === 'settled' ? {
         revealedHands: Object.values(state.players)
           .filter((player): player is MahjongPlayer => player !== null)
@@ -308,33 +339,18 @@ export class MahjongRoomService {
     return {
       breakSide: state.wallBreakSide,
       replacementSide: state.replacementWallSide,
+      breakStack: state.wallBreakStack,
       sides: MAHJONG_SEATS.map((seat) => ({
         seat,
-        liveTiles: state.liveWallBySide[seat],
-        replacementTiles: state.replacementWallSide === seat ? state.replacementWall.length : 0,
+        liveTiles: state.wallPositions.filter((position) => position.seat === seat).length,
+        replacementTiles: state.replacementPositions.filter((position) => position.seat === seat).length,
+        stacks: Array.from({ length: 17 }, (_, index) => ({
+          index,
+          liveTiles: state.wallPositions.filter((position) => position.seat === seat && position.stack === index).length,
+          replacementTiles: state.replacementPositions.filter((position) => position.seat === seat && position.stack === index).length,
+        })),
       })),
     };
-  }
-
-  private consumeLiveWallPosition(): void {
-    if (!this.state) return;
-    let side = this.state.nextLiveWallSide ?? this.state.wallBreakSide;
-    if (!side) return;
-    for (let visited = 0; visited < MAHJONG_SEATS.length; visited += 1) {
-      if (this.state.liveWallBySide[side] > 0) {
-        this.state.liveWallBySide[side] -= 1;
-        if (this.state.liveWallBySide[side] > 0) {
-          this.state.nextLiveWallSide = side;
-        } else {
-          let next = nextMahjongSeat(side);
-          for (let search = 0; search < MAHJONG_SEATS.length && this.state.liveWallBySide[next] === 0; search += 1) next = nextMahjongSeat(next);
-          this.state.nextLiveWallSide = this.state.liveWallBySide[next] > 0 ? next : null;
-        }
-        return;
-      }
-      side = nextMahjongSeat(side);
-    }
-    this.state.nextLiveWallSide = null;
   }
 
   attach(sessionToken: string, connectionId: string): { previousConnectionId: string | null } {
@@ -413,6 +429,19 @@ export class MahjongRoomService {
   tick(now = this.now()): boolean {
     const state = this.state;
     if (!state) return false;
+    if (state.pendingWin) {
+      if (!state.pendingWin.announced && now >= state.pendingWin.announceAt) {
+        state.pendingWin.announced = true;
+        state.pendingWin.settleAt = now + WIN_EFFECT_DURATION_MS;
+        state.version += 1;
+        return true;
+      }
+      if (state.pendingWin.announced && now >= state.pendingWin.settleAt) {
+        this.settle(state.pendingWin.settlement);
+        return true;
+      }
+      return false;
+    }
     if (state.phase === 'playing' && state.autoDiscardAt !== null && now >= state.autoDiscardAt && state.currentTurn) {
       const player = state.players[state.currentTurn];
       const tileId = player?.lastDrawnTileId;
@@ -446,6 +475,7 @@ export class MahjongRoomService {
   private applyCommand(session: Session, type: MahjongCommandType, payload: MahjongCommandEnvelope['payload']): void {
     if (!this.state) throw new MahjongRoomServiceError('ROOM_NOT_FOUND', '房间尚未创建');
     const state = this.state;
+    if (state.pendingWin) throw new MahjongRoomServiceError('WIN_ANIMATION', '胡牌展示中，请稍候结算');
     switch (type) {
       case 'start-hand':
         this.assertHost(session);
@@ -496,8 +526,13 @@ export class MahjongRoomService {
   private startHand(): void {
     if (!this.state) throw new MahjongRoomServiceError('ROOM_NOT_FOUND', '房间尚未创建');
     if (this.state.phase !== 'lobby' && this.state.phase !== 'settled') throw new MahjongRoomServiceError('HAND_IN_PROGRESS', '牌局尚未结束');
+    if (this.state.phase === 'settled') this.returnToLobby();
     if (MAHJONG_SEATS.some((seat) => !this.state?.players[seat])) throw new MahjongRoomServiceError('NOT_ENOUGH_PLAYERS', '需要四名玩家才能开始');
     const deck = shuffle(createMahjongDeck(), this.random);
+    const dealer = this.state.dealerSeat;
+    const diceRoll: [number, number] = [1 + Math.floor(this.random() * 6), 1 + Math.floor(this.random() * 6)];
+    const layout = makeInitialWallLayout(dealer, diceRoll);
+    const replacementWall = deck.splice(-layout.replacementPositions.length);
     const players = this.state.players;
     for (const seat of MAHJONG_SEATS) {
       players[seat]!.hand = sortMahjongTiles(deck.splice(0, 13));
@@ -510,12 +545,10 @@ export class MahjongRoomService {
       players[seat]!.lastDrawnTileId = null;
     }
     this.state.discardRiver = [];
-    const dealer = this.state.dealerSeat;
     const dealerTile = deck.shift()!;
     players[dealer]!.hand.push(dealerTile);
     players[dealer]!.lastDrawnTileId = dealerTile.id;
-    const replacementWall = deck.splice(-4);
-    const diceRoll: [number, number] = [1 + Math.floor(this.random() * 6), 1 + Math.floor(this.random() * 6)];
+    layout.wallPositions.splice(0, 53);
     this.state = {
       ...this.state,
       phase: 'playing',
@@ -523,7 +556,7 @@ export class MahjongRoomService {
       handNumber: this.state.handNumber + 1,
       wall: deck,
       replacementWall,
-      ...makeInitialWallLayout(dealer, diceRoll),
+      ...layout,
       currentTurn: dealer,
       awaitingDiscard: true,
       diceRoll,
@@ -531,6 +564,7 @@ export class MahjongRoomService {
       nextHandAt: null,
       pending: null,
       pendingListen: null,
+      pendingWin: null,
       lastDiscard: null,
       settlement: null,
     };
@@ -556,7 +590,7 @@ export class MahjongRoomService {
     this.refreshListenerBao();
     state.lastDiscard = { seat, tile };
     state.awaitingDiscard = false;
-    state.pending = this.createPending(seat, tile, baoSeatsBeforeDiscard);
+    state.pending = this.createPending(seat, tile, baoSeatsBeforeDiscard, player.isListening);
     state.pendingListen = postDiscardWaits.length > 0 ? { seat, tile, waits: postDiscardWaits } : null;
     state.version += 1;
     if (!state.pendingListen && !state.pending) this.advanceAfterNoResponse();
@@ -598,7 +632,7 @@ export class MahjongRoomService {
     this.refreshListenerBao();
     state.lastDiscard = { seat, tile };
     state.awaitingDiscard = false;
-    state.pending = this.createPending(seat, tile, baoSeatsBeforeDiscard);
+    state.pending = this.createPending(seat, tile, baoSeatsBeforeDiscard, true);
     state.version += 1;
     if (!state.pending || Object.keys(state.pending.options).length === 0) this.advanceAfterNoResponse();
   }
@@ -630,6 +664,7 @@ export class MahjongRoomService {
 
   private hu(seat: MahjongSeat): void {
     const state = this.requirePlaying();
+    if (state.pendingWin) throw new MahjongRoomServiceError('WIN_ANIMATION', '胡牌展示中，请稍候结算');
     if (state.pendingListen) throw new MahjongRoomServiceError('INVALID_ACTION', '等待出牌玩家确认是否听牌');
     const player = this.requirePlayer(seat);
     const winningTile = state.pending?.tile;
@@ -646,20 +681,44 @@ export class MahjongRoomService {
     const baoWin = !onDiscard && isBaoTile;
     const allowed = player.isListening
       && Boolean(tile)
+      && player.melds.length < 4
+      && player.hand.filter((handTile) => handTile.id !== tile?.id).length >= 4
       && hasMahjongPairStructure(player.hand.filter((handTile) => handTile.id !== tile?.id), player.melds)
+      && hasMahjongSequence(player.hand.filter((handTile) => handTile.id !== tile?.id), player.melds)
       && (onDiscard
         ? !isBaoTile && Boolean(state.pending?.options[seat]?.includes('hu'))
         : state.currentTurn === seat && state.awaitingDiscard && (matchingReadyWait || bigWind || baoWin));
     if (!allowed) throw new MahjongRoomServiceError('INVALID_ACTION', '当前不能胡牌');
     const winPattern = bigWind ? 'big-wind' : baoWin ? 'bao' : 'standard';
+    const waitingHand = onDiscard ? player.hand : player.hand.filter((handTile) => handTile.id !== tile!.id);
+    const structuralWaits = player.listenWaits.filter((wait) => isWinningMahjongHand([...waitingHand, wait], player.melds.length));
+    const isCardang = !bigWind && structuralWaits.length === 1
+      && isMahjongCardangWait(waitingHand, structuralWaits[0]!, player.melds.length)
+      && (baoWin || tileKey(structuralWaits[0]!) === tileKey(tile!));
+    const isBaoZhongBao = baoWin && isCardang && tileKey(structuralWaits[0]!) === tileKey(tile!);
     if (onDiscard && state.pending) this.removeClaimedDiscard(state.pending);
-    this.settle({
+    const settlement: MahjongSettlement = {
       winnerSeat: seat,
       winnerNickname: player.nickname,
       type: winningTile ? 'discard-win' : 'self-draw',
       winPattern,
+      isCardang,
+      isBaoZhongBao,
+      ...(onDiscard ? { discarderWasListening: state.pending!.discarderWasListening } : {}),
       ...(winningTile ? { payingSeat: state.pending!.seat, winningTile } : {}),
-    });
+    };
+    state.pending = null;
+    state.currentTurn = null;
+    state.awaitingDiscard = false;
+    state.autoDiscardAt = null;
+    const announceAt = this.now() + WIN_ANNOUNCE_DELAY_MS;
+    state.pendingWin = {
+      settlement,
+      announceAt,
+      settleAt: announceAt + WIN_EFFECT_DURATION_MS,
+      announced: false,
+    };
+    state.version += 1;
   }
 
   private claim(seat: MahjongSeat, action: 'chi' | 'peng' | 'exposed-kong', payload: { readonly tileIds?: readonly string[]; readonly discardTileId?: string }): void {
@@ -669,6 +728,7 @@ export class MahjongRoomService {
     const resolution = this.claimPriority(state.pending);
     if (resolution.seat !== seat || !resolution.actions.includes(action)) throw new MahjongRoomServiceError('CLAIM_PRIORITY', '有更靠前或优先级更高的玩家正在响应');
     const player = this.requirePlayer(seat);
+    if (player.melds.length >= 3) throw new MahjongRoomServiceError('SINGLE_TILE_WAIT', '不能吃碰杠到只剩一张手牌');
     const pending = state.pending;
     const discard = pending.tile;
     let usedTiles: MahjongTile[];
@@ -712,6 +772,7 @@ export class MahjongRoomService {
     if (state.pending || state.currentTurn !== seat || !state.awaitingDiscard) throw new MahjongRoomServiceError('INVALID_ACTION', '当前不能暗杠');
     const player = this.requirePlayer(seat);
     if (player.isListening) throw new MahjongRoomServiceError('LISTEN_LOCKED', '听牌后不能暗杠');
+    if (player.melds.length >= 3) throw new MahjongRoomServiceError('SINGLE_TILE_WAIT', '不能暗杠到只剩一张手牌');
     const selected = tileIds?.length === 4 ? tileIds.map((id) => player.hand.find((tile) => tile.id === id)).filter((tile): tile is MahjongTile => Boolean(tile)) : [];
     const tile = selected[0] ?? player.hand.find((candidate) => matchingTileCount(player.hand, candidate) === 4);
     if (!tile || matchingTileCount(player.hand, tile) !== 4) throw new MahjongRoomServiceError('INVALID_ACTION', '没有可以暗杠的牌');
@@ -737,7 +798,7 @@ export class MahjongRoomService {
     state.version += 1;
   }
 
-  private createPending(seat: MahjongSeat, tile: MahjongTile, baoSeatsBeforeDiscard: ReadonlySet<MahjongSeat>): PendingResponses | null {
+  private createPending(seat: MahjongSeat, tile: MahjongTile, baoSeatsBeforeDiscard: ReadonlySet<MahjongSeat>, discarderWasListening: boolean): PendingResponses | null {
     const options: Partial<Record<MahjongSeat, MahjongAction[]>> = {};
     for (const candidate of MAHJONG_SEATS) {
       if (candidate === seat) continue;
@@ -748,13 +809,15 @@ export class MahjongRoomService {
         && isWinningMahjongHand([...player.hand, tile], player.melds.length);
       const isBaoTile = baoSeatsBeforeDiscard.has(candidate)
         || Boolean(player.listenBao && tileKey(player.listenBao) === tileKey(tile));
-      if (player.isListening && hasMahjongPairStructure(player.hand, player.melds) && structuralWait && !isBaoTile) actions.push('hu');
-      if (!player.isListening && matchingTileCount(player.hand, tile) >= 3) actions.push('exposed-kong');
-      else if (!player.isListening && matchingTileCount(player.hand, tile) >= 2) actions.push('peng');
+      if (player.isListening && player.melds.length < 4 && player.hand.length >= 4
+        && hasMahjongPairStructure(player.hand, player.melds)
+        && hasMahjongSequence(player.hand, player.melds) && structuralWait && !isBaoTile) actions.push('hu');
+      if (!player.isListening && player.melds.length < 3 && matchingTileCount(player.hand, tile) >= 3) actions.push('exposed-kong');
+      else if (!player.isListening && player.melds.length < 3 && matchingTileCount(player.hand, tile) >= 2) actions.push('peng');
       if (!player.isListening && this.chiPlans(player, tile, seat).length > 0) actions.push('chi');
       if (actions.length > 0) options[candidate] = actions;
     }
-    return Object.keys(options).length > 0 ? { seat, tile, options, passed: [] } : null;
+    return Object.keys(options).length > 0 ? { seat, tile, discarderWasListening, options, passed: [] } : null;
   }
 
   private advanceAfterNoResponse(): void {
@@ -780,7 +843,7 @@ export class MahjongRoomService {
       this.settle({ winnerSeat: null, type: 'draw' });
       return;
     }
-    this.consumeLiveWallPosition();
+    this.state.wallPositions.shift();
     player.hand.push(tile);
     player.hand = sortMahjongTiles(player.hand);
     player.lastDrawnTileId = tile.id;
@@ -801,6 +864,7 @@ export class MahjongRoomService {
       this.settle({ winnerSeat: null, type: 'draw' });
       return;
     }
+    this.state.replacementPositions.pop();
     player.hand.push(tile);
     player.hand = sortMahjongTiles(player.hand);
     player.lastDrawnTileId = tile.id;
@@ -812,7 +876,7 @@ export class MahjongRoomService {
 
   private availableActions(player: MahjongPlayer): MahjongAction[] {
     const state = this.state;
-    if (!state || state.phase !== 'playing') return [];
+    if (!state || state.phase !== 'playing' || state.pendingWin) return [];
     if (state.pendingListen) return state.pendingListen.seat === player.seat ? ['listen', 'pass'] : [];
     if (state.pending) {
       if (!state.pending.options[player.seat]) return [];
@@ -827,7 +891,7 @@ export class MahjongRoomService {
     const actions: MahjongAction[] = player.mustListenAfterChi ? [] : ['discard'];
     {
       if (this.canDeclareListen(player)) actions.push('listen');
-      if (player.hand.some((tile) => matchingTileCount(player.hand, tile) === 4)) actions.push('concealed-kong');
+      if (player.melds.length < 3 && player.hand.some((tile) => matchingTileCount(player.hand, tile) === 4)) actions.push('concealed-kong');
       if (player.hand.some((tile) => player.melds.some((meld) => meld.kind === 'peng' && tileKey(meld.tiles[0]!) === tileKey(tile)))) actions.push('added-kong');
     }
     return actions;
@@ -864,7 +928,7 @@ export class MahjongRoomService {
   }
 
   private validListenWaits(hand: MahjongTile[], meldCount: number, melds: readonly MahjongMeld[]): MahjongTile[] {
-    if (!hasMahjongPairStructure(hand, melds)) return [];
+    if (meldCount >= 4 || hand.length < 4 || !hasMahjongPairStructure(hand, melds) || !hasMahjongSequence(hand, melds)) return [];
     return mahjongWaits(hand, meldCount, melds)
       .filter((tile) => hasMahjongListenYao(hand, tile, melds));
   }
@@ -892,6 +956,7 @@ export class MahjongRoomService {
   }
 
   private chiPlans(player: MahjongPlayer, discard: MahjongTile, fromSeat: MahjongSeat): Array<{ tiles: MahjongTile[]; requiresListen: boolean }> {
+    if (player.melds.length >= 3) return [];
     const options = findChiOptions(player.hand, discard);
     if (nextMahjongSeat(fromSeat) === player.seat) return options.map((tiles) => ({ tiles, requiresListen: false }));
     if (!this.state || player.isListening) return [];
@@ -941,7 +1006,10 @@ export class MahjongRoomService {
 
   private canSelfDrawHu(player: MahjongPlayer, tile: MahjongTile): boolean {
     return player.isListening
+      && player.melds.length < 4
+      && player.hand.filter((handTile) => handTile.id !== tile.id).length >= 4
       && hasMahjongPairStructure(player.hand.filter((handTile) => handTile.id !== tile.id), player.melds)
+      && hasMahjongSequence(player.hand.filter((handTile) => handTile.id !== tile.id), player.melds)
       && (
         player.listenWaits.some((wait) => tileKey(wait) === tileKey(tile))
         || isBigWindWin(player.hand.filter((handTile) => handTile.id !== tile.id), tile, player.melds)
@@ -951,15 +1019,37 @@ export class MahjongRoomService {
 
   private settle(settlement: MahjongSettlement): void {
     if (!this.state) return;
+    const baseScore = 5;
     const payments: Partial<Record<MahjongSeat, number>> = {};
+    const transfers: Array<{ from: MahjongSeat; to: MahjongSeat; fan: number; amount: number }> = [];
+    const transfer = (from: MahjongSeat, to: MahjongSeat, fan: number) => {
+      const amount = fan * baseScore;
+      transfers.push({ from, to, fan, amount });
+      payments[from] = (payments[from] ?? 0) - amount;
+      payments[to] = (payments[to] ?? 0) + amount;
+    };
+    const specialWin = settlement.winPattern === 'bao' || settlement.winPattern === 'big-wind';
+    const fanFor = (seat: MahjongSeat, onDiscard: boolean): number => {
+      if (settlement.isBaoZhongBao) return 12;
+      const player = this.state!.players[seat];
+      const closed = player ? player.melds.every((meld) => meld.kind === 'concealed-kong') : false;
+      let fan = specialWin ? 3 : closed ? 3 : onDiscard ? 1 : 2;
+      if (settlement.isCardang) fan *= 2;
+      return fan;
+    };
     if (settlement.winnerSeat && settlement.type === 'discard-win' && settlement.payingSeat) {
-      payments[settlement.winnerSeat] = 1;
-      payments[settlement.payingSeat] = (payments[settlement.payingSeat] ?? 0) - 1;
+      const losers = MAHJONG_SEATS.filter((seat) => seat !== settlement.winnerSeat);
+      const discarderListening = settlement.discarderWasListening ?? this.state.players[settlement.payingSeat]?.isListening ?? false;
+      if (discarderListening) {
+        for (const seat of losers) transfer(seat, settlement.winnerSeat, fanFor(seat, true));
+      } else {
+        const fan = losers.reduce((sum, seat) => sum + (seat === settlement.payingSeat ? 3 * (settlement.isCardang ? 2 : 1) : fanFor(seat, true)), 0);
+        transfer(settlement.payingSeat, settlement.winnerSeat, fan);
+      }
     } else if (settlement.winnerSeat && settlement.type === 'self-draw') {
       for (const seat of MAHJONG_SEATS) {
         if (seat === settlement.winnerSeat) continue;
-        payments[seat] = -1;
-        payments[settlement.winnerSeat] = (payments[settlement.winnerSeat] ?? 0) + 1;
+        transfer(seat, settlement.winnerSeat, fanFor(seat, false));
       }
     }
     for (const [seat, delta] of Object.entries(payments) as [MahjongSeat, number][]) {
@@ -974,23 +1064,31 @@ export class MahjongRoomService {
     this.state.nextHandAt = settlement.type === 'draw' ? this.now() + DRAW_RESTART_DELAY_MS : null;
     this.state.pending = null;
     this.state.pendingListen = null;
-    this.state.settlement = { ...settlement, ...(Object.keys(payments).length > 0 ? { payments } : {}) };
+    this.state.pendingWin = null;
+    this.state.settlement = { ...settlement, baseScore, payments, transfers };
   }
 
   private returnToLobby(): void {
     if (!this.state) return;
-    const keepDealer = this.state.settlement?.type === 'draw';
+    const keepDealer = this.state.settlement?.type === 'draw'
+      || this.state.settlement?.winnerSeat === this.state.dealerSeat;
     this.state.phase = 'lobby';
     this.state.version += 1;
     this.state.currentTurn = null;
     this.state.awaitingDiscard = false;
     this.state.wall = [];
     this.state.replacementWall = [];
+    this.state.wallPositions = [];
+    this.state.replacementPositions = [];
+    this.state.wallBreakSide = null;
+    this.state.replacementWallSide = null;
+    this.state.wallBreakStack = null;
     this.state.diceRoll = null;
     this.state.autoDiscardAt = null;
     this.state.nextHandAt = null;
     this.state.pending = null;
     this.state.pendingListen = null;
+    this.state.pendingWin = null;
     this.state.lastDiscard = null;
     this.state.settlement = null;
     if (!keepDealer) this.state.dealerSeat = nextMahjongSeat(this.state.dealerSeat);
@@ -1066,15 +1164,17 @@ export class MahjongRoomService {
       awaitingDiscard: false,
       wall: [],
       replacementWall: [],
-      liveWallBySide: { A: 0, B: 0, C: 0, D: 0 },
+      wallPositions: [],
+      replacementPositions: [],
       wallBreakSide: null,
       replacementWallSide: null,
-      nextLiveWallSide: null,
+      wallBreakStack: null,
       diceRoll: null,
       autoDiscardAt: null,
       nextHandAt: null,
       pending: null,
       pendingListen: null,
+      pendingWin: null,
       lastDiscard: null,
       discardRiver: [],
       settlement: null,
@@ -1085,7 +1185,7 @@ export class MahjongRoomService {
     return {
       gameId: 'mahjong', roomId: 'mahjong', phase: 'lobby', handNumber: 0, version: 0, players: [], spectators: [], chat: [],
       hostSeat: null, dealerSeat: null, currentTurn: null, awaitingDiscard: false, pendingDiscard: null, responseSeats: [], wallCount: 0,
-      wallLayout: { breakSide: null, replacementSide: null, sides: MAHJONG_SEATS.map((seat) => ({ seat, liveTiles: 0, replacementTiles: 0 })) }, diceRoll: null,
+      wallLayout: { breakSide: null, replacementSide: null, breakStack: null, sides: MAHJONG_SEATS.map((seat) => ({ seat, liveTiles: 0, replacementTiles: 0, stacks: [] })) }, diceRoll: null,
       lastDiscard: null, discardRiver: [], settlement: null,
     };
   }

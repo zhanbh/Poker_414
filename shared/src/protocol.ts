@@ -289,18 +289,25 @@ export interface MahjongSettlement {
   readonly winnerNickname?: string;
   readonly type: 'self-draw' | 'discard-win' | 'draw';
   readonly winPattern?: 'standard' | 'bao' | 'big-wind';
+  readonly isCardang?: boolean;
+  readonly isBaoZhongBao?: boolean;
+  readonly baseScore?: number;
+  readonly discarderWasListening?: boolean;
   readonly payingSeat?: MahjongSeat;
   readonly payments?: Partial<Record<MahjongSeat, number>>;
+  readonly transfers?: ReadonlyArray<{ readonly from: MahjongSeat; readonly to: MahjongSeat; readonly fan?: number; readonly amount: number }>;
   readonly winningTile?: MahjongTile;
 }
 
 export interface MahjongWallLayout {
   readonly breakSide: MahjongSeat | null;
   readonly replacementSide: MahjongSeat | null;
+  readonly breakStack?: number | null;
   readonly sides: ReadonlyArray<{
     readonly seat: MahjongSeat;
     readonly liveTiles: number;
     readonly replacementTiles: number;
+    readonly stacks?: ReadonlyArray<{ readonly index: number; readonly liveTiles: number; readonly replacementTiles: number }>;
   }>;
 }
 
@@ -324,6 +331,7 @@ export interface MahjongPublicSnapshot {
   readonly diceRoll: readonly [number, number] | null;
   readonly lastDiscard: { readonly seat: MahjongSeat; readonly tile: MahjongTile } | null;
   readonly discardRiver: ReadonlyArray<{ readonly seat: MahjongSeat; readonly tile: MahjongTile }>;
+  readonly winAnnouncement?: { readonly winnerSeat: MahjongSeat; readonly winnerNickname: string; readonly type: 'self-draw' | 'discard-win'; readonly winPattern: 'standard' | 'bao' | 'big-wind' } | null;
   readonly revealedHands?: ReadonlyArray<{ readonly seat: MahjongSeat; readonly nickname: string; readonly hand: MahjongTile[] }>;
   readonly settlement: MahjongSettlement | null;
 }

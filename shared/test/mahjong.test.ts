@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { createMahjongDeck, hasMahjongListenYao, hasMahjongPairStructure, isBigWindWin, isWinningMahjongHand, mahjongWaits, MahjongMeld, sortMahjongTiles } from '../src/mahjong';
+import { createMahjongDeck, hasMahjongListenYao, hasMahjongPairStructure, hasMahjongSequence, isBigWindWin, isMahjongCardangWait, isWinningMahjongHand, mahjongWaits, MahjongMeld, sortMahjongTiles } from '../src/mahjong';
 
 describe('Mahjong shared rules', () => {
+  it('only counts a genuine single middle wait as 卡当', () => {
+    const deck = createMahjongDeck();
+    const tile = (suit: string, rank: number | string, copy = 0) => deck.find((candidate) => candidate.suit === suit && candidate.rank === rank && candidate.id.endsWith('-' + copy))!;
+    const gap = [tile('dots', 2), tile('dots', 2, 1), tile('characters', 4), tile('characters', 6)];
+    expect(isMahjongCardangWait(gap, tile('characters', 5), 3)).toBe(true);
+    expect(isMahjongCardangWait(gap, tile('dots', 2, 2), 3)).toBe(false);
+    const twoSided = [tile('dots', 2), tile('dots', 2, 1), tile('characters', 6), tile('characters', 7)];
+    expect(isMahjongCardangWait(twoSided, tile('characters', 8), 3)).toBe(false);
+  });
   it('creates the standard 136-tile deck including green and white dragons', () => {
     const deck = createMahjongDeck();
     expect(deck).toHaveLength(136);
@@ -49,6 +58,18 @@ describe('Mahjong shared rules', () => {
     expect(hasMahjongListenYao(hand, tile('bamboo', 2))).toBe(false);
     expect(hasMahjongListenYao(hand, tile('bamboo', 2), [chi])).toBe(true);
     expect(hasMahjongListenYao(hand, tile('dragons', 'red'))).toBe(true);
+  });
+
+  it('requires a complete same-suit sequence already in hand or an exposed chi', () => {
+    const deck = createMahjongDeck();
+    const tile = (suit: string, rank: number | string) => deck.find((candidate) => candidate.suit === suit && candidate.rank === rank)!;
+    const chi: MahjongMeld = { kind: 'chi', tiles: [1, 2, 3].map((rank) => tile('dots', rank)) };
+    expect(hasMahjongSequence([1, 2, 3].map((rank) => tile('characters', rank)))).toBe(true);
+    expect(hasMahjongSequence([7, 8, 9].map((rank) => tile('bamboo', rank)))).toBe(true);
+    expect(hasMahjongSequence([tile('characters', 1), tile('characters', 2), tile('dots', 3)])).toBe(false);
+    expect(hasMahjongSequence([tile('winds', 'east'), tile('winds', 'south'), tile('winds', 'west')])).toBe(false);
+    expect(hasMahjongSequence([tile('characters', 1), tile('characters', 2)])).toBe(false);
+    expect(hasMahjongSequence([tile('characters', 1)], [chi])).toBe(true);
   });
 
   it('includes waits that complete an exposed pong as big-wind self-draws', () => {

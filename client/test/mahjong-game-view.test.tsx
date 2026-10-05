@@ -211,6 +211,29 @@ describe('MahjongGameView listen information privacy', () => {
     expect(container.querySelector('.mahjong-listen-preview strong')?.textContent).toBe('打出此牌可听');
     expect(container.querySelector('.mahjong-bao-preview')).toBeNull();
 
+    const postDiscardSnapshot: MahjongSnapshot = {
+      ...snapshot,
+      public: {
+        ...snapshot.public,
+        version: 6,
+        awaitingDiscard: false,
+        pendingDiscard: { seat: 'A', tile: hand[0]! },
+        lastDiscard: { seat: 'A', tile: hand[0]! },
+        discardRiver: [{ seat: 'A', tile: hand[0]! }],
+      },
+      private: {
+        seat: 'A', hand: hand.slice(1), availableActions: ['listen', 'pass'],
+        postDiscardListenWaits: [waitTile], spectator: false,
+      },
+    };
+    rerender(<MahjongGameView snapshot={postDiscardSnapshot} {...props} />);
+    expect(container.querySelector('.mahjong-listen-preview strong')?.textContent).toBe('已出牌，可选择听牌');
+    expect(container.querySelector('.mahjong-bao-preview')).toBeNull();
+    fireEvent.click(container.querySelector('button[aria-label="听"]')!);
+    fireEvent.click(container.querySelector('button[aria-label="暂不听"]')!);
+    expect(props.onCommand).toHaveBeenNthCalledWith(1, 'listen', {});
+    expect(props.onCommand).toHaveBeenNthCalledWith(2, 'pass', {});
+
     const listeningSnapshot: MahjongSnapshot = {
       ...snapshot,
       public: { ...snapshot.public, version: 6, players: snapshot.public.players.map((player) => player.seat === 'A' ? { ...player, isListening: true } : player) },
@@ -220,6 +243,6 @@ describe('MahjongGameView listen information privacy', () => {
 
     expect(container.querySelector('.mahjong-listen-preview strong')?.textContent).toBe('已听牌');
     expect(container.querySelector('.mahjong-bao-preview .mahjong-face')?.getAttribute('aria-label')).toBe(baoTile.label);
-    expect(container.querySelector('.mahjong-bao-preview')?.textContent).toContain('仅自摸');
+    expect(container.querySelector('.mahjong-bao-preview b')?.textContent).toBe('宝');
   });
 });

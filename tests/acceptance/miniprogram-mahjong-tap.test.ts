@@ -11,13 +11,15 @@ interface MahjongPage {
     availableActions: string[];
     listenTileIds: string[];
     listenOptions: unknown[];
+    postDiscardListenWaits: unknown[];
     hand: Array<{ id: string; selected?: boolean }>;
     selectedTileId: string;
     players: Array<{ seat: string; melds: Array<{ tiles: unknown[]; hiddenBacks: number[] }> }>;
   };
   app: { getSnapshot: () => MahjongSnapshot | null; setSnapshot: (snapshot: MahjongSnapshot) => void };
   setData: (patch: Record<string, unknown>) => void;
-  runCommand: (type: string, payload: { tileId: string }) => void;
+  runCommand: (type: string, payload: { tileId?: string }) => void;
+  onAction: (event: { currentTarget: { dataset: { action: string } } }) => void;
   onTileTap: (event: { currentTarget: { dataset: { id: string } } }) => void;
   updateSnapshot: (snapshot: MahjongSnapshot) => void;
   playDealAnimation: (handNumber: number) => void;
@@ -72,6 +74,19 @@ describe('Mini-program Mahjong hand interaction', () => {
 
     expect(runCommand).not.toHaveBeenCalled();
     expect(page.data.selectedTileId).toBe('tile-1');
+  });
+
+  it('confirms listening after an ordinary discard without requiring the discarded tile to remain selected', () => {
+    const page = loadPage();
+    const runCommand = vi.fn();
+    page.runCommand = runCommand;
+    Object.assign(page.data, {
+      selectedTileId: '', listenTileIds: [], postDiscardListenWaits: [{ id: 'wait-1' }],
+    });
+
+    page.onAction({ currentTarget: { dataset: { action: 'listen' } } });
+
+    expect(runCommand).toHaveBeenCalledExactlyOnceWith('listen', {});
   });
 
   it('prepares four hidden backs for another player’s concealed kong', () => {

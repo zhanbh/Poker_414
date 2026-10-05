@@ -263,6 +263,75 @@ describe('MahjongRoomService', () => {
     expect(room.getSnapshot(players[1].sessionToken).private).not.toHaveProperty('baoTile');
   });
 
+  it('普通出牌后可确认听牌或暂不听；确认前冻结其他响应，暂不听后下回合仍可再听', () => {
+    const room = new MahjongRoomService({ inviteCode: 'inner-414', random: () => 0.42 });
+    const players = ['甲', '乙', '丙', '丁'].map((nickname) => {
+      const auth = room.login('inner-414');
+      room.join(auth.sessionToken, nickname, 'mahjong');
+      return auth;
+    });
+    const lobby = room.getSnapshot(players[0].sessionToken);
+    room.dispatch(players[0].sessionToken, command('start-hand', lobby.public.handNumber, lobby.public.version));
+    const deck = createMahjongDeck();
+    const tile = (suit: string, rank: number | string, copy = 0) => deck.find((candidate) => candidate.suit === suit && candidate.rank === rank && candidate.id.endsWith('-' + copy))!;
+    const discard = tile('characters', 4);
+    const internals = room as unknown as {
+      state: {
+        players: Record<MahjongSeat, { hand: MahjongTile[]; melds: MahjongMeld[]; lastDrawnTileId: string | null; isListening: boolean } | null>;
+        currentTurn: MahjongSeat;
+        awaitingDiscard: boolean;
+      };
+    };
+    internals.state.players.A!.hand = [
+      tile('characters', 1), tile('characters', 2), tile('characters', 3),
+      discard, tile('characters', 4, 1), tile('characters', 5), tile('characters', 5, 1),
+      tile('characters', 6), tile('characters', 7), tile('characters', 8), tile('characters', 4, 2),
+    ];
+    internals.state.players.A!.melds = [{ kind: 'chi', tiles: [tile('bamboo', 1), tile('bamboo', 2), tile('bamboo', 3)] }];
+    internals.state.players.B!.hand = [tile('characters', 3, 1), tile('characters', 5, 2)];
+    internals.state.players.C!.hand = [];
+    internals.state.players.D!.hand = [];
+
+    const before = room.getSnapshot(players[0].sessionToken);
+    room.dispatch(players[0].sessionToken, command('discard', before.public.handNumber, before.public.version, { tileId: discard.id }));
+    const decision = room.getSnapshot(players[0].sessionToken);
+    expect(decision.private.availableActions).toEqual(['listen', 'pass']);
+    expect(decision.private.postDiscardListenWaits?.map((wait) => wait.label)).toContain('4万');
+    expect(decision.private.baoTile).toBeUndefined();
+    expect(decision.public.pendingDiscard?.tile.id).toBe(discard.id);
+    expect(decision.public.responseSeats).toEqual([]);
+    const responder = room.getSnapshot(players[1].sessionToken);
+    expect(responder.private.availableActions).toEqual([]);
+    expect(responder.private.postDiscardListenWaits).toBeUndefined();
+    expect(() => room.dispatch(players[1].sessionToken, command('chi', responder.public.handNumber, responder.public.version, { tileIds: internals.state.players.B!.hand.map((tile) => tile.id) })))
+      .toThrow('等待出牌玩家确认是否听牌');
+
+    room.dispatch(players[0].sessionToken, command('pass', decision.public.handNumber, decision.public.version));
+    const skipped = room.getSnapshot(players[0].sessionToken);
+    expect(skipped.private.isListening).toBe(false);
+    expect(skipped.private.postDiscardListenWaits).toBeUndefined();
+    expect(room.getSnapshot(players[1].sessionToken).private.availableActions).toContain('chi');
+    const response = room.getSnapshot(players[1].sessionToken);
+    room.dispatch(players[1].sessionToken, command('pass', response.public.handNumber, response.public.version));
+
+    const nextDraw = tile('winds', 'east');
+    internals.state.currentTurn = 'A';
+    internals.state.awaitingDiscard = true;
+    internals.state.players.A!.hand.push(nextDraw);
+    internals.state.players.A!.lastDrawnTileId = nextDraw.id;
+    const nextTurn = room.getSnapshot(players[0].sessionToken);
+    expect(nextTurn.private.availableActions).toContain('listen');
+    expect(nextTurn.private.listenOptions?.find((option) => option.discardTileId === nextDraw.id)?.waits.map((wait) => wait.label))
+      .toContain('4万');
+    room.dispatch(players[0].sessionToken, command('discard', nextTurn.public.handNumber, nextTurn.public.version, { tileId: nextDraw.id }));
+    const again = room.getSnapshot(players[0].sessionToken);
+    expect(again.private.availableActions).toEqual(['listen', 'pass']);
+    room.dispatch(players[0].sessionToken, command('listen', again.public.handNumber, again.public.version));
+    const confirmed = room.getSnapshot(players[0].sessionToken);
+    expect(confirmed.private.isListening).toBe(true);
+    expect(confirmed.private.baoTile).toBeDefined();
+  });
+
   it('已吃出的幺牌满足听牌条件，暗手有两对时摸牌后可选择听牌', () => {
     const room = new MahjongRoomService({ inviteCode: 'inner-414', random: () => 0.42 });
     const players = ['甲', '乙', '丙', '丁'].map((nickname) => {

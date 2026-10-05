@@ -26,7 +26,7 @@ const tileDecor = (tile) => {
 };
 
 Page({
-  data: { snapshot: null, chat: [], chatMembers: [], players: [], hand: [], discardRiver: [], selectedTileId: '', canListenSelected: false, listenOptions: [], listenPreview: null, ownSeat: null, currentTurn: null, turnStatus: '', isMyTurn: false, isResponsePhase: false, isWaitingForPriority: false, wallCount: 0, wallSides: [], boardSize: 720, diceRoll: null, diceLabel: '掷骰', animationStage: '', autoDiscardPending: false, availableActions: [], chiOptions: [], chiPickerOpen: false, listenTileIds: [], opponentHands: [], paymentRows: [], isListening: false, canDiscard: false, canListen: false, canHu: false, canPeng: false, canChi: false, canKong: false, canAddedKong: false, canConcealedKong: false, canPass: false, canRespondNow: false, spectator: false, settlement: null, settlementDescription: '', error: '' },
+  data: { snapshot: null, chat: [], chatMembers: [], players: [], hand: [], discardRiver: [], selectedTileId: '', canListenSelected: false, listenOptions: [], listenPreview: null, postDiscardListenWaits: [], ownSeat: null, currentTurn: null, turnStatus: '', isMyTurn: false, isResponsePhase: false, isWaitingForPriority: false, wallCount: 0, wallSides: [], boardSize: 720, diceRoll: null, diceLabel: '掷骰', animationStage: '', autoDiscardPending: false, availableActions: [], chiOptions: [], chiPickerOpen: false, listenTileIds: [], opponentHands: [], paymentRows: [], isListening: false, canDiscard: false, canListen: false, canHu: false, canPeng: false, canChi: false, canKong: false, canAddedKong: false, canConcealedKong: false, canPass: false, canRespondNow: false, spectator: false, settlement: null, settlementDescription: '', error: '' },
 
   onLoad() {
     this.app = getApp();
@@ -79,10 +79,13 @@ Page({
       waits: option.waits.map(tileDecor),
     }));
     const isListening = Boolean(snapshot.private.isListening);
+    const postDiscardListenWaits = (snapshot.private.postDiscardListenWaits || []).map(tileDecor);
     const isResponsePhase = Boolean(snapshot.public.pendingDiscard);
     const isWaitingForPriority = Boolean(snapshot.private.seat && !snapshot.private.spectator && isResponsePhase && snapshot.public.responseSeats.includes(snapshot.private.seat) && availableActions.length === 0);
     const currentPlayer = bySeat.get(snapshot.public.currentTurn);
-    const turnStatus = isResponsePhase
+    const turnStatus = postDiscardListenWaits.length > 0
+      ? '已出牌，请选择听或暂不听'
+      : isResponsePhase
       ? `响应阶段 · 上手打出 ${snapshot.public.pendingDiscard.tile.label}，当前没有普通出牌权`
       : snapshot.public.currentTurn === snapshot.private.seat
         ? '轮到你出牌'
@@ -98,7 +101,9 @@ Page({
         waits: (snapshot.private.listenWaits || []).map(tileDecor),
         baoTile: snapshot.private.baoTile ? tileDecor(snapshot.private.baoTile) : null,
       }
-      : listenOptions.find((option) => option.discardTileId === selectedTileId) || null;
+      : postDiscardListenWaits.length > 0
+        ? { waits: postDiscardListenWaits }
+        : listenOptions.find((option) => option.discardTileId === selectedTileId) || null;
     const chiOptions = (snapshot.private.chiOptions || []).map((tileIds) => {
       return {
         key: tileIds.join('-'),
@@ -182,6 +187,7 @@ Page({
       listenTileIds,
       listenOptions,
       listenPreview,
+      postDiscardListenWaits,
       opponentHands: [],
       isListening,
       canDiscard: availableActions.includes('discard'),
@@ -272,6 +278,10 @@ Page({
       return;
     }
     if (type === 'listen') {
+      if (this.data.postDiscardListenWaits.length > 0) {
+        this.runCommand('listen', {});
+        return;
+      }
       if (!this.data.selectedTileId || !this.data.listenTileIds.includes(this.data.selectedTileId)) return;
       this.runCommand('listen', { tileId: this.data.selectedTileId });
       this.setData({ selectedTileId: '', canListenSelected: false, listenPreview: null });

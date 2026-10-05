@@ -336,6 +336,7 @@ export interface MahjongPrivateSnapshot {
   readonly chiDiscardIds?: string[];
   readonly listenTileIds?: string[];
   readonly listenOptions?: Array<{ readonly discardTileId: string; readonly waits: MahjongTile[] }>;
+  readonly postDiscardListenWaits?: MahjongTile[];
   readonly drawnTileId?: string;
   readonly discardableTileId?: string;
   readonly isListening?: boolean;

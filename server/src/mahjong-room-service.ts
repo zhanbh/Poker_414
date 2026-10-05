@@ -83,6 +83,12 @@ interface PendingResponses {
   readonly passed: MahjongSeat[];
 }
 
+interface PendingListenDecision {
+  readonly seat: MahjongSeat;
+  readonly tile: MahjongTile;
+  readonly waits: MahjongTile[];
+}
+
 interface MahjongState {
   roomId: string;
   hostId: string;
@@ -103,6 +109,7 @@ interface MahjongState {
   autoDiscardAt: number | null;
   nextHandAt: number | null;
   pending: PendingResponses | null;
+  pendingListen: PendingListenDecision | null;
   lastDiscard: { seat: MahjongSeat; tile: MahjongTile } | null;
   discardRiver: Array<{ seat: MahjongSeat; tile: MahjongTile }>;
   settlement: MahjongSettlement | null;
@@ -204,6 +211,7 @@ export class MahjongRoomService {
     const session = this.sessions.get(sessionToken);
     if (!this.state) return { public: this.emptyPublicSnapshot(), private: this.emptyPrivateSnapshot(session) };
     const state = this.state;
+    const visiblePending = state.pending ?? state.pendingListen;
     const players = Object.values(state.players)
       .filter((player): player is MahjongPlayer => player !== null)
       .map((player) => ({
@@ -235,8 +243,8 @@ export class MahjongRoomService {
       dealerSeat: state.dealerSeat,
       currentTurn: state.currentTurn,
       awaitingDiscard: state.awaitingDiscard,
-      pendingDiscard: state.pending ? { seat: state.pending.seat, tile: state.pending.tile } : null,
-      responseSeats: state.pending
+      pendingDiscard: visiblePending ? { seat: visiblePending.seat, tile: visiblePending.tile } : null,
+      responseSeats: state.pending && !state.pendingListen
         ? Object.keys(state.pending.options).filter((seat) => !state.pending!.passed.includes(seat as MahjongSeat)) as MahjongSeat[]
         : [],
       wallCount: state.wall.length + state.replacementWall.length,
@@ -266,6 +274,9 @@ export class MahjongRoomService {
       seat: session.mahjongSeat,
       hand: ownPlayer ? sortMahjongTiles(ownPlayer.hand) : [],
       availableActions: available,
+      ...(state.pendingListen && ownPlayer && state.pendingListen.seat === ownPlayer.seat
+        ? { postDiscardListenWaits: state.pendingListen.waits }
+        : {}),
       ...(listenOptions.length ? {
         listenTileIds: listenOptions.map((option) => option.discardTileId),
         listenOptions,
@@ -458,7 +469,7 @@ export class MahjongRoomService {
         this.discard(session.mahjongSeat!, (payload as { readonly tileId: string }).tileId);
         return;
       case 'listen':
-        this.listen(session.mahjongSeat!, (payload as { readonly tileId: string }).tileId);
+        this.listen(session.mahjongSeat!, (payload as { readonly tileId?: string }).tileId);
         return;
       case 'pass':
         this.pass(session.mahjongSeat!);
@@ -519,6 +530,7 @@ export class MahjongRoomService {
       autoDiscardAt: null,
       nextHandAt: null,
       pending: null,
+      pendingListen: null,
       lastDiscard: null,
       settlement: null,
     };
@@ -532,6 +544,9 @@ export class MahjongRoomService {
     if (!tile) throw new MahjongRoomServiceError('TILE_NOT_OWNED', '选择的牌不在手牌中');
     if (player.mustListenAfterChi) throw new MahjongRoomServiceError('MUST_LISTEN_AFTER_CHI', '这次隔位吃牌后必须听牌并打出一张牌');
     if (player.isListening && player.lastDrawnTileId !== tileId) throw new MahjongRoomServiceError('LISTEN_LOCKED', '听牌后只能打出刚摸到的牌');
+    const postDiscardWaits = !player.isListening && player.melds.some((meld) => meld.kind !== 'concealed-kong')
+      ? this.validListenWaits(player.hand.filter((candidate) => candidate.id !== tileId), player.melds.length, player.melds)
+      : [];
     const baoSeatsBeforeDiscard = this.baoSeatsFor(tile);
     player.hand = removeTileIds(player.hand, [tileId]);
     player.lastDrawnTileId = null;
@@ -542,15 +557,30 @@ export class MahjongRoomService {
     state.lastDiscard = { seat, tile };
     state.awaitingDiscard = false;
     state.pending = this.createPending(seat, tile, baoSeatsBeforeDiscard);
+    state.pendingListen = postDiscardWaits.length > 0 ? { seat, tile, waits: postDiscardWaits } : null;
     state.version += 1;
-    if (!state.pending || Object.keys(state.pending.options).length === 0) this.advanceAfterNoResponse();
+    if (!state.pendingListen && !state.pending) this.advanceAfterNoResponse();
   }
 
-  private listen(seat: MahjongSeat, tileId: string): void {
+  private listen(seat: MahjongSeat, tileId?: string): void {
     const state = this.requirePlaying();
+    if (state.pendingListen) {
+      if (state.pendingListen.seat !== seat || (tileId && tileId !== state.pendingListen.tile.id)) {
+        throw new MahjongRoomServiceError('INVALID_ACTION', '当前不能确认听牌');
+      }
+      const player = this.requirePlayer(seat);
+      player.isListening = true;
+      player.listenWaits = state.pendingListen.waits;
+      state.pendingListen = null;
+      this.refreshListenerBao();
+      state.version += 1;
+      if (!state.pending) this.advanceAfterNoResponse();
+      return;
+    }
     if (state.pending || !state.awaitingDiscard || state.currentTurn !== seat) throw new MahjongRoomServiceError('NOT_YOUR_TURN', '当前还不能听牌');
     const player = this.requirePlayer(seat);
     if (player.isListening) throw new MahjongRoomServiceError('ALREADY_LISTENING', '已经听牌');
+    if (!tileId) throw new MahjongRoomServiceError('INVALID_ACTION', '请选择要打出的牌');
     const tile = player.hand.find((candidate) => candidate.id === tileId);
     if (!tile) throw new MahjongRoomServiceError('TILE_NOT_OWNED', '选择的牌不在手牌中');
     const hand = removeTileIds(player.hand, [tileId]);
@@ -575,6 +605,13 @@ export class MahjongRoomService {
 
   private pass(seat: MahjongSeat): void {
     const state = this.requirePlaying();
+    if (state.pendingListen) {
+      if (state.pendingListen.seat !== seat) throw new MahjongRoomServiceError('INVALID_ACTION', '当前没有可跳过的操作');
+      state.pendingListen = null;
+      state.version += 1;
+      if (!state.pending) this.advanceAfterNoResponse();
+      return;
+    }
     if (!state.pending) {
       const player = this.requirePlayer(seat);
       const drawnTile = player.lastDrawnTileId ? player.hand.find((tile) => tile.id === player.lastDrawnTileId) : undefined;
@@ -593,6 +630,7 @@ export class MahjongRoomService {
 
   private hu(seat: MahjongSeat): void {
     const state = this.requirePlaying();
+    if (state.pendingListen) throw new MahjongRoomServiceError('INVALID_ACTION', '等待出牌玩家确认是否听牌');
     const player = this.requirePlayer(seat);
     const winningTile = state.pending?.tile;
     if (state.pending && this.claimPriority(state.pending).seat !== seat) {
@@ -626,6 +664,7 @@ export class MahjongRoomService {
 
   private claim(seat: MahjongSeat, action: 'chi' | 'peng' | 'exposed-kong', payload: { readonly tileIds?: readonly string[]; readonly discardTileId?: string }): void {
     const state = this.requirePlaying();
+    if (state.pendingListen) throw new MahjongRoomServiceError('INVALID_ACTION', '等待出牌玩家确认是否听牌');
     if (!state.pending || !state.pending.options[seat]?.includes(action)) throw new MahjongRoomServiceError('INVALID_ACTION', '当前不能执行该操作');
     const resolution = this.claimPriority(state.pending);
     if (resolution.seat !== seat || !resolution.actions.includes(action)) throw new MahjongRoomServiceError('CLAIM_PRIORITY', '有更靠前或优先级更高的玩家正在响应');
@@ -774,6 +813,7 @@ export class MahjongRoomService {
   private availableActions(player: MahjongPlayer): MahjongAction[] {
     const state = this.state;
     if (!state || state.phase !== 'playing') return [];
+    if (state.pendingListen) return state.pendingListen.seat === player.seat ? ['listen', 'pass'] : [];
     if (state.pending) {
       if (!state.pending.options[player.seat]) return [];
       const priority = this.claimPriority(state.pending);
@@ -933,6 +973,7 @@ export class MahjongRoomService {
     this.state.autoDiscardAt = null;
     this.state.nextHandAt = settlement.type === 'draw' ? this.now() + DRAW_RESTART_DELAY_MS : null;
     this.state.pending = null;
+    this.state.pendingListen = null;
     this.state.settlement = { ...settlement, ...(Object.keys(payments).length > 0 ? { payments } : {}) };
   }
 
@@ -949,6 +990,7 @@ export class MahjongRoomService {
     this.state.autoDiscardAt = null;
     this.state.nextHandAt = null;
     this.state.pending = null;
+    this.state.pendingListen = null;
     this.state.lastDiscard = null;
     this.state.settlement = null;
     if (!keepDealer) this.state.dealerSeat = nextMahjongSeat(this.state.dealerSeat);
@@ -1032,6 +1074,7 @@ export class MahjongRoomService {
       autoDiscardAt: null,
       nextHandAt: null,
       pending: null,
+      pendingListen: null,
       lastDiscard: null,
       discardRiver: [],
       settlement: null,

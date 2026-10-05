@@ -78,9 +78,12 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode }: {
   const availableActions = snapshot.private.availableActions;
   const responseActions = availableActions.filter((candidate) => ['hu', 'peng', 'chi', 'exposed-kong'].includes(candidate));
   const listenTileIds = new Set(snapshot.private.listenTileIds ?? []);
+  const postDiscardListenWaits = snapshot.private.postDiscardListenWaits ?? [];
   const listenPreview = snapshot.private.isListening
     ? { waits: snapshot.private.listenWaits ?? [] }
-    : snapshot.private.listenOptions?.find((option) => option.discardTileId === effectiveSelectedTileId);
+    : postDiscardListenWaits.length > 0
+      ? { waits: postDiscardListenWaits }
+      : snapshot.private.listenOptions?.find((option) => option.discardTileId === effectiveSelectedTileId);
   const drawnTileId = snapshot.private.drawnTileId;
   const ownHand = snapshot.private.hand.filter((tile) => tile.id !== drawnTileId);
   const drawnTile = snapshot.private.hand.find((tile) => tile.id === drawnTileId);
@@ -161,11 +164,13 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode }: {
       stacks: Array.from({ length: Math.ceil(tiles.length / 2) }, (_, index) => ({ id: `${side.seat}-stack-${index}`, tiles: tiles.slice(index * 2, index * 2 + 2) })),
     };
   });
-  const showResponseDock = !isSpectator && snapshot.public.phase === 'playing' && isResponsePhase && (responseActions.length > 0 || availableActions.includes('pass'));
+  const showPostDiscardListenDock = !isSpectator && snapshot.public.phase === 'playing' && postDiscardListenWaits.length > 0;
+  const showResponseDock = !showPostDiscardListenDock && !isSpectator && snapshot.public.phase === 'playing' && isResponsePhase && (responseActions.length > 0 || availableActions.includes('pass'));
   const showTurnDock = !isSpectator && snapshot.public.phase === 'playing' && isMyTurn && !snapshot.private.isListening
     && (availableActions.includes('listen') || availableActions.includes('concealed-kong') || availableActions.includes('added-kong'));
   const showSelfDrawDock = !isSpectator && snapshot.public.phase === 'playing' && isMyTurn && snapshot.private.isListening && availableActions.includes('hu');
-  const actionDock = showResponseDock || showTurnDock || showSelfDrawDock ? <div className="mahjong-action-dock" aria-label="可选操作">
+  const actionDock = showPostDiscardListenDock || showResponseDock || showTurnDock || showSelfDrawDock ? <div className="mahjong-action-dock" aria-label="可选操作">
+    {showPostDiscardListenDock ? <><button type="button" className="mahjong-action-circle" aria-label="听" onClick={() => respond('listen')}>听</button><button type="button" className="mahjong-action-circle secondary" aria-label="暂不听" onClick={() => respond('pass')}>不听</button></> : null}
     {showResponseDock ? <>
       {responseActions.includes('hu') ? <button type="button" className="mahjong-action-circle" aria-label="胡" onClick={() => respond('hu')}>胡</button> : null}
       {responseActions.includes('peng') ? <button type="button" className="mahjong-action-circle" aria-label="碰" onClick={() => respond('peng')}>碰</button> : null}
@@ -205,7 +210,7 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode }: {
     <main className="mahjong-game">
       {testMode ? <div className="test-mode-banner" role="status">单机四人测试模式 · 每个标签页都是独立玩家</div> : null}
       {isSpectator ? <div className="spectator-banner">观战模式 · 可查看牌桌状态</div> : null}
-      <header className="mahjong-header"><div><h1>麻将对局</h1><p>{snapshot.public.phase === 'settled' ? '本局已结算' : isResponsePhase ? '响应阶段 · 等待可操作玩家' : snapshot.public.currentTurn ? `轮到${players.get(snapshot.public.currentTurn)?.nickname ?? snapshot.public.currentTurn}出牌` : '牌局进行中'} · 牌墙剩余 {wallCount}</p></div><button type="button" className="leave-room-button" onClick={onLeave}>退出房间</button></header>
+      <header className="mahjong-header"><div><h1>麻将对局</h1><p>{snapshot.public.phase === 'settled' ? '本局已结算' : showPostDiscardListenDock ? '已出牌 · 请确认是否听牌' : isResponsePhase ? '响应阶段 · 等待可操作玩家' : snapshot.public.currentTurn ? `轮到${players.get(snapshot.public.currentTurn)?.nickname ?? snapshot.public.currentTurn}出牌` : '牌局进行中'} · 牌墙剩余 {wallCount}</p></div><button type="button" className="leave-room-button" onClick={onLeave}>退出房间</button></header>
       <RoomPurposeNotice />
       <section ref={tableRef} onClick={handleTableClick} className={`mahjong-table${settlement ? ' is-settled' : ''}${selectedTileId ? ' has-selected-tile' : ''}`} aria-label="方形麻将桌">
         {wallSides.map(({ seat, position, stacks }) => <div className={`mahjong-wall mahjong-wall-${position}`} aria-label={`${players.get(seat)?.nickname ?? '玩家'}面前剩余牌墙`} key={seat}>
@@ -231,7 +236,7 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode }: {
             {!isOwnSeat && !visibleHand && player.handCount > 0 ? <div className="mahjong-concealed-hand" aria-label={`${player.nickname}的未公开手牌`}>{Array.from({ length: player.handCount }, (_, index) => <TileEdge key={`${seat}-hand-${index}`} />)}</div> : null}
             {isOwnSeat ? <>
               <div className="mahjong-own-hand" aria-label="我的手牌">{displayHand.map((tile) => <TileFace key={tile.id} tile={tile} drawn={tile.id === drawnTileId} selected={tile.id === selectedTileId} listenOption={listenTileIds.has(tile.id)} pending={tile.id === draggingTileId} onClick={isMyTurn && !snapshot.private.isListening ? () => handleTileClick(tile.id) : undefined} onPointerDown={isMyTurn && !snapshot.private.isListening ? (event) => handleTilePointerDown(tile.id, event) : undefined} onPointerMove={isMyTurn && !snapshot.private.isListening ? handleTilePointerMove : undefined} onPointerUp={isMyTurn && !snapshot.private.isListening ? handleTilePointerUp : undefined} />)}</div>
-              {listenPreview ? <div className="mahjong-listen-preview" role="status"><strong>{snapshot.private.isListening ? '已听牌' : '打出此牌可听'}</strong><span>胡：</span>{listenPreview.waits.map((tile) => <TileFace key={tile.id} tile={tile} />)}{snapshot.private.isListening && snapshot.private.baoTile ? <span className="mahjong-bao-preview"><b>宝·仅自摸</b><TileFace tile={snapshot.private.baoTile} /></span> : null}</div> : null}
+              {listenPreview ? <div className="mahjong-listen-preview" role="status"><strong>{snapshot.private.isListening ? '已听牌' : showPostDiscardListenDock ? '已出牌，可选择听牌' : '打出此牌可听'}</strong><span>胡：</span>{listenPreview.waits.map((tile) => <TileFace key={tile.id} tile={tile} />)}{snapshot.private.isListening && snapshot.private.baoTile ? <span className="mahjong-bao-preview"><b>宝</b><TileFace tile={snapshot.private.baoTile} /></span> : null}</div> : null}
             </> : null}
           </article>;
         })}

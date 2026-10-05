@@ -21,7 +21,7 @@ export function RoomChat({ messages, members, ownSeat, onSend }: {
 }) {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => typeof window !== 'undefined' && window.matchMedia?.('(max-width: 980px) and (orientation: landscape)').matches || false);
   const messagesRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

@@ -122,7 +122,11 @@ Page({
       position: seatPosition(snapshot.private.seat, player.seat),
       avatarLabel: player.nickname ? player.nickname.slice(0, 1) : player.seat,
       discards: (player.discards || []).map((tile) => ({ ...tileDecor(tile), isPendingDiscard: snapshot.public.pendingDiscard && snapshot.public.pendingDiscard.tile.id === tile.id })),
-      melds: (player.melds || []).map((meld) => ({ ...meld, tiles: meld.tiles.map(tileDecor) })),
+      melds: (player.melds || []).map((meld) => ({
+        ...meld,
+        tiles: meld.tiles.map(tileDecor),
+        hiddenBacks: meld.kind === 'concealed-kong' && meld.tiles.length === 0 ? [0, 1, 2, 3] : [],
+      })),
       revealedHand: (exposedHands.get(player.seat) || []).map(tileDecor),
       concealedTiles: Array.from({ length: player.handCount || 0 }, (_, index) => `${player.seat}-hand-${index}`),
     }));
@@ -200,7 +204,15 @@ Page({
 
   onTileTap(event) {
     const id = event.currentTarget.dataset.id;
-    if ((!this.data.availableActions.includes('discard') && !this.data.availableActions.includes('listen')) || this.data.isListening) return;
+    if (!this.data.isMyTurn || (!this.data.availableActions.includes('discard') && !this.data.availableActions.includes('listen')) || this.data.isListening) return;
+    const now = Date.now();
+    if (this.lastTileTap && this.lastTileTap.id === id && now - this.lastTileTap.at <= 300 && this.data.canDiscard) {
+      this.lastTileTap = null;
+      this.runCommand('discard', { tileId: id });
+      this.setData({ selectedTileId: '', canListenSelected: false, listenPreview: null, hand: this.data.hand.map((tile) => ({ ...tile, selected: false })) });
+      return;
+    }
+    this.lastTileTap = { id, at: now };
     this.setData({
       selectedTileId: id,
       canListenSelected: this.data.listenTileIds.includes(id),
@@ -228,6 +240,7 @@ Page({
     if (!drag || !drag.moved || !touch || !this.data.isMyTurn || this.data.isListening || !this.data.canDiscard) return;
     wx.createSelectorQuery().select('.mahjong-table').boundingClientRect((rect) => {
       if (!rect || touch.clientX < rect.left || touch.clientX > rect.right || touch.clientY < rect.top || touch.clientY > rect.bottom) return;
+      this.lastTileTap = null;
       this.runCommand('discard', { tileId: drag.id });
       this.setData({ selectedTileId: '', hand: this.data.hand.map((tile) => ({ ...tile, selected: false })) });
     }).exec();
@@ -235,6 +248,7 @@ Page({
 
   onTableTap() {
     if (!this.data.isMyTurn || this.data.isListening || !this.data.canDiscard || !this.data.selectedTileId) return;
+    this.lastTileTap = null;
     this.runCommand('discard', { tileId: this.data.selectedTileId });
     this.setData({ selectedTileId: '', hand: this.data.hand.map((tile) => ({ ...tile, selected: false })) });
   },

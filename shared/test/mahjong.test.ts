@@ -97,5 +97,10 @@ describe('Mahjong shared rules', () => {
     expect(hasMahjongPairStructure(triplet)).toBe(true);
     expect(hasMahjongPairStructure(allSequences)).toBe(false);
     expect(hasMahjongPairStructure(onePairPlusChiTile)).toBe(false);
+    expect(hasMahjongPairStructure(onePairPlusChiTile, [{ kind: 'chi', tiles: [
+      ...copies('bamboo', 1, 1), ...copies('bamboo', 2, 1), ...copies('bamboo', 3, 1),
+    ] }])).toBe(false);
+    expect(hasMahjongPairStructure(onePairPlusChiTile, [{ kind: 'concealed-kong', tiles: copies('dots', 6, 4) }])).toBe(true);
+    expect(hasMahjongPairStructure(onePairPlusChiTile, [{ kind: 'peng', tiles: copies('dots', 6, 3) }])).toBe(true);
   });
 });

@@ -74,7 +74,7 @@
 .mahjong-seat .face-suit { display: none; }
 .mahjong-seat .face-character { font-size: 18rpx; }
 .mahjong-seat .face-honor { font-size: 20rpx; }
-.mahjong-meld .mahjong-tile-face { width: 24rpx; height: 34rpx; }
+.mahjong-meld .mahjong-tile-face, .mahjong-meld .tile-back { width: 24rpx; height: 34rpx; }
 .mahjong-wall { position: absolute; z-index: 0; display: flex; gap: 2rpx; justify-content: center; }
 .mahjong-wall-north { top: 16%; left: 18%; right: 18%; }
 .mahjong-wall-south { bottom: 16%; left: 18%; right: 18%; }

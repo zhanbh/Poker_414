@@ -23,7 +23,8 @@ describe('MahjongGameView settlement', () => {
           handCount: hands[index]!.length,
           score: 1_000,
           isListening: false,
-          melds: index === 1 ? [{ kind: 'peng', tiles: meldTiles }] : [],
+          melds: index === 0 ? [{ kind: 'concealed-kong', tiles: [...meldTiles, deck[65]!] }]
+            : index === 1 ? [{ kind: 'concealed-kong', tiles: [] }] : [],
           discards: [],
           isDealer: index === 0,
           isHost: index === 0,
@@ -47,6 +48,9 @@ describe('MahjongGameView settlement', () => {
     expect(Array.from(table?.querySelectorAll('.mahjong-discard-tiles .mahjong-face') ?? []).map((tile) => tile.getAttribute('aria-label')))
       .toEqual(discards.map((tile) => tile.label));
     expect(table?.querySelector('.mahjong-seat-left .mahjong-seat-melds .mahjong-meld')).not.toBeNull();
+    expect(table?.querySelectorAll('.mahjong-seat-left .mahjong-meld .mahjong-tile-back')).toHaveLength(4);
+    expect(table?.querySelectorAll('.mahjong-seat-left .mahjong-meld .mahjong-face')).toHaveLength(0);
+    expect(table?.querySelectorAll('.mahjong-seat-bottom .mahjong-meld .mahjong-face')).toHaveLength(4);
   });
 });
 
@@ -87,6 +91,12 @@ describe('MahjongGameView discard interaction', () => {
     expect(onCommand).toHaveBeenCalledWith('discard', { tileId: hands[0]![0]!.id });
     expect(container.querySelector('.mahjong-action-dock')?.parentElement).toBe(table);
     expect(Array.from(container.querySelectorAll('button')).some((button) => button.textContent?.trim().startsWith('出牌'))).toBe(false);
+
+    onCommand.mockClear();
+    fireEvent.click(tile);
+    expect(onCommand).not.toHaveBeenCalled();
+    fireEvent.click(tile);
+    expect(onCommand).toHaveBeenCalledExactlyOnceWith('discard', { tileId: hands[0]![0]!.id });
   });
 
   it('discards a hand tile dragged onto the table', () => {

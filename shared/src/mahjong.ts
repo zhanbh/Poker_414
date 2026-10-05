@@ -183,8 +183,9 @@ export function mahjongWaits(hand: readonly MahjongTile[], meldCount = 0, melds:
   return kinds.filter((tile) => structuralKeys.has(tileKey(tile)) || isBigWindWin(hand, tile, melds));
 }
 
-/** The custom rules require two concealed pairs or a concealed triplet. */
-export function hasMahjongPairStructure(hand: readonly MahjongTile[]): boolean {
+/** Two pairs in hand, or a triplet/kong in hand or an already declared meld. */
+export function hasMahjongPairStructure(hand: readonly MahjongTile[], melds: readonly MahjongMeld[] = []): boolean {
+  if (melds.some((meld) => meld.kind !== 'chi' && meld.tiles.length >= 3)) return true;
   const counts = countsFor(hand);
   let pairs = 0;
   for (const count of counts.values()) {

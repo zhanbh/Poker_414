@@ -214,7 +214,10 @@ export class MahjongRoomService {
         handCount: player.hand.length,
         score: player.score,
         isListening: player.isListening,
-        melds: player.melds.map((meld) => ({ ...meld, tiles: [...meld.tiles] })),
+        melds: player.melds.map((meld) => ({
+          kind: meld.kind,
+          tiles: meld.kind === 'concealed-kong' && player.seat !== session.mahjongSeat ? [] : [...meld.tiles],
+        })),
         discards: [...player.discards],
         isDealer: player.seat === state.dealerSeat,
         isHost: player.id === state.hostId,
@@ -602,7 +605,7 @@ export class MahjongRoomService {
     const baoWin = Boolean(tile && player.listenBao && tileKey(tile) === tileKey(player.listenBao));
     const allowed = player.isListening
       && Boolean(tile)
-      && hasMahjongPairStructure(player.hand.filter((handTile) => handTile.id !== tile?.id))
+      && hasMahjongPairStructure(player.hand.filter((handTile) => handTile.id !== tile?.id), player.melds)
       && (onDiscard
         ? Boolean(state.pending?.options[seat]?.includes('hu'))
         : state.currentTurn === seat && state.awaitingDiscard && (matchingReadyWait || bigWind || baoWin));
@@ -702,7 +705,7 @@ export class MahjongRoomService {
       const structuralWait = player.listenWaits.some((wait) => tileKey(wait) === tileKey(tile))
         && isWinningMahjongHand([...player.hand, tile], player.melds.length);
       const baoWait = Boolean(player.listenBao && tileKey(player.listenBao) === tileKey(tile));
-      if (player.isListening && hasMahjongPairStructure(player.hand) && (structuralWait || baoWait)) actions.push('hu');
+      if (player.isListening && hasMahjongPairStructure(player.hand, player.melds) && (structuralWait || baoWait)) actions.push('hu');
       if (!player.isListening && matchingTileCount(player.hand, tile) >= 3) actions.push('exposed-kong');
       else if (!player.isListening && matchingTileCount(player.hand, tile) >= 2) actions.push('peng');
       if (!player.isListening && this.chiPlans(player, tile, seat).length > 0) actions.push('chi');
@@ -790,7 +793,7 @@ export class MahjongRoomService {
     const state = this.state;
     if (!state) return null;
     const visibleTiles = Object.values(state.players).flatMap((candidate) => candidate
-      ? [...candidate.discards, ...candidate.melds.flatMap((meld) => meld.tiles)]
+      ? [...candidate.discards, ...candidate.melds.flatMap((meld) => meld.kind !== 'concealed-kong' || candidate.seat === player.seat ? meld.tiles : [])]
       : []);
     const knownTiles = [...visibleTiles, ...playerHand];
     for (let index = state.replacementWall.length - 1; index >= 0; index -= 1) {
@@ -809,7 +812,7 @@ export class MahjongRoomService {
   }
 
   private validListenWaits(hand: MahjongTile[], meldCount: number, melds: readonly MahjongMeld[]): MahjongTile[] {
-    if (!hasMahjongPairStructure(hand)) return [];
+    if (!hasMahjongPairStructure(hand, melds)) return [];
     return mahjongWaits(hand, meldCount, melds)
       .filter((tile) => hasMahjongListenYao(hand, tile, melds));
   }
@@ -843,9 +846,10 @@ export class MahjongRoomService {
     const plans: Array<{ tiles: MahjongTile[]; requiresListen: boolean }> = [];
     for (const tiles of options) {
       const afterClaim = player.hand.filter((tile) => !tiles.some((used) => used.id === tile.id));
+      const melds: MahjongMeld[] = [...player.melds, { kind: 'chi', tiles: sortMahjongTiles([discard, ...tiles]) }];
       const canListenAfterClaim = afterClaim.some((discardTile) => {
         const afterDiscard = afterClaim.filter((tile) => tile.id !== discardTile.id);
-        return this.validListenWaits(afterDiscard, player.melds.length + 1, player.melds).length > 0;
+        return this.validListenWaits(afterDiscard, melds.length, melds).length > 0;
       });
       if (canListenAfterClaim) plans.push({ tiles, requiresListen: true });
     }
@@ -856,10 +860,10 @@ export class MahjongRoomService {
     return this.chiPlans(player, pending.tile, pending.seat).map((plan) => plan.tiles.map((tile) => tile.id));
   }
 
-  private actionPriority(action: MahjongAction): number {
+  private actionPriority(action: MahjongAction, seat: MahjongSeat, fromSeat: MahjongSeat): number {
     if (action === 'hu') return 3;
     if (action === 'peng' || action === 'exposed-kong') return 2;
-    if (action === 'chi') return 1;
+    if (action === 'chi') return seat === nextMahjongSeat(fromSeat) ? 1 : 1.5;
     return 0;
   }
 
@@ -867,7 +871,7 @@ export class MahjongRoomService {
     const waitingSeats = Object.keys(pending.options)
       .map((seat) => seat as MahjongSeat)
       .filter((seat) => !pending.passed.includes(seat));
-    const bestPriority = Math.max(0, ...waitingSeats.flatMap((seat) => (pending.options[seat] ?? []).map((action) => this.actionPriority(action))));
+    const bestPriority = Math.max(0, ...waitingSeats.flatMap((seat) => (pending.options[seat] ?? []).map((action) => this.actionPriority(action, seat, pending.seat))));
     if (bestPriority === 0) return { seat: null, actions: [] };
     const orderedSeats: MahjongSeat[] = [];
     let current = nextMahjongSeat(pending.seat);
@@ -876,16 +880,16 @@ export class MahjongRoomService {
       current = nextMahjongSeat(current);
     }
     const seat = orderedSeats.find((candidate) => waitingSeats.includes(candidate)
-      && (pending.options[candidate] ?? []).some((action) => this.actionPriority(action) === bestPriority)) ?? null;
+      && (pending.options[candidate] ?? []).some((action) => this.actionPriority(action, candidate, pending.seat) === bestPriority)) ?? null;
     return {
       seat,
-      actions: seat ? (pending.options[seat] ?? []).filter((action) => this.actionPriority(action) === bestPriority) : [],
+      actions: seat ? (pending.options[seat] ?? []).filter((action) => this.actionPriority(action, seat, pending.seat) === bestPriority) : [],
     };
   }
 
   private canSelfDrawHu(player: MahjongPlayer, tile: MahjongTile): boolean {
     return player.isListening
-      && hasMahjongPairStructure(player.hand.filter((handTile) => handTile.id !== tile.id))
+      && hasMahjongPairStructure(player.hand.filter((handTile) => handTile.id !== tile.id), player.melds)
       && (
         player.listenWaits.some((wait) => tileKey(wait) === tileKey(tile))
         || isBigWindWin(player.hand.filter((handTile) => handTile.id !== tile.id), tile, player.melds)

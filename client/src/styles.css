@@ -190,7 +190,7 @@ main { min-height: 100vh; padding: 32px; }
 .mahjong-seat .mahjong-dot-art, .mahjong-seat .mahjong-bamboo-art { width: 18px; height: 25px; }
 .mahjong-seat .mahjong-char-art { font-size: 17px; }
 .mahjong-seat .mahjong-honor-art { font-size: 18px; }
-.mahjong-meld .mahjong-face { width: 16px; height: 24px; padding: 1px; }
+.mahjong-meld .mahjong-face, .mahjong-meld .mahjong-tile-back { width: 16px; height: 24px; padding: 1px; }
 .mahjong-meld .mahjong-face-top { font-size: 6px; }.mahjong-meld .mahjong-face-bottom { display: none; }
 .mahjong-meld .mahjong-dot-art, .mahjong-meld .mahjong-bamboo-art { width: 10px; height: 15px; }
 .mahjong-meld .mahjong-char-art, .mahjong-meld .mahjong-honor-art { font-size: 10px; }
@@ -261,7 +261,7 @@ main { min-height: 100vh; padding: 32px; }
   .mahjong-wall-west { top: 23%; bottom: 23%; left: 30%; }
   .mahjong-tile-back { width: 12px; height: 17px; padding: 1px; }
   .mahjong-meld { gap: 1px; padding: 1px; }
-  .mahjong-meld .mahjong-face { width: 13px; height: 19px; }
+  .mahjong-meld .mahjong-face, .mahjong-meld .mahjong-tile-back { width: 13px; height: 19px; }
   .mahjong-discard-pile { top: 37%; right: 25%; bottom: 25%; left: 25%; gap: 2px; padding: 4px; }
   .mahjong-discard-pile > strong { font-size: .54rem; }
   .mahjong-discard-tiles { gap: 1px; }

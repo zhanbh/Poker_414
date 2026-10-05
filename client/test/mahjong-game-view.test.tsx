@@ -220,5 +220,6 @@ describe('MahjongGameView listen information privacy', () => {
 
     expect(container.querySelector('.mahjong-listen-preview strong')?.textContent).toBe('已听牌');
     expect(container.querySelector('.mahjong-bao-preview .mahjong-face')?.getAttribute('aria-label')).toBe(baoTile.label);
+    expect(container.querySelector('.mahjong-bao-preview')?.textContent).toContain('仅自摸');
   });
 });

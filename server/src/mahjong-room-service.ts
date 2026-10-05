@@ -532,6 +532,7 @@ export class MahjongRoomService {
     if (!tile) throw new MahjongRoomServiceError('TILE_NOT_OWNED', '选择的牌不在手牌中');
     if (player.mustListenAfterChi) throw new MahjongRoomServiceError('MUST_LISTEN_AFTER_CHI', '这次隔位吃牌后必须听牌并打出一张牌');
     if (player.isListening && player.lastDrawnTileId !== tileId) throw new MahjongRoomServiceError('LISTEN_LOCKED', '听牌后只能打出刚摸到的牌');
+    const baoSeatsBeforeDiscard = this.baoSeatsFor(tile);
     player.hand = removeTileIds(player.hand, [tileId]);
     player.lastDrawnTileId = null;
     state.autoDiscardAt = null;
@@ -540,7 +541,7 @@ export class MahjongRoomService {
     this.refreshListenerBao();
     state.lastDiscard = { seat, tile };
     state.awaitingDiscard = false;
-    state.pending = this.createPending(seat, tile);
+    state.pending = this.createPending(seat, tile, baoSeatsBeforeDiscard);
     state.version += 1;
     if (!state.pending || Object.keys(state.pending.options).length === 0) this.advanceAfterNoResponse();
   }
@@ -556,6 +557,7 @@ export class MahjongRoomService {
     const waits = this.validListenWaits(hand, player.melds.length, player.melds);
     if (!player.melds.some((meld) => meld.kind !== 'concealed-kong')) throw new MahjongRoomServiceError('CLOSED_HAND', '听牌前必须开门，先吃、碰或明杠一组牌');
     if (waits.length === 0) throw new MahjongRoomServiceError('NOT_LISTENING', '打出这张牌后不满足听牌条件');
+    const baoSeatsBeforeDiscard = this.baoSeatsFor(tile);
     player.hand = hand;
     player.isListening = true;
     player.mustListenAfterChi = false;
@@ -566,7 +568,7 @@ export class MahjongRoomService {
     this.refreshListenerBao();
     state.lastDiscard = { seat, tile };
     state.awaitingDiscard = false;
-    state.pending = this.createPending(seat, tile);
+    state.pending = this.createPending(seat, tile, baoSeatsBeforeDiscard);
     state.version += 1;
     if (!state.pending || Object.keys(state.pending.options).length === 0) this.advanceAfterNoResponse();
   }
@@ -602,12 +604,13 @@ export class MahjongRoomService {
     const waitKeys = new Set(player.listenWaits.map(tileKey));
     const matchingReadyWait = Boolean(tile && waitKeys.has(tileKey(tile)));
     const bigWind = Boolean(!onDiscard && tile && isBigWindWin(player.hand.filter((handTile) => handTile.id !== tile.id), tile, player.melds));
-    const baoWin = Boolean(tile && player.listenBao && tileKey(tile) === tileKey(player.listenBao));
+    const isBaoTile = Boolean(tile && player.listenBao && tileKey(tile) === tileKey(player.listenBao));
+    const baoWin = !onDiscard && isBaoTile;
     const allowed = player.isListening
       && Boolean(tile)
       && hasMahjongPairStructure(player.hand.filter((handTile) => handTile.id !== tile?.id), player.melds)
       && (onDiscard
-        ? Boolean(state.pending?.options[seat]?.includes('hu'))
+        ? !isBaoTile && Boolean(state.pending?.options[seat]?.includes('hu'))
         : state.currentTurn === seat && state.awaitingDiscard && (matchingReadyWait || bigWind || baoWin));
     if (!allowed) throw new MahjongRoomServiceError('INVALID_ACTION', '当前不能胡牌');
     const winPattern = bigWind ? 'big-wind' : baoWin ? 'bao' : 'standard';
@@ -695,7 +698,7 @@ export class MahjongRoomService {
     state.version += 1;
   }
 
-  private createPending(seat: MahjongSeat, tile: MahjongTile): PendingResponses | null {
+  private createPending(seat: MahjongSeat, tile: MahjongTile, baoSeatsBeforeDiscard: ReadonlySet<MahjongSeat>): PendingResponses | null {
     const options: Partial<Record<MahjongSeat, MahjongAction[]>> = {};
     for (const candidate of MAHJONG_SEATS) {
       if (candidate === seat) continue;
@@ -704,8 +707,9 @@ export class MahjongRoomService {
       const actions: MahjongAction[] = [];
       const structuralWait = player.listenWaits.some((wait) => tileKey(wait) === tileKey(tile))
         && isWinningMahjongHand([...player.hand, tile], player.melds.length);
-      const baoWait = Boolean(player.listenBao && tileKey(player.listenBao) === tileKey(tile));
-      if (player.isListening && hasMahjongPairStructure(player.hand, player.melds) && (structuralWait || baoWait)) actions.push('hu');
+      const isBaoTile = baoSeatsBeforeDiscard.has(candidate)
+        || Boolean(player.listenBao && tileKey(player.listenBao) === tileKey(tile));
+      if (player.isListening && hasMahjongPairStructure(player.hand, player.melds) && structuralWait && !isBaoTile) actions.push('hu');
       if (!player.isListening && matchingTileCount(player.hand, tile) >= 3) actions.push('exposed-kong');
       else if (!player.isListening && matchingTileCount(player.hand, tile) >= 2) actions.push('peng');
       if (!player.isListening && this.chiPlans(player, tile, seat).length > 0) actions.push('chi');
@@ -802,6 +806,14 @@ export class MahjongRoomService {
       if (visibleCopies < 3) return candidate;
     }
     return null;
+  }
+
+  private baoSeatsFor(tile: MahjongTile): Set<MahjongSeat> {
+    // Keep the pre-discard bao identity: revealing this tile may rotate bao immediately.
+    return new Set(MAHJONG_SEATS.filter((seat) => {
+      const bao = this.state?.players[seat]?.listenBao;
+      return bao && tileKey(bao) === tileKey(tile);
+    }));
   }
 
   private refreshListenerBao(): void {

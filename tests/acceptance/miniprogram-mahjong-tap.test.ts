@@ -14,10 +14,12 @@ interface MahjongPage {
     postDiscardListenWaits: unknown[];
     hand: Array<{ id: string; selected?: boolean }>;
     selectedTileId: string;
-    players: Array<{ seat: string; melds: Array<{ tiles: unknown[]; hiddenBacks: number[] }> }>;
+    players: Array<{ seat: string; isDiscarder?: boolean; melds: Array<{ tiles: unknown[]; hiddenBacks: number[] }> }>;
     wallSides: Array<{ seat: string; position: string; stacks: Array<{ count: number; replacement: boolean }> }>;
     paymentRows: Array<{ seat: string; before: number; after: number; flow: string }>;
     winAnnouncement: { winnerSeat: string } | null;
+    winType: string;
+    discarderNickname: string;
   };
   app: { getSnapshot: () => MahjongSnapshot | null; setSnapshot: (snapshot: MahjongSnapshot) => void };
   setData: (patch: Record<string, unknown>) => void;
@@ -163,7 +165,24 @@ describe('Mini-program Mahjong hand interaction', () => {
     } as unknown as MahjongSnapshot);
     expect(page.data.players.find((player) => player.seat === 'B')).toMatchObject({ isWinner: true });
     expect(page.data.winAnnouncement?.winnerSeat).toBe('B');
+    expect(page.data.winType).toBe('自摸');
     expect(page.data.paymentRows).toHaveLength(0);
+
+    page.updateSnapshot({
+      public: { ...base, winAnnouncement: { winnerSeat: 'B', winnerNickname: '乙', type: 'discard-win', winPattern: 'standard', payingSeat: 'A', isCardang: true }, settlement: null },
+      private: { seat: 'A', hand: [], availableActions: [] },
+    } as unknown as MahjongSnapshot);
+    expect(page.data.winType).toBe('卡当');
+    expect(page.data.discarderNickname).toBe('甲');
+    expect(page.data.players.find((player) => player.seat === 'A')).toMatchObject({ isDiscarder: true });
+
+    page.updateSnapshot({
+      public: { ...base, winAnnouncement: { winnerSeat: 'B', winnerNickname: '乙', type: 'self-draw', winPattern: 'bao', isCardang: true, isBaoZhongBao: true }, settlement: null },
+      private: { seat: 'A', hand: [], availableActions: [] },
+    } as unknown as MahjongSnapshot);
+    expect(page.data.winType).toBe('宝中宝');
+    expect(page.data.discarderNickname).toBe('');
+    expect(page.data.players.some((player) => player.isDiscarder)).toBe(false);
 
     page.updateSnapshot({
       public: {

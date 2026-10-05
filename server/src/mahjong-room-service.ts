@@ -134,11 +134,12 @@ interface MahjongState {
 }
 
 const MAX_SPECTATORS = 4;
-const TOTAL_TILE_COUNT = 136;
+const TOTAL_TILE_COUNT = createMahjongDeck().length;
+const WALL_STACKS_PER_SIDE = TOTAL_TILE_COUNT / (MAHJONG_SEATS.length * 2);
 const FLOW_WALL_THRESHOLD = Math.ceil(TOTAL_TILE_COUNT * 0.15);
 const LISTENING_DISCARD_DELAY_MS = 1_000;
 const WIN_ANNOUNCE_DELAY_MS = 1_000;
-const WIN_EFFECT_DURATION_MS = 900;
+const WIN_EFFECT_DURATION_MS = 2_200;
 const DRAW_RESTART_DELAY_MS = 2_000;
 
 function shuffle<T>(items: readonly T[], random: () => number): T[] {
@@ -170,10 +171,10 @@ function makeInitialWallLayout(dealerSeat: MahjongSeat, diceRoll: readonly [numb
       { seat, stack: start + offset, layer: 0 as const },
       { seat, stack: start + offset, layer: 1 as const },
     ]).flat();
-  const wallPositions = positions(wallBreakSide, wallBreakStack, 17);
+  const wallPositions = positions(wallBreakSide, wallBreakStack, WALL_STACKS_PER_SIDE);
   let side = nextMahjongSeat(wallBreakSide);
   for (let count = 0; count < 3; count += 1) {
-    wallPositions.push(...positions(side, 0, 17));
+    wallPositions.push(...positions(side, 0, WALL_STACKS_PER_SIDE));
     side = nextMahjongSeat(side);
   }
   return {
@@ -281,6 +282,9 @@ export class MahjongRoomService {
           winnerNickname: state.pendingWin.settlement.winnerNickname ?? state.pendingWin.settlement.winnerSeat,
           type: state.pendingWin.settlement.type as 'self-draw' | 'discard-win',
           winPattern: state.pendingWin.settlement.winPattern ?? 'standard',
+          ...(state.pendingWin.settlement.payingSeat ? { payingSeat: state.pendingWin.settlement.payingSeat } : {}),
+          isCardang: state.pendingWin.settlement.isCardang,
+          isBaoZhongBao: state.pendingWin.settlement.isBaoZhongBao,
         }
         : null,
       ...(state.phase === 'settled' ? {
@@ -344,7 +348,7 @@ export class MahjongRoomService {
         seat,
         liveTiles: state.wallPositions.filter((position) => position.seat === seat).length,
         replacementTiles: state.replacementPositions.filter((position) => position.seat === seat).length,
-        stacks: Array.from({ length: 17 }, (_, index) => ({
+        stacks: Array.from({ length: WALL_STACKS_PER_SIDE }, (_, index) => ({
           index,
           liveTiles: state.wallPositions.filter((position) => position.seat === seat && position.stack === index).length,
           replacementTiles: state.replacementPositions.filter((position) => position.seat === seat && position.stack === index).length,
@@ -679,18 +683,18 @@ export class MahjongRoomService {
     const bigWind = Boolean(!onDiscard && tile && isBigWindWin(player.hand.filter((handTile) => handTile.id !== tile.id), tile, player.melds));
     const isBaoTile = Boolean(tile && player.listenBao && tileKey(tile) === tileKey(player.listenBao));
     const baoWin = !onDiscard && isBaoTile;
+    const waitingHand = onDiscard ? player.hand : player.hand.filter((handTile) => handTile.id !== tile?.id);
+    const singleRedWait = this.isRedCenterSingleWait(waitingHand, player.melds);
     const allowed = player.isListening
       && Boolean(tile)
-      && player.melds.length < 4
-      && player.hand.filter((handTile) => handTile.id !== tile?.id).length >= 4
-      && hasMahjongPairStructure(player.hand.filter((handTile) => handTile.id !== tile?.id), player.melds)
-      && hasMahjongSequence(player.hand.filter((handTile) => handTile.id !== tile?.id), player.melds)
+      && (player.melds.length < 4 && waitingHand.length >= 4 || singleRedWait && tile?.suit === 'dragons' && tile.rank === 'red')
+      && hasMahjongPairStructure(waitingHand, player.melds)
+      && hasMahjongSequence(waitingHand, player.melds)
       && (onDiscard
         ? !isBaoTile && Boolean(state.pending?.options[seat]?.includes('hu'))
         : state.currentTurn === seat && state.awaitingDiscard && (matchingReadyWait || bigWind || baoWin));
     if (!allowed) throw new MahjongRoomServiceError('INVALID_ACTION', '当前不能胡牌');
     const winPattern = bigWind ? 'big-wind' : baoWin ? 'bao' : 'standard';
-    const waitingHand = onDiscard ? player.hand : player.hand.filter((handTile) => handTile.id !== tile!.id);
     const structuralWaits = player.listenWaits.filter((wait) => isWinningMahjongHand([...waitingHand, wait], player.melds.length));
     const isCardang = !bigWind && structuralWaits.length === 1
       && isMahjongCardangWait(waitingHand, structuralWaits[0]!, player.melds.length)
@@ -728,7 +732,9 @@ export class MahjongRoomService {
     const resolution = this.claimPriority(state.pending);
     if (resolution.seat !== seat || !resolution.actions.includes(action)) throw new MahjongRoomServiceError('CLAIM_PRIORITY', '有更靠前或优先级更高的玩家正在响应');
     const player = this.requirePlayer(seat);
-    if (player.melds.length >= 3) throw new MahjongRoomServiceError('SINGLE_TILE_WAIT', '不能吃碰杠到只剩一张手牌');
+    if (player.melds.length >= 3 && !player.hand.some((tile) => tile.suit === 'dragons' && tile.rank === 'red')) {
+      throw new MahjongRoomServiceError('SINGLE_TILE_WAIT', '不能吃碰杠到只剩一张手牌');
+    }
     const pending = state.pending;
     const discard = pending.tile;
     let usedTiles: MahjongTile[];
@@ -745,10 +751,14 @@ export class MahjongRoomService {
       usedTiles = findTilesByKey(player.hand, tileKey(discard), count);
       if (usedTiles.length !== count) throw new MahjongRoomServiceError('INVALID_ACTION', '手牌数量不足');
     }
+    const meldKind: MahjongMeldKind = action === 'chi' ? 'chi' : action === 'peng' ? 'peng' : 'exposed-kong';
+    const meld: MahjongMeld = { kind: meldKind, tiles: sortMahjongTiles([discard, ...usedTiles]) };
+    if (player.melds.length >= 3 && !this.canReachRedSingleWait(removeTileIds(player.hand, usedTiles.map((tile) => tile.id)), [...player.melds, meld])) {
+      throw new MahjongRoomServiceError('SINGLE_TILE_WAIT', '不能吃碰杠到只剩一张手牌');
+    }
     this.removeClaimedDiscard(pending);
     player.hand = removeTileIds(player.hand, usedTiles.map((tile) => tile.id));
-    const meldKind: MahjongMeldKind = action === 'chi' ? 'chi' : action === 'peng' ? 'peng' : 'exposed-kong';
-    player.melds.push({ kind: meldKind, tiles: sortMahjongTiles([discard, ...usedTiles]) });
+    player.melds.push(meld);
     player.mustListenAfterChi = chiRequiresListen;
     this.refreshListenerBao();
     state.pending = null;
@@ -772,11 +782,13 @@ export class MahjongRoomService {
     if (state.pending || state.currentTurn !== seat || !state.awaitingDiscard) throw new MahjongRoomServiceError('INVALID_ACTION', '当前不能暗杠');
     const player = this.requirePlayer(seat);
     if (player.isListening) throw new MahjongRoomServiceError('LISTEN_LOCKED', '听牌后不能暗杠');
-    if (player.melds.length >= 3) throw new MahjongRoomServiceError('SINGLE_TILE_WAIT', '不能暗杠到只剩一张手牌');
     const selected = tileIds?.length === 4 ? tileIds.map((id) => player.hand.find((tile) => tile.id === id)).filter((tile): tile is MahjongTile => Boolean(tile)) : [];
     const tile = selected[0] ?? player.hand.find((candidate) => matchingTileCount(player.hand, candidate) === 4);
     if (!tile || matchingTileCount(player.hand, tile) !== 4) throw new MahjongRoomServiceError('INVALID_ACTION', '没有可以暗杠的牌');
     const tiles = findTilesByKey(player.hand, tileKey(tile), 4);
+    if (player.melds.length >= 3 && !this.canReachRedSingleWait(removeTileIds(player.hand, tiles.map((candidate) => candidate.id)), [...player.melds, { kind: 'concealed-kong', tiles }])) {
+      throw new MahjongRoomServiceError('SINGLE_TILE_WAIT', '不能暗杠到只剩一张手牌');
+    }
     player.hand = removeTileIds(player.hand, tiles.map((candidate) => candidate.id));
     player.melds.push({ kind: 'concealed-kong', tiles: sortMahjongTiles(tiles) });
     this.drawKongReplacement(player);
@@ -809,11 +821,15 @@ export class MahjongRoomService {
         && isWinningMahjongHand([...player.hand, tile], player.melds.length);
       const isBaoTile = baoSeatsBeforeDiscard.has(candidate)
         || Boolean(player.listenBao && tileKey(player.listenBao) === tileKey(tile));
-      if (player.isListening && player.melds.length < 4 && player.hand.length >= 4
+      if (player.isListening && (player.melds.length < 4 && player.hand.length >= 4 || this.isRedCenterSingleWait(player.hand, player.melds) && tile.suit === 'dragons' && tile.rank === 'red')
         && hasMahjongPairStructure(player.hand, player.melds)
         && hasMahjongSequence(player.hand, player.melds) && structuralWait && !isBaoTile) actions.push('hu');
-      if (!player.isListening && player.melds.length < 3 && matchingTileCount(player.hand, tile) >= 3) actions.push('exposed-kong');
-      else if (!player.isListening && player.melds.length < 3 && matchingTileCount(player.hand, tile) >= 2) actions.push('peng');
+      const kongTiles = findTilesByKey(player.hand, tileKey(tile), 3);
+      const pengTiles = kongTiles.slice(0, 2);
+      if (!player.isListening && player.melds.length < 4 && kongTiles.length === 3
+        && (player.melds.length < 3 || this.canReachRedSingleWait(removeTileIds(player.hand, kongTiles.map((used) => used.id)), [...player.melds, { kind: 'exposed-kong', tiles: [tile, ...kongTiles] }]))) actions.push('exposed-kong');
+      else if (!player.isListening && player.melds.length < 4 && pengTiles.length === 2
+        && (player.melds.length < 3 || this.canReachRedSingleWait(removeTileIds(player.hand, pengTiles.map((used) => used.id)), [...player.melds, { kind: 'peng', tiles: [tile, ...pengTiles] }]))) actions.push('peng');
       if (!player.isListening && this.chiPlans(player, tile, seat).length > 0) actions.push('chi');
       if (actions.length > 0) options[candidate] = actions;
     }
@@ -891,7 +907,11 @@ export class MahjongRoomService {
     const actions: MahjongAction[] = player.mustListenAfterChi ? [] : ['discard'];
     {
       if (this.canDeclareListen(player)) actions.push('listen');
-      if (player.melds.length < 3 && player.hand.some((tile) => matchingTileCount(player.hand, tile) === 4)) actions.push('concealed-kong');
+      if (player.melds.length < 4 && player.hand.some((tile) => matchingTileCount(player.hand, tile) === 4
+        && (player.melds.length < 3 || (() => {
+          const tiles = findTilesByKey(player.hand, tileKey(tile), 4);
+          return this.canReachRedSingleWait(removeTileIds(player.hand, tiles.map((used) => used.id)), [...player.melds, { kind: 'concealed-kong', tiles }]);
+        })()))) actions.push('concealed-kong');
       if (player.hand.some((tile) => player.melds.some((meld) => meld.kind === 'peng' && tileKey(meld.tiles[0]!) === tileKey(tile)))) actions.push('added-kong');
     }
     return actions;
@@ -928,9 +948,19 @@ export class MahjongRoomService {
   }
 
   private validListenWaits(hand: MahjongTile[], meldCount: number, melds: readonly MahjongMeld[]): MahjongTile[] {
-    if (meldCount >= 4 || hand.length < 4 || !hasMahjongPairStructure(hand, melds) || !hasMahjongSequence(hand, melds)) return [];
+    if ((meldCount >= 4 && !this.isRedCenterSingleWait(hand, melds)) || (meldCount < 4 && hand.length < 4)
+      || !hasMahjongPairStructure(hand, melds) || !hasMahjongSequence(hand, melds)) return [];
     return mahjongWaits(hand, meldCount, melds)
-      .filter((tile) => hasMahjongListenYao(hand, tile, melds));
+      .filter((tile) => (meldCount < 4 || tile.suit === 'dragons' && tile.rank === 'red') && hasMahjongListenYao(hand, tile, melds));
+  }
+
+  private isRedCenterSingleWait(hand: readonly MahjongTile[], melds: readonly MahjongMeld[]): boolean {
+    return melds.length === 4 && hand.length === 1 && hand[0]?.suit === 'dragons' && hand[0].rank === 'red';
+  }
+
+  private canReachRedSingleWait(hand: MahjongTile[], melds: readonly MahjongMeld[]): boolean {
+    return hand.some((discard) => this.validListenWaits(hand.filter((tile) => tile.id !== discard.id), melds.length, melds).some((wait) => wait.suit === 'dragons' && wait.rank === 'red'))
+      || this.validListenWaits(hand, melds.length, melds).some((wait) => wait.suit === 'dragons' && wait.rank === 'red');
   }
 
   private listenDiscardOptions(player: MahjongPlayer): MahjongTile[] {
@@ -956,9 +986,11 @@ export class MahjongRoomService {
   }
 
   private chiPlans(player: MahjongPlayer, discard: MahjongTile, fromSeat: MahjongSeat): Array<{ tiles: MahjongTile[]; requiresListen: boolean }> {
-    if (player.melds.length >= 3) return [];
+    if (player.melds.length >= 4) return [];
     const options = findChiOptions(player.hand, discard);
-    if (nextMahjongSeat(fromSeat) === player.seat) return options.map((tiles) => ({ tiles, requiresListen: false }));
+    if (nextMahjongSeat(fromSeat) === player.seat) return options
+      .filter((tiles) => player.melds.length < 3 || this.canReachRedSingleWait(player.hand.filter((tile) => !tiles.some((used) => used.id === tile.id)), [...player.melds, { kind: 'chi', tiles: sortMahjongTiles([discard, ...tiles]) }]))
+      .map((tiles) => ({ tiles, requiresListen: false }));
     if (!this.state || player.isListening) return [];
     const plans: Array<{ tiles: MahjongTile[]; requiresListen: boolean }> = [];
     for (const tiles of options) {
@@ -1006,8 +1038,8 @@ export class MahjongRoomService {
 
   private canSelfDrawHu(player: MahjongPlayer, tile: MahjongTile): boolean {
     return player.isListening
-      && player.melds.length < 4
-      && player.hand.filter((handTile) => handTile.id !== tile.id).length >= 4
+      && (player.melds.length < 4 && player.hand.filter((handTile) => handTile.id !== tile.id).length >= 4
+        || this.isRedCenterSingleWait(player.hand.filter((handTile) => handTile.id !== tile.id), player.melds) && tile.suit === 'dragons' && tile.rank === 'red')
       && hasMahjongPairStructure(player.hand.filter((handTile) => handTile.id !== tile.id), player.melds)
       && hasMahjongSequence(player.hand.filter((handTile) => handTile.id !== tile.id), player.melds)
       && (

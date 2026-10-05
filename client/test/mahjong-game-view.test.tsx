@@ -1,5 +1,5 @@
 /* @vitest-environment jsdom */
-import { fireEvent, render } from '@testing-library/react';
+import { act, fireEvent, render } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { MahjongSnapshot } from '../../shared/src/protocol';
 import { createMahjongDeck, MahjongSeat } from '../../shared/src/mahjong';
@@ -54,7 +54,33 @@ describe('MahjongGameView settlement', () => {
     const { container, rerender } = render(<MahjongGameView snapshot={announcing} {...props} />);
     expect(container.querySelector('.mahjong-seat-left.winner-announced .mahjong-win-badge')?.textContent).toBe('胡!');
     expect(container.querySelector('.mahjong-win-announcement')?.textContent).toContain('乙');
+    expect(container.querySelector('.mahjong-win-announcement')?.textContent).toContain('自摸');
     expect(container.querySelector('.mahjong-table-settlement')).toBeNull();
+
+    vi.useFakeTimers();
+    try {
+      rerender(<MahjongGameView snapshot={{ ...announcing, public: { ...announcing.public, chat: [{ id: 'voice-1', kind: 'voice', senderNickname: '乙', senderSeat: 'B', voiceId: 'nice', text: '这牌打得漂亮！', createdAt: 1 }] } }} {...props} />);
+      expect(container.querySelector('.mahjong-seat-left .mahjong-voice-bubble')?.textContent).toBe('这牌打得漂亮！');
+      act(() => vi.advanceTimersByTime(2000));
+      expect(container.querySelector('.mahjong-voice-bubble')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+
+    rerender(<MahjongGameView snapshot={{ ...announcing, public: {
+      ...announcing.public,
+      winAnnouncement: { winnerSeat: 'B', winnerNickname: '乙', type: 'discard-win', winPattern: 'standard', payingSeat: 'A', isCardang: true },
+    } }} {...props} />);
+    expect(container.querySelector('.mahjong-seat-bottom.discarder-announced .mahjong-discarder-badge')?.textContent).toBe('点炮');
+    expect(container.querySelector('.mahjong-win-announcement')?.textContent).toContain('卡当');
+    expect(container.querySelector('.mahjong-win-announcement')?.textContent).toContain('甲 点炮');
+
+    rerender(<MahjongGameView snapshot={{ ...announcing, public: {
+      ...announcing.public,
+      winAnnouncement: { winnerSeat: 'B', winnerNickname: '乙', type: 'self-draw', winPattern: 'bao', isCardang: true, isBaoZhongBao: true },
+    } }} {...props} />);
+    expect(container.querySelector('.mahjong-win-announcement')?.textContent).toContain('宝中宝');
+    expect(container.querySelector('.mahjong-discarder-badge')).toBeNull();
 
     rerender(<MahjongGameView snapshot={snapshot} {...props} />);
     const table = container.querySelector('.mahjong-table');

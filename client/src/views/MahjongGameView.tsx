@@ -3,13 +3,13 @@ import { MahjongCommandPayload, MahjongCommandType, MahjongSnapshot } from '../.
 import { MAHJONG_SEATS, MahjongSeat, MahjongTile } from '../../../shared/src/mahjong';
 import { RoomPurposeNotice } from '../components/RoomPurposeNotice';
 
-const HONOR_SPRITE_COLUMNS: Record<string, number> = { east: 0, south: 1, west: 2, north: 3, red: 4, green: 5, white: 6 };
+const HONOR_SPRITE_COLUMNS: Record<'red', number> = { red: 4 };
 
 function tileClass(tile: MahjongTile): string {
   if (tile.suit === 'characters') return 'wan';
   if (tile.suit === 'bamboo') return 'suo';
   if (tile.suit === 'dots') return 'tong';
-  return tile.suit === 'winds' ? 'honor wind' : `honor dragon-${tile.rank}`;
+  return `honor dragon-${tile.rank}`;
 }
 
 function TileFace({ tile, selected = false, listenOption = false, pending = false, drawn = false, onClick, onPointerDown, onPointerMove, onPointerUp }: {
@@ -65,7 +65,22 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode }: {
   const [animationStage, setAnimationStage] = useState<'dice' | 'deal' | null>(null);
   const [chiPickerOpen, setChiPickerOpen] = useState(false);
   const [draggingTileId, setDraggingTileId] = useState<string | null>(null);
+  const [voiceBubble, setVoiceBubble] = useState<{ seat: MahjongSeat; text: string } | null>(null);
+  const lastVoiceMessageIdRef = useRef(snapshot.public.chat?.at(-1)?.id ?? null);
+  const voiceBubbleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tableRef = useRef<HTMLElementTagNameMap['section'] | null>(null);
+  useEffect(() => {
+    const messages = snapshot.public.chat ?? [];
+    const previousIndex = messages.findIndex((message) => message.id === lastVoiceMessageIdRef.current);
+    const fresh = lastVoiceMessageIdRef.current === null ? messages : previousIndex < 0 ? [] : messages.slice(previousIndex + 1);
+    lastVoiceMessageIdRef.current = messages.at(-1)?.id ?? null;
+    const voice = [...fresh].reverse().find((message) => message.kind === 'voice' && message.senderSeat && message.text);
+    if (!voice?.senderSeat || !voice.text || !MAHJONG_SEATS.includes(voice.senderSeat as MahjongSeat)) return;
+    if (voiceBubbleTimerRef.current) clearTimeout(voiceBubbleTimerRef.current);
+    setVoiceBubble({ seat: voice.senderSeat as MahjongSeat, text: voice.text });
+    voiceBubbleTimerRef.current = setTimeout(() => setVoiceBubble(null), 2000);
+  }, [snapshot.public.chat]);
+  useEffect(() => () => { if (voiceBubbleTimerRef.current) clearTimeout(voiceBubbleTimerRef.current); }, []);
   const pointerStartRef = useRef<{ tileId: string; x: number; y: number; moved: boolean } | null>(null);
   const suppressTileClickRef = useRef(false);
   const lastTileTapRef = useRef<{ tileId: string; at: number } | null>(null);
@@ -142,12 +157,18 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode }: {
   const chiOptions = snapshot.private.chiOptions ?? [];
   const settlement = snapshot.public.settlement;
   const settlementDescription = settlement?.type === 'draw'
-    ? '流局 · 原庄家不变'
+    ? '流局 · 本局不计分 · 原庄家不变'
     : settlement
-      ? `${settlement.winnerNickname ?? settlement.winnerSeat ?? ''} 获胜 · ${settlement.isBaoZhongBao ? '宝中宝' : settlement.winPattern === 'big-wind' ? '大风' : settlement.winPattern === 'bao' ? '摸宝' : settlement.type === 'self-draw' ? '自摸' : '平和'}${settlement.isCardang && !settlement.isBaoZhongBao ? ' · 卡当' : ''}`
+      ? `${settlement.winnerNickname ?? settlement.winnerSeat ?? ''} 获胜 · ${settlement.isBaoZhongBao ? '宝中宝' : settlement.winPattern === 'big-wind' ? '大风' : settlement.winPattern === 'bao' ? '搂宝' : settlement.type === 'self-draw' ? '自摸' : '平和'}${settlement.isCardang && !settlement.isBaoZhongBao ? ' · 卡当' : ''}`
       : '';
   const players = new Map(snapshot.public.players.map((player) => [player.seat, player]));
   const winAnnouncement = snapshot.public.winAnnouncement;
+  const winType = winAnnouncement?.isBaoZhongBao ? '宝中宝'
+    : winAnnouncement?.winPattern === 'big-wind' ? '大风'
+      : winAnnouncement?.winPattern === 'bao' ? winAnnouncement.isCardang ? '搂宝 · 卡当' : '搂宝'
+        : winAnnouncement?.isCardang ? '卡当'
+          : winAnnouncement?.type === 'self-draw' ? '自摸' : '平和';
+  const discarderNickname = winAnnouncement?.payingSeat ? players.get(winAnnouncement.payingSeat)?.nickname ?? winAnnouncement.payingSeat : null;
   const transfers = settlement?.transfers ?? [];
   const transferDetail = (transfer: typeof transfers[number]) => transfer.fan && settlement?.baseScore
     ? `${transfer.fan}番×${settlement.baseScore}=${transfer.amount}分`
@@ -245,13 +266,15 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode }: {
           const canRespond = isResponsePhase && seat === ownSeat && responseActions.length > 0;
           const visibleHand = seat === ownSeat ? null : revealedHands.get(seat);
           const isOwnSeat = seat === ownSeat && !isSpectator;
-          return <article className={`mahjong-seat mahjong-seat-${position}${isCurrentTurn ? ' current' : ''}${canRespond ? ' responding' : ''}${isOwnSeat ? ' own' : ''}${winAnnouncement?.winnerSeat === seat ? ' winner-announced' : ''}`} key={seat} aria-label={player.nickname}>
+          return <article className={`mahjong-seat mahjong-seat-${position}${isCurrentTurn ? ' current' : ''}${canRespond ? ' responding' : ''}${isOwnSeat ? ' own' : ''}${winAnnouncement?.winnerSeat === seat ? ' winner-announced' : ''}${winAnnouncement?.payingSeat === seat ? ' discarder-announced' : ''}`} key={seat} aria-label={player.nickname}>
             <div className="mahjong-player-card">
               <span className="mahjong-player-avatar">{player.nickname.slice(0, 1)}</span>
               <div className="mahjong-player-meta"><strong>{player.nickname}</strong><span>{player.score} 分</span></div>
               {player.isDealer ? <span className="mahjong-player-badge dealer" aria-label="庄家">庄</span> : null}
               {player.isListening ? <span className="mahjong-player-badge listening" aria-label="听牌标识">听</span> : null}
               {winAnnouncement?.winnerSeat === seat ? <span className="mahjong-win-badge" aria-label="胡牌玩家">胡!</span> : null}
+              {winAnnouncement?.payingSeat === seat ? <span className="mahjong-discarder-badge" aria-label="点炮玩家">点炮</span> : null}
+              {voiceBubble?.seat === seat ? <span className="mahjong-voice-bubble" role="status">{voiceBubble.text}</span> : null}
             </div>
             {player.melds.length ? <div className="mahjong-seat-melds">{player.melds.map((meld, index) => <MeldTiles meld={meld} key={`${seat}-${index}`} />)}</div> : null}
             {!isOwnSeat && visibleHand ? <div className="mahjong-revealed-hand" aria-label={`${player.nickname}的明牌`}>{visibleHand.map((tile) => <TileFace tile={tile} key={tile.id} />)}</div> : null}
@@ -266,7 +289,10 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode }: {
           <div className="mahjong-discard-tiles">{snapshot.public.discardRiver.map(({ tile }) => <TileFace tile={tile} key={tile.id} pending={snapshot.public.pendingDiscard?.tile.id === tile.id} />)}</div>
         </div>
         {actionDock}
-        {winAnnouncement ? <div className="mahjong-win-announcement" role="status" aria-label={`${winAnnouncement.winnerNickname}胡牌`}><strong>胡!</strong><span>{winAnnouncement.winnerNickname} · {winAnnouncement.winPattern === 'big-wind' ? '大风' : winAnnouncement.winPattern === 'bao' ? '胡宝' : winAnnouncement.type === 'self-draw' ? '自摸' : '点炮'}</span></div> : null}
+        {winAnnouncement ? <div className={`mahjong-win-announcement${discarderNickname ? ' from-discard' : ''}`} role="status" aria-label={`${winAnnouncement.winnerNickname}${winType}${discarderNickname ? `，${discarderNickname}点炮` : ''}`}>
+          <span className="mahjong-win-kicker">本局胡牌</span><strong>{winType}</strong><span>{winAnnouncement.winnerNickname} 胡牌</span>
+          {discarderNickname ? <span className="mahjong-win-cause">{discarderNickname} 点炮</span> : null}
+        </div> : null}
         {settlement ? <section className="mahjong-settlement mahjong-table-settlement" role="status" aria-label="本局结算">
           <h2>本局结束</h2>
           <p>{settlementDescription}</p>

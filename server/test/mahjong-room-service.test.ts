@@ -56,8 +56,8 @@ function readyBaoScenario(baoKind: 'red' | 'structural') {
   listener.lastDrawnTileId = null;
   internals.state.players.C!.hand = [];
   internals.state.players.D!.hand = [];
-  internals.state.wall[0] = tile('winds', 'east');
-  internals.state.replacementWall = [tile('winds', 'east', 2), tile('winds', 'south', 2), tile('dragons', 'green'), bao];
+  internals.state.wall[0] = tile('dots', 8);
+  internals.state.replacementWall = [tile('dots', 8, 2), tile('characters', 9, 2), tile('bamboo', 8), bao];
   internals.state.currentTurn = 'A';
   internals.state.awaitingDiscard = true;
   internals.state.pending = null;
@@ -112,7 +112,7 @@ describe('MahjongRoomService', () => {
       expect(listener.private.availableActions).not.toContain('hu');
       expect(() => room.dispatch(players[1].sessionToken, command('hu', listener.public.handNumber, listener.public.version)))
         .toThrow('当前不能胡牌');
-      if (baoKind === 'structural') expect(listener.private.baoTile?.label).toBe('發');
+      if (baoKind === 'structural') expect(listener.private.baoTile?.label).toBe('8条');
     }
   });
 
@@ -125,7 +125,12 @@ describe('MahjongRoomService', () => {
     const response = point.room.getSnapshot(point.players[1].sessionToken);
     expect(response.private.availableActions).toEqual(['hu', 'pass']);
     point.room.dispatch(point.players[1].sessionToken, command('hu', response.public.handNumber, response.public.version));
-    const pointWin = finishWin(point.room, point.players[1].sessionToken);
+    expect(point.room.tick(Number.POSITIVE_INFINITY)).toBe(true);
+    expect(point.room.getSnapshot(point.players[0].sessionToken).public.winAnnouncement).toMatchObject({
+      winnerSeat: 'B', payingSeat: 'A', type: 'discard-win', winPattern: 'standard',
+    });
+    expect(point.room.tick(Number.POSITIVE_INFINITY)).toBe(true);
+    const pointWin = point.room.getSnapshot(point.players[1].sessionToken);
     expect(pointWin.public.settlement?.type).toBe('discard-win');
     expect(pointWin.public.settlement?.winPattern).toBe('standard');
     expect(pointWin.public.settlement?.transfers).toEqual([{ from: 'A', to: 'B', fan: 9, amount: 45 }]);
@@ -147,6 +152,14 @@ describe('MahjongRoomService', () => {
       { from: 'C', to: 'B', fan: 3, amount: 15 },
       { from: 'D', to: 'B', fan: 3, amount: 15 },
     ]);
+    expect(baoWin.public.players.map((player) => player.score)).toEqual([985, 1045, 985, 985]);
+    const settledHost = selfDraw.room.getSnapshot(selfDraw.players[0].sessionToken);
+    const nextLobby = selfDraw.room.dispatch(selfDraw.players[0].sessionToken,
+      command('next-hand', settledHost.public.handNumber, settledHost.public.version)).snapshot;
+    expect(nextLobby.public.players.map((player) => player.score)).toEqual([985, 1045, 985, 985]);
+    const nextHand = selfDraw.room.dispatch(selfDraw.players[0].sessionToken,
+      command('start-hand', nextLobby.public.handNumber, nextLobby.public.version)).snapshot;
+    expect(nextHand.public.players.map((player) => player.score)).toEqual([985, 1045, 985, 985]);
   });
 
   it('实际胡牌时识别卡当与宝中宝，并按截图番数结算', () => {
@@ -175,7 +188,12 @@ describe('MahjongRoomService', () => {
         const response = room.getSnapshot(players[1]!.sessionToken);
         room.dispatch(players[1]!.sessionToken, command('hu', response.public.handNumber, response.public.version));
       }
-      const result = finishWin(room, players[1]!.sessionToken).public.settlement!;
+      expect(room.tick(Number.POSITIVE_INFINITY)).toBe(true);
+      expect(room.getSnapshot(players[1]!.sessionToken).public.winAnnouncement).toMatchObject({
+        isCardang: true, isBaoZhongBao: baoZhongBao,
+      });
+      expect(room.tick(Number.POSITIVE_INFINITY)).toBe(true);
+      const result = room.getSnapshot(players[1]!.sessionToken).public.settlement!;
       expect(result.isCardang).toBe(true);
       expect(result.isBaoZhongBao).toBe(baoZhongBao);
       expect(result.payments?.B).toBe(baoZhongBao ? 180 : 90);
@@ -237,13 +255,14 @@ describe('MahjongRoomService', () => {
     expect(started.snapshot.public.phase).toBe('playing');
     expect(started.snapshot.public.dealerSeat).toBe('A');
     expect(started.snapshot.public.currentTurn).toBe('A');
-    expect(started.snapshot.public.wallCount).toBe(83);
+    expect(started.snapshot.public.wallCount).toBe(59);
     const layout = started.snapshot.public.wallLayout;
     const breakStacks = started.snapshot.public.diceRoll![0] + started.snapshot.public.diceRoll![1];
     expect(layout.breakSide).toBe('C');
     expect(layout.replacementSide).toBe('C');
     expect(layout.breakStack).toBe(breakStacks);
-    expect(layout.sides.reduce((total, side) => total + side.liveTiles + side.replacementTiles, 0)).toBe(83);
+    expect(layout.sides.every((side) => side.stacks?.length === 14)).toBe(true);
+    expect(layout.sides.reduce((total, side) => total + side.liveTiles + side.replacementTiles, 0)).toBe(59);
     expect(layout.sides.reduce((total, side) => total + side.replacementTiles, 0)).toBe(breakStacks * 2);
     expect(layout.sides.find((side) => side.seat === 'C')?.stacks?.slice(0, breakStacks).every((stack) => stack.replacementTiles === 2)).toBe(true);
     expect(layout.sides.filter((side) => side.seat !== 'C').every((side) => side.replacementTiles === 0)).toBe(true);
@@ -277,10 +296,10 @@ describe('MahjongRoomService', () => {
       expect(internals.state.replacementPositions).toHaveLength(breakStacks * 2);
       expect(internals.state.replacementPositions.at(-1)).toMatchObject({ seat: 'C', stack: breakStacks - 1 });
       expect(internals.state.wallPositions.length).toBe(internals.state.wall.length);
-      const dealtAfterOpposite = 53 - (34 - breakStacks * 2);
-      expect(internals.state.wallPositions[0]).toMatchObject(dealtAfterOpposite < 34
+      const dealtAfterOpposite = 53 - (28 - breakStacks * 2);
+      expect(internals.state.wallPositions[0]).toMatchObject(dealtAfterOpposite < 28
         ? { seat: 'D', stack: Math.floor(dealtAfterOpposite / 2), layer: dealtAfterOpposite % 2 }
-        : { seat: 'A', stack: Math.floor((dealtAfterOpposite - 34) / 2), layer: (dealtAfterOpposite - 34) % 2 });
+        : { seat: 'A', stack: Math.floor((dealtAfterOpposite - 28) / 2), layer: (dealtAfterOpposite - 28) % 2 });
 
       const kongTiles = createMahjongDeck().filter((tile) => tile.suit === 'dots' && tile.rank === 6);
       internals.state.players.A!.hand = kongTiles;
@@ -380,7 +399,7 @@ describe('MahjongRoomService', () => {
     const deck = createMahjongDeck();
     const tile = (suit: string, rank: number | string, copy = 0) => deck.find((candidate) => candidate.suit === suit && candidate.rank === rank && candidate.id.endsWith('-' + copy))!;
     const kongTiles = deck.filter((candidate) => candidate.suit === 'characters' && candidate.rank === 4);
-    const east = tile('winds', 'east');
+    const east = tile('dragons', 'red');
     const internals = room as unknown as {
       state: {
         players: Record<MahjongSeat, { hand: MahjongTile[]; melds: MahjongMeld[] } | null>;
@@ -519,7 +538,7 @@ describe('MahjongRoomService', () => {
     const response = room.getSnapshot(players[1].sessionToken);
     room.dispatch(players[1].sessionToken, command('pass', response.public.handNumber, response.public.version));
 
-    const nextDraw = tile('winds', 'east');
+    const nextDraw = tile('dots', 8);
     internals.state.currentTurn = 'A';
     internals.state.awaitingDiscard = true;
     internals.state.players.A!.hand.push(nextDraw);
@@ -549,7 +568,7 @@ describe('MahjongRoomService', () => {
 
     const deck = createMahjongDeck();
     const tile = (suit: string, rank: number | string, copy = 0) => deck.find((candidate) => candidate.suit === suit && candidate.rank === rank && candidate.id.endsWith('-' + copy))!;
-    const drawnEast = tile('winds', 'east');
+    const drawnEast = tile('dots', 8);
     const internals = room as unknown as {
       state: { players: Record<MahjongSeat, { hand: MahjongTile[]; melds: MahjongMeld[]; lastDrawnTileId: string | null } | null> };
     };
@@ -584,7 +603,7 @@ describe('MahjongRoomService', () => {
     room.dispatch(players[0].sessionToken, command('start-hand', lobby.public.handNumber, lobby.public.version));
     const deck = createMahjongDeck();
     const tile = (suit: string, rank: number | string, copy = 0) => deck.find((candidate) => candidate.suit === suit && candidate.rank === rank && candidate.id.endsWith('-' + copy))!;
-    const drawnEast = tile('winds', 'east');
+    const drawnEast = tile('dots', 8);
     const internals = room as unknown as {
       state: { players: Record<MahjongSeat, {
         hand: MahjongTile[]; melds: MahjongMeld[]; lastDrawnTileId: string | null;
@@ -598,7 +617,7 @@ describe('MahjongRoomService', () => {
       ...[0, 1, 2].map((copy) => tile('bamboo', 3, copy)),
       tile('characters', 5), drawnEast,
     ];
-    player.melds = [{ kind: 'peng', tiles: [0, 1, 2].map((copy) => tile('dragons', 'white', copy)) }];
+    player.melds = [{ kind: 'peng', tiles: [0, 1, 2].map((copy) => tile('bamboo', 9, copy)) }];
     player.lastDrawnTileId = drawnEast.id;
 
     const before = room.getSnapshot(players[0].sessionToken);
@@ -638,7 +657,7 @@ describe('MahjongRoomService', () => {
       } | null> };
     };
     const player = internals.state.players.A!;
-    const east = tile('winds', 'east');
+    const east = tile('dots', 8);
     player.hand = [tile('characters', 1), tile('characters', 2), tile('characters', 3), tile('characters', 5), east];
     player.melds = [
       { kind: 'chi', tiles: [1, 2, 3].map((rank) => tile('bamboo', rank)) },
@@ -650,9 +669,9 @@ describe('MahjongRoomService', () => {
     expect(threeMelds.private.listenOptions?.find((option) => option.discardTileId === east.id)?.waits.map((wait) => wait.label))
       .toContain('5万');
 
-    const otherEast = tile('winds', 'east', 1);
+    const otherEast = tile('dots', 8, 1);
     player.hand = [east, otherEast];
-    player.melds.push({ kind: 'peng', tiles: [0, 1, 2].map((copy) => tile('dragons', 'green', copy)) });
+    player.melds.push({ kind: 'peng', tiles: [0, 1, 2].map((copy) => tile('bamboo', 8, copy)) });
     player.lastDrawnTileId = otherEast.id;
     const singleWait = room.getSnapshot(players[0].sessionToken);
     expect(singleWait.private.availableActions).not.toContain('listen');
@@ -667,6 +686,129 @@ describe('MahjongRoomService', () => {
     expect(forcedListener.private.availableActions).not.toContain('hu');
     expect(() => room.dispatch(players[0].sessionToken, command('hu', forcedListener.public.handNumber, forcedListener.public.version)))
       .toThrow('当前不能胡牌');
+  });
+
+  it('仅允许四组副露后单调红中，并能在听牌后胡另一张红中', () => {
+    const room = new MahjongRoomService({ inviteCode: 'inner-414', random: () => 0.42 });
+    const players = ['甲', '乙', '丙', '丁'].map((nickname) => {
+      const auth = room.login('inner-414');
+      room.join(auth.sessionToken, nickname, 'mahjong');
+      return auth;
+    });
+    const lobby = room.getSnapshot(players[0].sessionToken);
+    room.dispatch(players[0].sessionToken, command('start-hand', lobby.public.handNumber, lobby.public.version));
+    const deck = createMahjongDeck();
+    const tile = (suit: string, rank: number | string, copy = 0) => deck.find((candidate) => candidate.suit === suit && candidate.rank === rank && candidate.id.endsWith('-' + copy))!;
+    const internals = room as unknown as {
+      state: { players: Record<MahjongSeat, {
+        hand: MahjongTile[]; melds: MahjongMeld[]; lastDrawnTileId: string | null;
+        isListening: boolean; listenWaits: MahjongTile[]; listenBao: MahjongTile | null;
+      } | null>; currentTurn: MahjongSeat; awaitingDiscard: boolean; pending: unknown };
+    };
+    const player = internals.state.players.A!;
+    const red = tile('dragons', 'red');
+    const discard = tile('characters', 5);
+    player.hand = [red, discard];
+    player.melds = [
+      { kind: 'chi', tiles: [1, 2, 3].map((rank) => tile('bamboo', rank)) },
+      { kind: 'peng', tiles: [0, 1, 2].map((copy) => tile('dots', 2, copy)) },
+      { kind: 'peng', tiles: [0, 1, 2].map((copy) => tile('dots', 6, copy)) },
+      { kind: 'peng', tiles: [0, 1, 2].map((copy) => tile('bamboo', 8, copy)) },
+    ];
+    player.lastDrawnTileId = discard.id;
+    internals.state.players.B!.hand = [tile('dragons', 'red', 1)];
+    internals.state.players.C!.hand = [];
+    internals.state.players.D!.hand = [];
+    internals.state.currentTurn = 'A';
+    internals.state.awaitingDiscard = true;
+    internals.state.pending = null;
+    const before = room.getSnapshot(players[0].sessionToken);
+    expect(before.private.listenOptions?.find((option) => option.discardTileId === discard.id)?.waits.map((wait) => wait.label)).toEqual(['中']);
+    room.dispatch(players[0].sessionToken, command('listen', before.public.handNumber, before.public.version, { tileId: discard.id }));
+    player.listenBao = tile('characters', 9);
+    const bTurn = room.getSnapshot(players[1].sessionToken);
+    room.dispatch(players[1].sessionToken, command('discard', bTurn.public.handNumber, bTurn.public.version, { tileId: tile('dragons', 'red', 1).id }));
+    const response = room.getSnapshot(players[0].sessionToken);
+    expect(response.private.availableActions).toContain('hu');
+    room.dispatch(players[0].sessionToken, command('hu', response.public.handNumber, response.public.version));
+    expect(finishWin(room, players[0].sessionToken).public.settlement?.winnerSeat).toBe('A');
+  });
+
+  it('三组副露时仅允许能形成单调红中的第四次碰牌', () => {
+    const room = new MahjongRoomService({ inviteCode: 'inner-414', random: () => 0.42 });
+    const players = ['甲', '乙', '丙', '丁'].map((nickname) => {
+      const auth = room.login('inner-414');
+      room.join(auth.sessionToken, nickname, 'mahjong');
+      return auth;
+    });
+    const lobby = room.getSnapshot(players[0].sessionToken);
+    room.dispatch(players[0].sessionToken, command('start-hand', lobby.public.handNumber, lobby.public.version));
+    const deck = createMahjongDeck();
+    const tile = (suit: string, rank: number | string, copy = 0) => deck.find((candidate) => candidate.suit === suit && candidate.rank === rank && candidate.id.endsWith('-' + copy))!;
+    const internals = room as unknown as {
+      state: { players: Record<MahjongSeat, { hand: MahjongTile[]; melds: MahjongMeld[] } | null>;
+        currentTurn: MahjongSeat; awaitingDiscard: boolean; pending: {
+          seat: MahjongSeat; tile: MahjongTile; options: Partial<Record<MahjongSeat, MahjongAction[]>>; passed: MahjongSeat[];
+        } | null };
+    };
+    const player = internals.state.players.A!;
+    player.melds = [
+      { kind: 'chi', tiles: [1, 2, 3].map((rank) => tile('bamboo', rank)) },
+      { kind: 'peng', tiles: [0, 1, 2].map((copy) => tile('dots', 2, copy)) },
+      { kind: 'peng', tiles: [0, 1, 2].map((copy) => tile('dots', 6, copy)) },
+    ];
+    player.hand = [tile('dragons', 'red'), tile('characters', 5), tile('characters', 5, 1), tile('dots', 8)];
+    const claimed = tile('characters', 5, 2);
+    internals.state.currentTurn = 'B';
+    internals.state.awaitingDiscard = false;
+    internals.state.pending = { seat: 'B', tile: claimed, options: { A: ['peng'] }, passed: [] };
+    const response = room.getSnapshot(players[0].sessionToken);
+    room.dispatch(players[0].sessionToken, command('peng', response.public.handNumber, response.public.version));
+    const afterPeng = room.getSnapshot(players[0].sessionToken);
+    expect(afterPeng.private.listenOptions?.find((option) => option.discardTileId === tile('dots', 8).id)?.waits.map((wait) => wait.label)).toEqual(['中']);
+  });
+
+  it('四组副露单调红中可以自摸，但不能把其他宝牌当成万能替牌', () => {
+    const room = new MahjongRoomService({ inviteCode: 'inner-414', random: () => 0.42 });
+    const players = ['甲', '乙', '丙', '丁'].map((nickname) => {
+      const auth = room.login('inner-414');
+      room.join(auth.sessionToken, nickname, 'mahjong');
+      return auth;
+    });
+    const lobby = room.getSnapshot(players[0].sessionToken);
+    room.dispatch(players[0].sessionToken, command('start-hand', lobby.public.handNumber, lobby.public.version));
+    const deck = createMahjongDeck();
+    const tile = (suit: string, rank: number | string, copy = 0) => deck.find((candidate) => candidate.suit === suit && candidate.rank === rank && candidate.id.endsWith('-' + copy))!;
+    const internals = room as unknown as {
+      state: { players: Record<MahjongSeat, {
+        hand: MahjongTile[]; melds: MahjongMeld[]; lastDrawnTileId: string | null;
+        isListening: boolean; listenWaits: MahjongTile[]; listenBao: MahjongTile | null;
+      } | null>; currentTurn: MahjongSeat; awaitingDiscard: boolean; pending: unknown };
+    };
+    const player = internals.state.players.A!;
+    player.melds = [
+      { kind: 'chi', tiles: [1, 2, 3].map((rank) => tile('bamboo', rank)) },
+      { kind: 'peng', tiles: [0, 1, 2].map((copy) => tile('dots', 2, copy)) },
+      { kind: 'peng', tiles: [0, 1, 2].map((copy) => tile('dots', 6, copy)) },
+      { kind: 'peng', tiles: [0, 1, 2].map((copy) => tile('bamboo', 8, copy)) },
+    ];
+    player.hand = [tile('dragons', 'red'), tile('characters', 9)];
+    player.lastDrawnTileId = tile('characters', 9).id;
+    player.isListening = true;
+    player.listenWaits = [tile('dragons', 'red', 1)];
+    player.listenBao = tile('characters', 9);
+    internals.state.currentTurn = 'A';
+    internals.state.awaitingDiscard = true;
+    internals.state.pending = null;
+    expect(room.getSnapshot(players[0].sessionToken).private.availableActions).not.toContain('hu');
+
+    const drawnRed = tile('dragons', 'red', 1);
+    player.hand = [tile('dragons', 'red'), drawnRed];
+    player.lastDrawnTileId = drawnRed.id;
+    const ready = room.getSnapshot(players[0].sessionToken);
+    expect(ready.private.availableActions).toContain('hu');
+    room.dispatch(players[0].sessionToken, command('hu', ready.public.handNumber, ready.public.version));
+    expect(finishWin(room, players[0].sessionToken).public.settlement).toMatchObject({ winnerSeat: 'A', type: 'self-draw' });
   });
 
   it('已有三组副露时不再提供第四次吃碰杠，伪造操作也会被拒绝', () => {
@@ -693,8 +835,8 @@ describe('MahjongRoomService', () => {
       { kind: 'peng', tiles: [0, 1, 2].map((copy) => tile('dots', 2, copy)) },
       { kind: 'peng', tiles: [0, 1, 2].map((copy) => tile('dots', 6, copy)) },
     ];
-    player.hand = [0, 1, 2, 3].map((copy) => tile('characters', 4, copy)).concat(tile('winds', 'east'));
-    player.lastDrawnTileId = tile('winds', 'east').id;
+    player.hand = [0, 1, 2, 3].map((copy) => tile('characters', 4, copy)).concat(tile('dots', 8));
+    player.lastDrawnTileId = tile('dots', 8).id;
     const beforeKong = room.getSnapshot(players[0].sessionToken);
     expect(beforeKong.private.availableActions).not.toContain('concealed-kong');
     expect(() => room.dispatch(players[0].sessionToken, command('concealed-kong', beforeKong.public.handNumber, beforeKong.public.version)))
@@ -763,7 +905,7 @@ describe('MahjongRoomService', () => {
       .toThrow('打出这张牌后不满足听牌条件');
   });
 
-  it('白板碰牌不能让散牌凭大风听口听牌', () => {
+  it('普通碰牌不能让散牌凭大风听口听牌', () => {
     const room = new MahjongRoomService({ inviteCode: 'inner-414', random: () => 0.42 });
     const players = ['甲', '乙', '丙', '丁'].map((nickname) => {
       const auth = room.login('inner-414');
@@ -775,7 +917,7 @@ describe('MahjongRoomService', () => {
 
     const deck = createMahjongDeck();
     const tile = (suit: string, rank: number | string, copy = 0) => deck.find((candidate) => candidate.suit === suit && candidate.rank === rank && candidate.id.endsWith('-' + copy))!;
-    const east = tile('winds', 'east');
+    const east = tile('dots', 8);
     const internals = room as unknown as {
       state: { players: Record<MahjongSeat, { hand: MahjongTile[]; melds: MahjongMeld[]; lastDrawnTileId: string | null } | null> };
     };
@@ -785,7 +927,7 @@ describe('MahjongRoomService', () => {
       tile('bamboo', 1), tile('bamboo', 2), tile('bamboo', 3),
       tile('bamboo', 5), tile('bamboo', 5, 1), tile('bamboo', 6), tile('dots', 3), east,
     ];
-    player.melds = [{ kind: 'peng', tiles: [0, 1, 2].map((copy) => tile('dragons', 'white', copy)) }];
+    player.melds = [{ kind: 'peng', tiles: [0, 1, 2].map((copy) => tile('bamboo', 9, copy)) }];
     player.lastDrawnTileId = east.id;
 
     const view = room.getSnapshot(players[0].sessionToken);
@@ -938,7 +1080,7 @@ describe('MahjongRoomService', () => {
     const internals = room as unknown as { state: { players: Record<MahjongSeat, { hand: MahjongTile[] } | null> } };
     internals.state.players.A!.hand = [discarded];
     internals.state.players.B!.hand = [tile('characters', 1, 1), tile('characters', 2, 1)];
-    internals.state.players.C!.hand = [tile('characters', 1, 2), tile('characters', 2, 2), tile('winds', 'east')];
+    internals.state.players.C!.hand = [tile('characters', 1, 2), tile('characters', 2, 2), tile('dots', 8)];
     internals.state.players.D!.hand = [];
 
     const before = room.getSnapshot(players[0].sessionToken);
@@ -963,7 +1105,7 @@ describe('MahjongRoomService', () => {
     const deck = createMahjongDeck();
     const tile = (suit: string, rank: number | string, copy = 0) => deck.find((candidate) => candidate.suit === suit && candidate.rank === rank && candidate.id.endsWith('-' + copy))!;
     const discarded = tile('characters', 3);
-    const east = tile('winds', 'east');
+    const east = tile('dots', 8);
     const internals = room as unknown as { state: { players: Record<MahjongSeat, { hand: MahjongTile[] } | null> } };
     internals.state.players.A!.hand = [discarded];
     internals.state.players.B!.hand = [tile('characters', 1, 1), tile('characters', 2, 1)];
@@ -1047,6 +1189,31 @@ describe('MahjongRoomService', () => {
     expect(result.public.revealedHands?.find((player) => player.seat === 'B')?.hand.map((handTile) => handTile.id)).toContain(drawn.id);
   });
 
+  it('手里暗藏三张后摸到第四张只能按普通自摸胡，不能算大风', () => {
+    const { room, players, tile, internals } = readyBaoScenario('red');
+    const drawn = tile('dots', 2, 3);
+    const listener = internals.state.players.B!;
+    listener.hand = [
+      ...[0, 1, 2].map((copy) => tile('dots', 2, copy)),
+      tile('dots', 1), tile('dots', 3),
+      tile('characters', 1), tile('characters', 2), tile('characters', 3),
+      tile('bamboo', 5), tile('bamboo', 5, 1), drawn,
+    ];
+    listener.melds = [{ kind: 'chi', tiles: [7, 8, 9].map((rank) => tile('bamboo', rank)) }];
+    listener.listenWaits = [tile('dots', 2)];
+    listener.listenBao = tile('dragons', 'red');
+    listener.lastDrawnTileId = drawn.id;
+    internals.state.players.A!.melds = [{ kind: 'chi', tiles: [7, 8, 9].map((rank) => tile('characters', rank)) }];
+    internals.state.currentTurn = 'B';
+
+    const ready = room.getSnapshot(players[1].sessionToken);
+    expect(ready.private.availableActions).toContain('hu');
+    room.dispatch(players[1].sessionToken, command('hu', ready.public.handNumber, ready.public.version));
+    const result = finishWin(room, players[1].sessionToken).public.settlement!;
+    expect(result.winPattern).toBe('standard');
+    expect(result.payments).toEqual({ A: -10, B: 40, C: -15, D: -15 });
+  });
+
   it('点炮结算公开所有手牌，并将胡牌放入赢家明牌而不是弃牌区', () => {
     const room = new MahjongRoomService({ inviteCode: 'inner-414', random: () => 0.42 });
     const players = ['甲', '乙', '丙', '丁'].map((nickname) => {
@@ -1059,7 +1226,7 @@ describe('MahjongRoomService', () => {
 
     const deck = createMahjongDeck();
     const tile = (suit: string, rank: number | string, copy = 0) => deck.find((candidate) => candidate.suit === suit && candidate.rank === rank && candidate.id.endsWith('-' + copy))!;
-    const winningTile = tile('winds', 'east', 3);
+    const winningTile = tile('dots', 8, 3);
     const internals = room as unknown as {
       state: {
         currentTurn: MahjongSeat;
@@ -1079,7 +1246,7 @@ describe('MahjongRoomService', () => {
     internals.state.players.B!.hand = [
       tile('bamboo', 2, 0), tile('bamboo', 2, 1), tile('bamboo', 2, 2),
       tile('characters', 1), tile('characters', 2), tile('characters', 3),
-      tile('dots', 4), tile('dots', 5), tile('dots', 6), tile('winds', 'east'),
+      tile('dots', 4), tile('dots', 5), tile('dots', 6), tile('dots', 8),
     ];
     internals.state.players.B!.melds = [{ kind: 'chi', tiles: [7, 8, 9].map((rank) => tile('characters', rank)) }];
     internals.state.players.B!.isListening = true;
@@ -1115,7 +1282,7 @@ describe('MahjongRoomService', () => {
 
     const deck = createMahjongDeck();
     const tile = (suit: string, rank: number | string, copy = 0) => deck.find((candidate) => candidate.suit === suit && candidate.rank === rank && candidate.id.endsWith('-' + copy))!;
-    const drawnEast = tile('winds', 'east');
+    const drawnEast = tile('dots', 8);
     const internals = room as unknown as {
       state: {
         players: Record<MahjongSeat, {
@@ -1132,7 +1299,7 @@ describe('MahjongRoomService', () => {
       tile('dots', 1), tile('dots', 2), tile('dots', 6, 0), tile('dots', 6, 1),
       drawnEast,
     ];
-    player.melds = [{ kind: 'peng', tiles: [0, 1, 2].map((copy) => tile('winds', 'north', copy)) }];
+    player.melds = [{ kind: 'peng', tiles: [0, 1, 2].map((copy) => tile('bamboo', 9, copy)) }];
     player.lastDrawnTileId = drawnEast.id;
 
     const view = room.getSnapshot(players[0].sessionToken);

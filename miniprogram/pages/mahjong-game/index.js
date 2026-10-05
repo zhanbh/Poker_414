@@ -4,7 +4,7 @@ const { commandFor } = require('../../utils/commands');
 const { lostRoomIdentity, clearStoredIdentity } = require('../../utils/session');
 
 const SEATS = ['A', 'B', 'C', 'D'];
-const HONOR_SPRITE_COLUMNS = { east: 0, south: 1, west: 2, north: 3, red: 4, green: 5, white: 6 };
+const HONOR_SPRITE_COLUMNS = { red: 4 };
 
 function seatPosition(viewerSeat, seat) {
   const viewerIndex = SEATS.indexOf(viewerSeat || 'A');
@@ -16,7 +16,7 @@ function tileClass(tile) {
   if (tile.suit === 'characters') return 'wan';
   if (tile.suit === 'bamboo') return 'suo';
   if (tile.suit === 'dots') return 'tong';
-  return tile.suit === 'winds' ? 'honor wind' : `honor dragon-${tile.rank}`;
+  return `honor dragon-${tile.rank}`;
 }
 
 const tileDecor = (tile) => {
@@ -26,9 +26,10 @@ const tileDecor = (tile) => {
 };
 
 Page({
-  data: { snapshot: null, chat: [], chatMembers: [], players: [], hand: [], discardRiver: [], selectedTileId: '', canListenSelected: false, listenOptions: [], listenPreview: null, postDiscardListenWaits: [], ownSeat: null, currentTurn: null, turnStatus: '', isMyTurn: false, isResponsePhase: false, isWaitingForPriority: false, wallCount: 0, wallSides: [], boardSize: 720, diceRoll: null, diceLabel: '掷骰', animationStage: '', autoDiscardPending: false, availableActions: [], chiOptions: [], chiPickerOpen: false, listenTileIds: [], opponentHands: [], paymentRows: [], winAnnouncement: null, isListening: false, canDiscard: false, canListen: false, canHu: false, canPeng: false, canChi: false, canKong: false, canAddedKong: false, canConcealedKong: false, canPass: false, canRespondNow: false, spectator: false, settlement: null, settlementDescription: '', error: '' },
+  data: { snapshot: null, chat: [], chatMembers: [], players: [], hand: [], discardRiver: [], voiceBubble: null, selectedTileId: '', canListenSelected: false, listenOptions: [], listenPreview: null, postDiscardListenWaits: [], ownSeat: null, currentTurn: null, turnStatus: '', isMyTurn: false, isResponsePhase: false, isWaitingForPriority: false, wallCount: 0, wallSides: [], boardSize: 720, diceRoll: null, diceLabel: '掷骰', animationStage: '', autoDiscardPending: false, availableActions: [], chiOptions: [], chiPickerOpen: false, listenTileIds: [], opponentHands: [], paymentRows: [], winAnnouncement: null, winType: '', discarderNickname: '', isListening: false, canDiscard: false, canListen: false, canHu: false, canPeng: false, canChi: false, canKong: false, canAddedKong: false, canConcealedKong: false, canPass: false, canRespondNow: false, spectator: false, settlement: null, settlementDescription: '', error: '' },
 
   onLoad() {
+    this.lastSeenChatId = undefined;
     this.app = getApp();
     const screenWidth = (wx.getSystemInfoSync && wx.getSystemInfoSync().windowWidth) || 375;
     this.setData({ boardSize: Math.max(280, screenWidth - 24) });
@@ -43,6 +44,7 @@ Page({
     if (this.unsubscribeReplaced) this.unsubscribeReplaced();
     clearTimeout(this.diceTimer);
     clearTimeout(this.dealTimer);
+    clearTimeout(this.voiceBubbleTimer);
   },
 
   playDealAnimation(handNumber) {
@@ -69,7 +71,20 @@ Page({
       wx.reLaunch({ url: '/pages/mahjong-lobby/index' });
       return;
     }
+    const chat = snapshot.public.chat || [];
+    const previousIndex = chat.findIndex((message) => message.id === this.lastSeenChatId);
+    const freshMessages = this.lastSeenChatId === undefined ? [] : this.lastSeenChatId === null ? chat : previousIndex < 0 ? [] : chat.slice(previousIndex + 1);
+    this.lastSeenChatId = chat.length ? chat[chat.length - 1].id : null;
+    const voiceMessage = freshMessages.filter((message) => message.kind === 'voice' && message.senderSeat && message.text).pop();
     const bySeat = new Map(snapshot.public.players.map((player) => [player.seat, player]));
+    const winAnnouncement = snapshot.public.winAnnouncement;
+    const winType = winAnnouncement && (winAnnouncement.isBaoZhongBao ? '宝中宝'
+      : winAnnouncement.winPattern === 'big-wind' ? '大风'
+        : winAnnouncement.winPattern === 'bao' ? winAnnouncement.isCardang ? '搂宝 · 卡当' : '搂宝'
+          : winAnnouncement.isCardang ? '卡当'
+            : winAnnouncement.type === 'self-draw' ? '自摸' : '平和') || '';
+    const discarderNickname = winAnnouncement && winAnnouncement.payingSeat
+      ? (bySeat.get(winAnnouncement.payingSeat) || {}).nickname || winAnnouncement.payingSeat : '';
     if (snapshot.public.phase === 'playing') this.playDealAnimation(snapshot.public.handNumber);
     const selectedTileId = snapshot.private.isListening ? (snapshot.private.discardableTileId || '') : this.data.selectedTileId;
     const availableActions = snapshot.private.availableActions || [];
@@ -140,6 +155,7 @@ Page({
       position: seatPosition(snapshot.private.seat, player.seat),
       avatarLabel: player.nickname ? player.nickname.slice(0, 1) : player.seat,
       isWinner: Boolean(snapshot.public.winAnnouncement && snapshot.public.winAnnouncement.winnerSeat === player.seat),
+      isDiscarder: Boolean(winAnnouncement && winAnnouncement.payingSeat === player.seat),
       discards: (player.discards || []).map((tile) => ({ ...tileDecor(tile), isPendingDiscard: snapshot.public.pendingDiscard && snapshot.public.pendingDiscard.tile.id === tile.id })),
       melds: (player.melds || []).map((meld) => ({
         ...meld,
@@ -154,9 +170,9 @@ Page({
       isPendingDiscard: snapshot.public.pendingDiscard && snapshot.public.pendingDiscard.tile.id === discard.tile.id,
     }));
     const settlementDescription = snapshot.public.settlement && snapshot.public.settlement.type === 'draw'
-      ? '流局 · 原庄家不变'
+      ? '流局 · 本局不计分 · 原庄家不变'
       : snapshot.public.settlement
-        ? `${snapshot.public.settlement.winnerNickname || snapshot.public.settlement.winnerSeat} 获胜 · ${snapshot.public.settlement.isBaoZhongBao ? '宝中宝' : snapshot.public.settlement.winPattern === 'big-wind' ? '大风' : snapshot.public.settlement.winPattern === 'bao' ? '摸宝' : snapshot.public.settlement.type === 'self-draw' ? '自摸' : '平和'}${snapshot.public.settlement.isCardang && !snapshot.public.settlement.isBaoZhongBao ? ' · 卡当' : ''}`
+        ? `${snapshot.public.settlement.winnerNickname || snapshot.public.settlement.winnerSeat} 获胜 · ${snapshot.public.settlement.isBaoZhongBao ? '宝中宝' : snapshot.public.settlement.winPattern === 'big-wind' ? '大风' : snapshot.public.settlement.winPattern === 'bao' ? '搂宝' : snapshot.public.settlement.type === 'self-draw' ? '自摸' : '平和'}${snapshot.public.settlement.isCardang && !snapshot.public.settlement.isBaoZhongBao ? ' · 卡当' : ''}`
         : '';
     const wallCount = snapshot.public.wallCount;
     const wallSides = (snapshot.public.wallLayout && snapshot.public.wallLayout.sides || []).map((side) => {
@@ -179,7 +195,7 @@ Page({
     this.app.setSnapshot(snapshot);
     this.setData({
       snapshot,
-      chat: snapshot.public.chat || [],
+      chat,
       chatMembers: chatMembers(snapshot),
       players,
       hand,
@@ -221,8 +237,15 @@ Page({
       settlementDescription,
       paymentRows,
       winAnnouncement: snapshot.public.winAnnouncement || null,
+      winType,
+      discarderNickname,
       error: '',
     });
+    if (voiceMessage) {
+      clearTimeout(this.voiceBubbleTimer);
+      this.setData({ voiceBubble: { seat: voiceMessage.senderSeat, text: voiceMessage.text } });
+      this.voiceBubbleTimer = setTimeout(() => this.setData({ voiceBubble: null }), 2000);
+    }
   },
 
   onTileTap(event) {

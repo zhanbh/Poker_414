@@ -254,7 +254,7 @@ export function App({ transport: providedTransport }: { readonly transport?: Cli
   if (!snapshot) {
     return <><AccessView gameId={gameId} onGameChange={selectGame} onSubmit={enterRoom} error={error} busy={busy} testMode={testMode} />{roomNotice}</>;
   }
-  const roomChat = <RoomChat messages={snapshot.public.chat ?? []} members={chatMembersFor(snapshot)} ownSeat={snapshot.private.seat} onSend={sendChat} />;
+  const roomChat = <RoomChat messages={snapshot.public.chat ?? []} members={chatMembersFor(snapshot)} ownSeat={snapshot.private.seat} onSend={sendChat} enableVoice={isMahjongSnapshot(snapshot) && snapshot.public.phase === 'playing'} />;
   if (gameId === 'texas' && isTexasSnapshot(snapshot)) {
     if (snapshot.public.phase === 'lobby') {
       return <><TexasLobbyView snapshot={snapshot.public} ownSeat={snapshot.private.seat} spectator={Boolean(snapshot.private.spectator)} onStart={() => runCommand('start-hand', {})} onRemove={(seat) => runCommand('remove-player', { seat })} onLeave={leaveRoom} testMode={testMode} onInteract={sendInteraction} interactionEffect={interactionEffect} />{roomNotice}{error ? <p role="alert">{error}</p> : null}{roomChat}</>;

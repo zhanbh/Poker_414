@@ -8,8 +8,8 @@ export const MAHJONG_SEAT_LABELS: Readonly<Record<MahjongSeat, string>> = {
   D: '北家',
 };
 
-export type MahjongSuit = 'characters' | 'bamboo' | 'dots' | 'winds' | 'dragons';
-export type MahjongRank = number | 'east' | 'south' | 'west' | 'north' | 'red' | 'green' | 'white';
+export type MahjongSuit = 'characters' | 'bamboo' | 'dots' | 'dragons';
+export type MahjongRank = number | 'red';
 
 export interface MahjongTile {
   readonly id: string;
@@ -30,28 +30,15 @@ const SUIT_LABELS: Readonly<Record<MahjongSuit, string>> = {
   characters: '万',
   bamboo: '条',
   dots: '筒',
-  winds: '',
   dragons: '',
 };
 
 const HONOR_LABELS: Readonly<Record<Exclude<MahjongRank, number>, string>> = {
-  east: '东',
-  south: '南',
-  west: '西',
-  north: '北',
   red: '中',
-  green: '發',
-  white: '白',
 };
 
-const HONOR_ORDER: ReadonlyArray<{ readonly suit: 'winds' | 'dragons'; readonly rank: Exclude<MahjongRank, number> }> = [
-  { suit: 'winds', rank: 'east' },
-  { suit: 'winds', rank: 'south' },
-  { suit: 'winds', rank: 'west' },
-  { suit: 'winds', rank: 'north' },
+const HONOR_ORDER: ReadonlyArray<{ readonly suit: 'dragons'; readonly rank: 'red' }> = [
   { suit: 'dragons', rank: 'red' },
-  { suit: 'dragons', rank: 'green' },
-  { suit: 'dragons', rank: 'white' },
 ];
 
 export function tileKey(tile: Pick<MahjongTile, 'suit' | 'rank'>): string {
@@ -160,9 +147,11 @@ export function isMahjongTerminal(tile: Pick<MahjongTile, 'suit' | 'rank'>): boo
   return isNumbered(tile) && (tile.rank === 1 || tile.rank === 9);
 }
 
-export function isBigWindWin(hand: readonly MahjongTile[], winningTile: MahjongTile, melds: readonly MahjongMeld[] = []): boolean {
-  const meldTileCount = melds.reduce((count, meld) => count + matchingTileCount(meld.tiles, winningTile), 0);
-  return matchingTileCount(hand, winningTile) + meldTileCount === 3;
+/** Only a fourth tile drawn against an already exposed peng counts as big wind. */
+export function isBigWindWin(_hand: readonly MahjongTile[], winningTile: MahjongTile, melds: readonly MahjongMeld[] = []): boolean {
+  return melds.some((meld) => meld.kind === 'peng'
+    && meld.tiles.length === 3
+    && matchingTileCount(meld.tiles, winningTile) === 3);
 }
 
 export function mahjongTileKinds(): MahjongTile[] {

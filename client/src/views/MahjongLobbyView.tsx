@@ -1,8 +1,9 @@
 import { MahjongPublicSnapshot } from '../../../shared/src/protocol';
 import { MAHJONG_SEATS, MahjongSeat } from '../../../shared/src/mahjong';
+import { InteractionEffect, RoomInteractionEffect } from '../components/InteractionMenu';
 import { RoomPurposeNotice } from '../components/RoomPurposeNotice';
 
-export function MahjongLobbyView({ snapshot, ownSeat, spectator = false, onStart, onRemove, onLeave, testMode }: {
+export function MahjongLobbyView({ snapshot, ownSeat, spectator = false, onStart, onRemove, onLeave, testMode, interactionEffect = null }: {
   readonly snapshot: MahjongPublicSnapshot;
   readonly ownSeat: MahjongSeat | null;
   readonly spectator?: boolean;
@@ -10,6 +11,7 @@ export function MahjongLobbyView({ snapshot, ownSeat, spectator = false, onStart
   readonly onRemove: (seat: MahjongSeat) => void;
   readonly onLeave: () => void;
   readonly testMode: boolean;
+  readonly interactionEffect?: RoomInteractionEffect | null;
 }) {
   const players = new Map(snapshot.players.map((player) => [player.seat, player]));
   const ownPlayer = snapshot.players.find((player) => player.seat === ownSeat);
@@ -24,8 +26,7 @@ export function MahjongLobbyView({ snapshot, ownSeat, spectator = false, onStart
           const player = players.get(seat);
           const canRemove = Boolean(player && ownPlayer?.isHost && player.seat !== ownSeat);
           return <article className={'mahjong-lobby-seat mahjong-lobby-seat-' + seat + (player ? ' occupied' : '')} key={seat}>
-            <strong>{player?.seatLabel ?? ({ A: '东家', B: '南家', C: '西家', D: '北家' }[seat])}</strong>
-            {player ? <><b>{player.nickname}</b><small>{player.score} 积分</small>{player.isHost ? <em>房主</em> : null}{!player.connected ? <em className="offline">已断开</em> : null}</> : <span>空位</span>}
+            {player ? <><b>{player.nickname}</b><small>{player.score} 积分</small>{interactionEffect?.targetSeat === seat ? <InteractionEffect interaction={interactionEffect.interaction} /> : null}</> : <span>空位</span>}
             {canRemove ? <button type="button" onClick={() => onRemove(seat)}>移除</button> : null}
           </article>;
         })}

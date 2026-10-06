@@ -1,5 +1,6 @@
 const chatUtils = require('../../utils/chat');
 const chatMembers = chatUtils.chatMembers;
+const newInteractionEffect = chatUtils.newInteractionEffect;
 const { commandFor } = require('../../utils/commands');
 const { lostRoomIdentity, clearStoredIdentity } = require('../../utils/session');
 
@@ -26,10 +27,9 @@ const tileDecor = (tile) => {
 };
 
 Page({
-  data: { snapshot: null, chat: [], chatMembers: [], players: [], hand: [], discardRiver: [], voiceBubble: null, selectedTileId: '', canListenSelected: false, listenOptions: [], listenPreview: null, postDiscardListenWaits: [], ownSeat: null, currentTurn: null, turnStatus: '', isMyTurn: false, isResponsePhase: false, isWaitingForPriority: false, wallCount: 0, wallSides: [], boardSize: 720, diceRoll: null, diceLabel: '掷骰', animationStage: '', autoDiscardPending: false, availableActions: [], chiOptions: [], chiPickerOpen: false, listenTileIds: [], opponentHands: [], paymentRows: [], winAnnouncement: null, winType: '', discarderNickname: '', isListening: false, canDiscard: false, canListen: false, canHu: false, canPeng: false, canChi: false, canKong: false, canAddedKong: false, canConcealedKong: false, canPass: false, canRespondNow: false, spectator: false, settlement: null, settlementDescription: '', error: '' },
+  data: { snapshot: null, chat: [], chatMembers: [], players: [], hand: [], discardRiver: [], interactionEffect: null, selectedTileId: '', canListenSelected: false, listenOptions: [], listenPreview: null, postDiscardListenWaits: [], ownSeat: null, currentTurn: null, turnStatus: '', isMyTurn: false, isResponsePhase: false, isWaitingForPriority: false, wallCount: 0, wallSides: [], boardSize: 720, diceRoll: null, diceLabel: '掷骰', animationStage: '', autoDiscardPending: false, availableActions: [], chiOptions: [], chiPickerOpen: false, listenTileIds: [], opponentHands: [], paymentRows: [], winAnnouncement: null, winType: '', discarderNickname: '', isListening: false, canDiscard: false, canListen: false, canHu: false, canPeng: false, canChi: false, canKong: false, canAddedKong: false, canConcealedKong: false, canPass: false, canRespondNow: false, spectator: false, settlement: null, settlementDescription: '', error: '' },
 
   onLoad() {
-    this.lastSeenChatId = undefined;
     this.app = getApp();
     const screenWidth = (wx.getSystemInfoSync && wx.getSystemInfoSync().windowWidth) || 375;
     this.setData({ boardSize: Math.max(280, screenWidth - 24) });
@@ -44,7 +44,7 @@ Page({
     if (this.unsubscribeReplaced) this.unsubscribeReplaced();
     clearTimeout(this.diceTimer);
     clearTimeout(this.dealTimer);
-    clearTimeout(this.voiceBubbleTimer);
+    clearTimeout(this.interactionTimer);
   },
 
   playDealAnimation(handNumber) {
@@ -72,10 +72,11 @@ Page({
       return;
     }
     const chat = snapshot.public.chat || [];
-    const previousIndex = chat.findIndex((message) => message.id === this.lastSeenChatId);
-    const freshMessages = this.lastSeenChatId === undefined ? [] : this.lastSeenChatId === null ? chat : previousIndex < 0 ? [] : chat.slice(previousIndex + 1);
-    this.lastSeenChatId = chat.length ? chat[chat.length - 1].id : null;
-    const voiceMessage = freshMessages.filter((message) => message.kind === 'voice' && message.senderSeat && message.text).pop();
+    const newEffect = newInteractionEffect(snapshot, previous);
+    if (newEffect) {
+      clearTimeout(this.interactionTimer);
+      this.interactionTimer = setTimeout(() => this.setData({ interactionEffect: null }), 1200);
+    }
     const bySeat = new Map(snapshot.public.players.map((player) => [player.seat, player]));
     const winAnnouncement = snapshot.public.winAnnouncement;
     const winType = winAnnouncement && (winAnnouncement.isBaoZhongBao ? '宝中宝'
@@ -196,6 +197,7 @@ Page({
     this.setData({
       snapshot,
       chat,
+      interactionEffect: newEffect || this.data.interactionEffect,
       chatMembers: chatMembers(snapshot),
       players,
       hand,
@@ -241,11 +243,6 @@ Page({
       discarderNickname,
       error: '',
     });
-    if (voiceMessage) {
-      clearTimeout(this.voiceBubbleTimer);
-      this.setData({ voiceBubble: { seat: voiceMessage.senderSeat, text: voiceMessage.text } });
-      this.voiceBubbleTimer = setTimeout(() => this.setData({ voiceBubble: null }), 2000);
-    }
   },
 
   onTileTap(event) {

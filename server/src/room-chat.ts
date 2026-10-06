@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { isRoomChatPayload, RoomChatMessage, RoomChatPayload } from '../../shared/src/protocol';
 import { Session } from './session-service';
-import { roomVoicePhrase } from '../../shared/src/voice-phrases';
 
 export const MAX_ROOM_CHAT_MESSAGES = 120;
 const MAX_TEXT_LENGTH = 200;
@@ -24,19 +23,6 @@ export function createRoomChatMessage(session: Session, payload: unknown): RoomC
       createdAt: Date.now(),
     };
   }
-  if (payload.kind === 'voice') {
-    const phrase = roomVoicePhrase(payload.voiceId);
-    if (!phrase) throw new Error('固定语音不存在');
-    return {
-      id: randomUUID(),
-      kind: 'voice',
-      senderNickname,
-      ...(senderSeat ? { senderSeat } : {}),
-      voiceId: phrase.id,
-      text: phrase.text,
-      createdAt: Date.now(),
-    };
-  }
   const targetNickname = payload.target.nickname.trim().slice(0, MAX_NICKNAME_LENGTH);
   const targetSeat = payload.target.seat?.trim().slice(0, 12) || undefined;
   return {
@@ -52,10 +38,6 @@ export function createRoomChatMessage(session: Session, payload: unknown): RoomC
 }
 
 export function appendRoomChatMessage(messages: readonly RoomChatMessage[], message: RoomChatMessage): RoomChatMessage[] {
-  if (message.kind === 'voice' && messages.some((previous) => previous.kind === 'voice'
-    && previous.senderNickname === message.senderNickname && message.createdAt - previous.createdAt < 3000)) {
-    throw new Error('固定语音发送太频繁，请稍后再试');
-  }
   return [...messages, message].slice(-MAX_ROOM_CHAT_MESSAGES);
 }
 

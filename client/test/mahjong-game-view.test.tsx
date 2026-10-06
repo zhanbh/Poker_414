@@ -1,5 +1,5 @@
 /* @vitest-environment jsdom */
-import { act, fireEvent, render } from '@testing-library/react';
+import { fireEvent, render } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { MahjongSnapshot } from '../../shared/src/protocol';
 import { createMahjongDeck, MahjongSeat } from '../../shared/src/mahjong';
@@ -57,15 +57,9 @@ describe('MahjongGameView settlement', () => {
     expect(container.querySelector('.mahjong-win-announcement')?.textContent).toContain('自摸');
     expect(container.querySelector('.mahjong-table-settlement')).toBeNull();
 
-    vi.useFakeTimers();
-    try {
-      rerender(<MahjongGameView snapshot={{ ...announcing, public: { ...announcing.public, chat: [{ id: 'voice-1', kind: 'voice', senderNickname: '乙', senderSeat: 'B', voiceId: 'nice', text: '这牌打得漂亮！', createdAt: 1 }] } }} {...props} />);
-      expect(container.querySelector('.mahjong-seat-left .mahjong-voice-bubble')?.textContent).toBe('这牌打得漂亮！');
-      act(() => vi.advanceTimersByTime(2000));
-      expect(container.querySelector('.mahjong-voice-bubble')).toBeNull();
-    } finally {
-      vi.useRealTimers();
-    }
+    rerender(<MahjongGameView snapshot={announcing} interactionEffect={{ id: 'interaction-1', targetSeat: 'B', interaction: 'water' }} {...props} />);
+    expect(container.querySelector('.mahjong-seat-left .room-interaction-effect')?.getAttribute('aria-label')).toBe('泼水动画');
+    expect(container.querySelector('.mahjong-seat-bottom .room-interaction-effect')).toBeNull();
 
     rerender(<MahjongGameView snapshot={{ ...announcing, public: {
       ...announcing.public,
@@ -94,6 +88,12 @@ describe('MahjongGameView settlement', () => {
     expect(Array.from(table?.querySelectorAll('.mahjong-discard-tiles .mahjong-face') ?? []).map((tile) => tile.getAttribute('aria-label')))
       .toEqual(discards.map((tile) => tile.label));
     expect(table?.querySelector('.mahjong-seat-left .mahjong-seat-melds .mahjong-meld')).not.toBeNull();
+    expect(table?.querySelector('.mahjong-player-avatar')).toBeNull();
+    expect(table?.querySelector('.mahjong-seat-bottom .mahjong-player-card')?.textContent).toContain('甲');
+    expect(table?.querySelector('.mahjong-seat-bottom .mahjong-player-card')?.textContent).toContain('999 分');
+    expect(table?.querySelector('.mahjong-seat-bottom .mahjong-player-card')?.textContent).not.toContain('东家');
+    expect(table?.querySelector('.mahjong-face-art')?.getAttribute('style')).toContain('background-position');
+    expect(table?.querySelector('.mahjong-face-art img')).toBeNull();
     expect(table?.querySelectorAll('.mahjong-seat-left .mahjong-meld .mahjong-tile-back')).toHaveLength(4);
     expect(table?.querySelectorAll('.mahjong-seat-left .mahjong-meld .mahjong-face')).toHaveLength(0);
     expect(table?.querySelectorAll('.mahjong-seat-bottom .mahjong-meld .mahjong-face')).toHaveLength(4);

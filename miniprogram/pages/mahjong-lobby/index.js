@@ -1,5 +1,6 @@
 const chatUtils = require('../../utils/chat');
 const chatMembers = chatUtils.chatMembers;
+const newInteractionEffect = chatUtils.newInteractionEffect;
 const { commandFor } = require('../../utils/commands');
 const { lostRoomIdentity, clearStoredIdentity } = require('../../utils/session');
 
@@ -7,7 +8,7 @@ const SEATS = ['A', 'B', 'C', 'D'];
 const LABELS = { A: '东家', B: '南家', C: '西家', D: '北家' };
 
 Page({
-  data: { snapshot: null, chat: [], chatMembers: [], players: [], spectators: [], ownSeat: null, isHost: false, spectator: false, playerCount: 0, boardSize: 720, error: '' },
+  data: { snapshot: null, chat: [], chatMembers: [], players: [], spectators: [], ownSeat: null, isHost: false, spectator: false, playerCount: 0, boardSize: 720, interactionEffect: null, error: '' },
 
   onLoad() {
     this.app = getApp();
@@ -18,7 +19,10 @@ Page({
     this.updateSnapshot(this.app.getSnapshot());
   },
 
-  onUnload() { if (this.unsubscribe) this.unsubscribe(); },
+  onUnload() {
+    if (this.unsubscribe) this.unsubscribe();
+    clearTimeout(this.interactionTimer);
+  },
 
   updateSnapshot(snapshot) {
     if (!snapshot || !snapshot.public || snapshot.public.gameId !== 'mahjong') return;
@@ -37,10 +41,16 @@ Page({
     const bySeat = new Map(snapshot.public.players.map((player) => [player.seat, player]));
     const players = SEATS.map((seat) => bySeat.get(seat) || { seat, seatLabel: LABELS[seat], nickname: '', connected: false, isHost: false });
     const own = snapshot.public.players.find((player) => player.seat === snapshot.private.seat);
+    const newEffect = newInteractionEffect(snapshot, previous);
+    if (newEffect) {
+      clearTimeout(this.interactionTimer);
+      this.interactionTimer = setTimeout(() => this.setData({ interactionEffect: null }), 1200);
+    }
     this.app.setSnapshot(snapshot);
     this.setData({
       snapshot,
       chat: snapshot.public.chat || [],
+      interactionEffect: newEffect || this.data.interactionEffect,
       chatMembers: chatMembers(snapshot),
       players,
       spectators: snapshot.public.spectators || [],

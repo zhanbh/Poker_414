@@ -36,7 +36,7 @@ function loadPage(): MahjongPage {
     Page: (definition: MahjongPage) => { page = definition; },
     require: (request: string) => request.includes('utils/session')
       ? { lostRoomIdentity: () => false, clearStoredIdentity: () => undefined }
-      : request.includes('utils/chat') ? { chatMembers: () => [] } : { commandFor: () => ({}) },
+      : request.includes('utils/chat') ? { chatMembers: () => [], newInteractionEffect: () => null } : { commandFor: () => ({}) },
   });
   if (!page) throw new Error('Mahjong page was not registered');
   page.setData = (patch) => Object.assign(page!.data, patch);

@@ -289,7 +289,7 @@ export function App({ transport: providedTransport }: { readonly transport?: Cli
   if (!snapshot) {
     return <><AccessView gameId={gameId} onGameChange={selectGame} onSubmit={enterRoom} error={error} busy={busy} testMode={testMode} />{roomNotice}</>;
   }
-  const roomChat = <RoomChat messages={snapshot.public.chat ?? []} members={chatMembersFor(snapshot)} ownSeat={snapshot.private.seat} onSend={sendChat} enableVoice={isMahjongSnapshot(snapshot) && snapshot.public.phase === 'playing'} />;
+  const roomChat = <RoomChat messages={snapshot.public.chat ?? []} members={chatMembersFor(snapshot)} ownSeat={snapshot.private.seat} onSend={sendChat} />;
   if (gameId === 'texas' && isTexasSnapshot(snapshot)) {
     if (snapshot.public.phase === 'lobby') {
       return <><TexasLobbyView snapshot={snapshot.public} ownSeat={snapshot.private.seat} spectator={Boolean(snapshot.private.spectator)} onStart={() => runCommand('start-hand', {})} onRemove={(seat) => runCommand('remove-player', { seat })} onLeave={leaveRoom} testMode={testMode} onInteract={sendInteraction} interactionEffect={interactionEffect} />{roomNotice}{error ? <p role="alert">{error}</p> : null}{roomChat}</>;
@@ -298,9 +298,9 @@ export function App({ transport: providedTransport }: { readonly transport?: Cli
   }
   if (isMahjongSnapshot(snapshot)) {
     if (snapshot.public.phase === 'lobby') {
-      return <><MahjongLobbyView snapshot={snapshot.public} ownSeat={snapshot.private.seat} spectator={Boolean(snapshot.private.spectator)} onStart={() => runCommand('start-hand', {})} onRemove={(seat) => runCommand('remove-player', { seat })} onLeave={leaveRoom} testMode={testMode} />{roomNotice}{error ? <p role="alert">{error}</p> : null}{roomChat}</>;
+      return <><MahjongLobbyView snapshot={snapshot.public} ownSeat={snapshot.private.seat} spectator={Boolean(snapshot.private.spectator)} onStart={() => runCommand('start-hand', {})} onRemove={(seat) => runCommand('remove-player', { seat })} onLeave={leaveRoom} testMode={testMode} interactionEffect={interactionEffect} />{roomNotice}{error ? <p role="alert">{error}</p> : null}{roomChat}</>;
     }
-    return <><MahjongGameView snapshot={snapshot} onCommand={(type, payload = {}) => runCommand(type, payload)} onLeave={leaveRoom} testMode={testMode} />{roomNotice}{error ? <p role="alert">{error}</p> : null}{roomChat}</>;
+    return <><MahjongGameView snapshot={snapshot} onCommand={(type, payload = {}) => runCommand(type, payload)} onLeave={leaveRoom} testMode={testMode} interactionEffect={interactionEffect} />{roomNotice}{error ? <p role="alert">{error}</p> : null}{roomChat}</>;
   }
   if (!isTexasSnapshot(snapshot) && snapshot.public.phase === 'lobby') {
     return <><LobbyView snapshot={snapshot.public} ownSeat={snapshot.private.seat} spectator={Boolean(snapshot.private.spectator)} onStart={() => runCommand('start-hand', {})} onRemove={(seat) => runCommand('remove-player', { seat })} onLeave={leaveRoom} testMode={testMode} onInteract={sendInteraction} interactionEffect={interactionEffect} />{roomNotice}{error ? <p role="alert">{error}</p> : null}{roomChat}</>;

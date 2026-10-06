@@ -8,7 +8,6 @@
       <text wx:else>{{item.senderNickname}} {{item.interaction === 'tomato' ? '扔了番茄给' : item.interaction === 'water' ? '泼水给' : item.interaction === 'heart' ? '比心给' : '亲吻'}} {{item.targetNickname}}</text>
     </view>
   </scroll-view>
-  <view wx:if="{{enableVoice}}" class="room-chat-voice"><view class="room-chat-voice-heading"><text>快捷语音</text><button size="mini" bindtap="onToggleVoiceMute">{{voiceMuted ? '🔇 已静音' : '🔊 声音开'}}</button></view><view class="room-chat-voice-options"><button wx:for="{{voicePhrases}}" wx:key="id" size="mini" data-id="{{item.id}}" bindtap="onVoice">{{item.text}}</button></view></view>
   <view class="room-chat-targets">
     <text class="chat-target-label">点击玩家互动</text>
     <view wx:for="{{members}}" wx:for-item="member" wx:key="id" wx:if="{{!member.seat || member.seat !== ownSeat}}" class="room-chat-target">

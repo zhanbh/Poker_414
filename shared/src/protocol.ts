@@ -3,7 +3,6 @@ import { HandKind } from './hand-types';
 import { Level, Seat, SettlementMode, SettlementResult, Team } from './scoring';
 import type { TexasSeat } from './texas';
 import type { MahjongMeld, MahjongSeat, MahjongTile } from './mahjong';
-import { roomVoicePhrase, type RoomVoicePhraseId } from './voice-phrases';
 
 export const EVENTS = {
   login: 'auth:login',
@@ -29,7 +28,7 @@ export interface RoomChatMessage {
   readonly senderSeat?: string;
   readonly text?: string;
   readonly interaction?: RoomChatInteraction;
-  readonly voiceId?: RoomVoicePhraseId;
+  readonly voiceId?: string;
   readonly targetNickname?: string;
   readonly targetSeat?: string;
   readonly createdAt: number;
@@ -37,7 +36,6 @@ export interface RoomChatMessage {
 
 export type RoomChatPayload =
   | { readonly kind: 'text'; readonly text: string }
-  | { readonly kind: 'voice'; readonly voiceId: RoomVoicePhraseId }
   | { readonly kind: 'interaction'; readonly interaction: RoomChatInteraction; readonly target: { readonly nickname: string; readonly seat?: string } };
 export interface GameSelection {
   readonly id: GameId;
@@ -381,7 +379,6 @@ export function isRoomChatPayload(value: unknown): value is RoomChatPayload {
   if (!value || typeof value !== 'object') return false;
   const candidate = value as Partial<RoomChatPayload>;
   if (candidate.kind === 'text') return typeof candidate.text === 'string';
-  if (candidate.kind === 'voice') return typeof candidate.voiceId === 'string' && Boolean(roomVoicePhrase(candidate.voiceId));
   if (candidate.kind !== 'interaction' || !ROOM_CHAT_INTERACTIONS.has(candidate.interaction as RoomChatInteraction)) return false;
   const target = candidate.target;
   return Boolean(target && typeof target === 'object'

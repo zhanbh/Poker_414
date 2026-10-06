@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
 import { MahjongCommandPayload, MahjongCommandType, MahjongSnapshot } from '../../../shared/src/protocol';
 import { MAHJONG_SEATS, MahjongSeat, MahjongTile } from '../../../shared/src/mahjong';
+import { InteractionEffect, RoomInteractionEffect } from '../components/InteractionMenu';
 import { RoomPurposeNotice } from '../components/RoomPurposeNotice';
 
 const HONOR_SPRITE_COLUMNS: Record<'red', number> = { red: 4 };
@@ -26,7 +27,7 @@ function TileFace({ tile, selected = false, listenOption = false, pending = fals
 }) {
   const row = tile.suit === 'dots' ? 0 : tile.suit === 'bamboo' ? 1 : tile.suit === 'characters' ? 2 : 3;
   const column = typeof tile.rank === 'number' ? tile.rank - 1 : HONOR_SPRITE_COLUMNS[tile.rank];
-  const face = <span className="mahjong-face-art" aria-hidden="true"><img src="/assets/mahjong-tiles.png" alt="" draggable={false} style={{ left: `${-column * 100}%`, top: `${-row * 100}%` }} /></span>;
+  const face = <span className="mahjong-face-art" aria-hidden="true" style={{ backgroundPosition: `${column * 100 / 8}% ${row * 100 / 3}%` }} />;
   const className = `mahjong-face ${tileClass(tile)}${selected ? ' selected' : ''}${listenOption ? ' listen-option' : ''}${pending ? ' pending-discard' : ''}${drawn ? ' drawn' : ''}`;
   return onClick
     ? <button type="button" className={className} onClick={onClick} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel} aria-label={tile.label}>{face}</button>
@@ -56,32 +57,18 @@ function MeldTiles({ meld }: { readonly meld: MahjongSnapshot['public']['players
     : meld.tiles.map((tile) => <TileFace tile={tile} key={tile.id} />)}</div></div>;
 }
 
-export function MahjongGameView({ snapshot, onCommand, onLeave, testMode }: {
+export function MahjongGameView({ snapshot, onCommand, onLeave, testMode, interactionEffect = null }: {
   readonly snapshot: MahjongSnapshot;
   readonly onCommand: (type: MahjongCommandType, payload?: MahjongCommandPayload) => void;
   readonly onLeave: () => void;
   readonly testMode: boolean;
+  readonly interactionEffect?: RoomInteractionEffect | null;
 }) {
   const [selectedTileId, setSelectedTileId] = useState<string | null>(null);
   const [animationStage, setAnimationStage] = useState<'dice' | 'deal' | null>(null);
   const [chiPickerOpen, setChiPickerOpen] = useState(false);
   const [draggingTileId, setDraggingTileId] = useState<string | null>(null);
-  const [voiceBubble, setVoiceBubble] = useState<{ seat: MahjongSeat; text: string } | null>(null);
-  const lastVoiceMessageIdRef = useRef(snapshot.public.chat?.at(-1)?.id ?? null);
-  const voiceBubbleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tableRef = useRef<HTMLElementTagNameMap['section'] | null>(null);
-  useEffect(() => {
-    const messages = snapshot.public.chat ?? [];
-    const previousIndex = messages.findIndex((message) => message.id === lastVoiceMessageIdRef.current);
-    const fresh = lastVoiceMessageIdRef.current === null ? messages : previousIndex < 0 ? [] : messages.slice(previousIndex + 1);
-    lastVoiceMessageIdRef.current = messages.at(-1)?.id ?? null;
-    const voice = [...fresh].reverse().find((message) => message.kind === 'voice' && message.senderSeat && message.text);
-    if (!voice?.senderSeat || !voice.text || !MAHJONG_SEATS.includes(voice.senderSeat as MahjongSeat)) return;
-    if (voiceBubbleTimerRef.current) clearTimeout(voiceBubbleTimerRef.current);
-    setVoiceBubble({ seat: voice.senderSeat as MahjongSeat, text: voice.text });
-    voiceBubbleTimerRef.current = setTimeout(() => setVoiceBubble(null), 2000);
-  }, [snapshot.public.chat]);
-  useEffect(() => () => { if (voiceBubbleTimerRef.current) clearTimeout(voiceBubbleTimerRef.current); }, []);
   const pointerStartRef = useRef<{ tileId: string; x: number; y: number; moved: boolean } | null>(null);
   const suppressTileClickUntilRef = useRef(0);
   const lastTileTapRef = useRef<{ tileId: string; at: number } | null>(null);
@@ -291,13 +278,12 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode }: {
           const isOwnSeat = seat === ownSeat && !isSpectator;
           return <article className={`mahjong-seat mahjong-seat-${position}${isCurrentTurn ? ' current' : ''}${canRespond ? ' responding' : ''}${isOwnSeat ? ' own' : ''}${winAnnouncement?.winnerSeat === seat ? ' winner-announced' : ''}${winAnnouncement?.payingSeat === seat ? ' discarder-announced' : ''}`} key={seat} aria-label={player.nickname}>
             <div className="mahjong-player-card">
-              <span className="mahjong-player-avatar">{player.nickname.slice(0, 1)}</span>
               <div className="mahjong-player-meta"><strong>{player.nickname}</strong><span>{player.score} 分</span></div>
               {player.isDealer ? <span className="mahjong-player-badge dealer" aria-label="庄家">庄</span> : null}
               {player.isListening ? <span className="mahjong-player-badge listening" aria-label="听牌标识">听</span> : null}
               {winAnnouncement?.winnerSeat === seat ? <span className="mahjong-win-badge" aria-label="胡牌玩家">胡!</span> : null}
               {winAnnouncement?.payingSeat === seat ? <span className="mahjong-discarder-badge" aria-label="点炮玩家">点炮</span> : null}
-              {voiceBubble?.seat === seat ? <span className="mahjong-voice-bubble" role="status">{voiceBubble.text}</span> : null}
+              {interactionEffect?.targetSeat === seat ? <InteractionEffect interaction={interactionEffect.interaction} /> : null}
             </div>
             {player.melds.length ? <div className="mahjong-seat-melds">{player.melds.map((meld, index) => <MeldTiles meld={meld} key={`${seat}-${index}`} />)}</div> : null}
             {!isOwnSeat && visibleHand ? <div className="mahjong-revealed-hand" aria-label={`${player.nickname}的明牌`}>{visibleHand.map((tile) => <TileFace tile={tile} key={tile.id} />)}</div> : null}

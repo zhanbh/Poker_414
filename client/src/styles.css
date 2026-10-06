@@ -843,6 +843,74 @@ main { min-height: 100svh; padding: clamp(16px, 4vw, 32px); }
   .texas-lobby-table, .texas-game-table { min-height: calc(100svh - 190px); margin-block: 10px; }
   .texas-hand, .texas-actions { margin-top: 8px; padding-block: 8px; }
 }
+
+/* On phones, H5 cannot change the system orientation reliably. Rotate the app canvas
+   into landscape dimensions so room controls remain usable even when auto-rotate is off. */
+@media (max-width: 760px) and (orientation: portrait) {
+  html, body, #root { width: 100%; height: 100%; min-height: 0; }
+  body { overflow: hidden; }
+  #root {
+    position: fixed; top: 0; left: 100vw; z-index: 1;
+    width: 100dvh; height: 100vw; min-height: 0;
+    overflow: hidden; transform: rotate(90deg); transform-origin: top left;
+  }
+  #root > main {
+    width: 100%; height: 100vw; min-height: 100vw; max-width: none;
+    padding: 8px 12px; overflow: auto; overscroll-behavior: contain; scrollbar-width: none;
+  }
+  #root > main::-webkit-scrollbar { display: none; }
+  #root > .room-notice, #root > [role="alert"] {
+    position: absolute; z-index: 20; top: 5px; left: 50%; width: min(94%, 620px);
+    margin: 0; transform: translateX(-50%);
+  }
+
+  #root > main.access-view {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .9fr);
+    grid-template-rows: auto auto min-content; align-content: center;
+    gap: 5px 20px; padding: 10px 24px;
+  }
+  #root > main.access-view > h1 { grid-area: 1 / 1; margin: 0; font-size: 1.7rem; }
+  #root > main.access-view > p:nth-child(2) { grid-area: 2 / 1; margin: 0; }
+  #root > main.access-view > .game-picker { grid-area: 3 / 1; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  #root > main.access-view > .game-picker .game-card { align-content: start; gap: 4px; padding: 8px 7px; font-size: .72rem; }
+  #root > main.access-view > .game-picker .game-card strong { font-size: .9rem; }
+  #root > main.access-view > .game-picker .game-card small { font-size: .62rem; }
+  #root > main.access-view > h2 { grid-area: 1 / 2; margin: 0; font-size: 1.1rem; }
+  #root > main.access-view > p:nth-child(5) { grid-area: 2 / 2; margin: 0; }
+  #root > main.access-view > form { grid-area: 3 / 2; align-self: start; gap: 7px; padding: 10px 12px; }
+  #root > main.access-view > form label { gap: 3px; }
+  #root > main.access-view > form input, #root > main.access-view > form button { min-height: 34px; padding-block: 5px; }
+  #root > main.access-view > form .join-mode-hint { margin: 0; font-size: .72rem; }
+  #root > main.access-view > .test-mode-hint { display: none; }
+  #root > main.access-view > [role="alert"] { grid-column: 1 / -1; margin: 0; }
+
+  #root .lobby-view .team-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  #root .table-layout { width: 100%; height: max(220px, calc(100vw - 150px)); min-height: 0; margin: 6px auto; overflow: hidden; }
+  #root .texas-lobby-table, #root .texas-game-table {
+    height: max(210px, calc(100vw - 170px)); min-height: 0; margin: 6px 0 8px; border-radius: 32%;
+  }
+  #root .texas-hand, #root .texas-actions { margin-top: 6px; padding: 7px 9px; }
+}
+@media (min-width: 761px) and (max-height: 600px) and (orientation: landscape) {
+  main.access-view {
+    display: grid; width: 100%; max-width: 1100px; height: 100svh;
+    grid-template-columns: minmax(0, 1fr) minmax(320px, .9fr); grid-template-rows: auto auto min-content;
+    align-content: center; gap: 5px 20px; padding: 10px 24px;
+  }
+  main.access-view > h1 { grid-area: 1 / 1; margin: 0; font-size: 1.7rem; }
+  main.access-view > p:nth-child(2) { grid-area: 2 / 1; margin: 0; }
+  main.access-view > .game-picker { grid-area: 3 / 1; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  main.access-view > .game-picker .game-card { align-content: start; gap: 4px; padding: 8px 7px; font-size: .72rem; }
+  main.access-view > .game-picker .game-card strong { font-size: .9rem; }
+  main.access-view > .game-picker .game-card small { font-size: .62rem; }
+  main.access-view > h2 { grid-area: 1 / 2; margin: 0; font-size: 1.1rem; }
+  main.access-view > p:nth-child(5) { grid-area: 2 / 2; margin: 0; }
+  main.access-view > form { grid-area: 3 / 2; align-self: start; gap: 7px; padding: 10px 12px; }
+  main.access-view > form label { gap: 3px; }
+  main.access-view > form input, main.access-view > form button { min-height: 34px; padding-block: 5px; }
+  main.access-view > form .join-mode-hint { margin: 0; font-size: .72rem; }
+  main.access-view > .test-mode-hint { display: none; }
+}
 @media (prefers-reduced-motion: reduce) {
   .room-interaction-options, .room-interaction-effect { animation: none; }
 }

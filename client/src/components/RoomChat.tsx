@@ -23,7 +23,7 @@ export function RoomChat({ messages, members, ownSeat, onSend, enableVoice = fal
 }) {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
-  const [collapsed, setCollapsed] = useState(() => typeof window !== 'undefined' && window.matchMedia?.('(max-width: 980px) and (orientation: landscape)').matches || false);
+  const [collapsed, setCollapsed] = useState(() => typeof window !== 'undefined' && window.matchMedia?.('(max-width: 980px) and (orientation: landscape), (max-width: 760px) and (orientation: portrait)').matches || false);
   const [voiceMuted, setVoiceMuted] = useState(false);
   const messagesRef = useRef<HTMLDivElement>(null);
   const lastSeenMessageIdRef = useRef(messages.at(-1)?.id ?? null);

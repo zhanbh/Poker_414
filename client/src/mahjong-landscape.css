@@ -1,5 +1,5 @@
 /* Phone landscape is a dedicated table layout; desktop remains unchanged. */
-@media screen and (max-width: 980px) and (orientation: landscape) {
+@media screen and (max-width: 980px) and (orientation: landscape), screen and (max-width: 760px) and (orientation: portrait) {
   body:has(.mahjong-game, .mahjong-lobby) { min-width: 0; overflow-x: hidden; }
   main.mahjong-game, main.mahjong-lobby {
     max-width: none;
@@ -45,16 +45,34 @@
   .mahjong-lobby .mahjong-lobby-felt { z-index: 3; inset: 29% 23%; }
   .mahjong-lobby .mahjong-lobby-felt strong { font-size: 1.05rem; }
   .mahjong-lobby .mahjong-lobby-felt small { display: none; }
+  .mahjong-lobby .mahjong-lobby-seat {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: 16px 15px 20px;
+    align-content: center; align-items: center; gap: 1px 4px; width: 24%; height: 62px; min-height: 0;
+    padding: 4px 6px; font-size: .62rem;
+  }
+  .mahjong-lobby .mahjong-lobby-seat strong { grid-column: 1; grid-row: 1; font-size: .62rem; }
+  .mahjong-lobby .mahjong-lobby-seat b { grid-column: 2; grid-row: 1; min-width: 0; overflow: hidden; font-size: .66rem; text-overflow: ellipsis; white-space: nowrap; }
+  .mahjong-lobby .mahjong-lobby-seat small { grid-column: 1; grid-row: 2; font-size: .55rem; white-space: nowrap; }
+  .mahjong-lobby .mahjong-lobby-seat em { grid-column: 2; grid-row: 2; font-size: .55rem; white-space: nowrap; }
+  .mahjong-lobby .mahjong-lobby-seat button { grid-column: 1 / -1; grid-row: 3; justify-self: center; padding: 1px 8px; font-size: .58rem; line-height: 1.2; }
+  .mahjong-lobby .mahjong-lobby-felt { inset: 30% 24%; gap: 3px; }
+  .mahjong-lobby .mahjong-lobby-felt button { min-height: 34px; padding: 5px 12px; }
   body:has(.mahjong-game, .mahjong-lobby) .room-chat-shell { top: auto; right: max(6px, env(safe-area-inset-right)); bottom: max(6px, env(safe-area-inset-bottom)); width: min(270px, 34vw); }
-  body:has(.mahjong-game, .mahjong-lobby) .room-chat-shell.is-collapsed { top: 91px; bottom: auto; width: auto; }
+  body:has(.mahjong-game, .mahjong-lobby) .room-chat-shell.is-collapsed { top: auto; bottom: 6px; width: auto; }
   body:has(.mahjong-game, .mahjong-lobby) .room-chat { max-height: 70svh; }
 }
 
 @media screen and (max-width: 760px) and (orientation: portrait) {
-  body:has(.mahjong-game, .mahjong-lobby) { min-width: 0; }
-  .mahjong-game::before, .mahjong-lobby::before {
-    display: block; margin: 0 0 8px; padding: 8px 10px; color: #fff4d3;
-    content: '横屏体验更好，请旋转手机'; text-align: center;
-    background: #245869; border: 1px solid #eac268; border-radius: 8px; font-size: .82rem;
-  }
+  .mahjong-game .mahjong-table { height: max(250px, calc(100vw - 108px)); }
+  .mahjong-lobby .mahjong-lobby-table { height: max(250px, calc(100vw - 120px)); }
+  .mahjong-game .mahjong-seat-bottom .mahjong-own-hand .mahjong-face { width: clamp(25px, 4.2vh, 37px); height: clamp(37px, 11vw, 50px); }
+  .mahjong-game .mahjong-seat-bottom .mahjong-own-hand .mahjong-face-top { font-size: 10px; }
+  .mahjong-game .mahjong-wall .mahjong-tile-back { width: 12px; height: 17px; }
+  .mahjong-game .mahjong-wall-left .mahjong-wall-stack, .mahjong-game .mahjong-wall-right .mahjong-wall-stack { width: 17px; height: 12px; }
+  .mahjong-game .mahjong-wall-left .mahjong-wall-stack .mahjong-tile-back, .mahjong-game .mahjong-wall-right .mahjong-wall-stack .mahjong-tile-back { width: 17px; height: 12px; }
+  .mahjong-game .mahjong-seat-bottom .mahjong-seat-melds { bottom: 16%; }
+  .mahjong-game .mahjong-seat-bottom .mahjong-listen-preview { bottom: 20%; }
+  .mahjong-game .mahjong-action-dock { bottom: 8%; }
+  body:has(.mahjong-game, .mahjong-lobby) .room-chat-shell { width: min(270px, 34vh); }
+  body:has(.mahjong-game, .mahjong-lobby) .room-chat { max-height: 70vw; }
 }

@@ -97,6 +97,17 @@ describe('MahjongGameView settlement', () => {
     expect(table?.querySelectorAll('.mahjong-seat-left .mahjong-meld .mahjong-tile-back')).toHaveLength(4);
     expect(table?.querySelectorAll('.mahjong-seat-left .mahjong-meld .mahjong-face')).toHaveLength(0);
     expect(table?.querySelectorAll('.mahjong-seat-bottom .mahjong-meld .mahjong-face')).toHaveLength(4);
+
+    const discardWin = {
+      ...snapshot,
+      public: {
+        ...snapshot.public,
+        settlement: { ...snapshot.public.settlement!, type: 'discard-win' as const, payingSeat: 'A' as const },
+      },
+    };
+    rerender(<MahjongGameView snapshot={discardWin} {...props} />);
+    expect(container.querySelector('.mahjong-score-row:nth-child(1) .mahjong-score-role.discarder')?.textContent).toBe('点炮');
+    expect(container.querySelector('.mahjong-score-row:nth-child(2) .mahjong-score-role.winner')?.textContent).toBe('胡牌');
   });
 });
 
@@ -199,6 +210,8 @@ describe('MahjongGameView discard interaction', () => {
     const { container } = render(<MahjongGameView snapshot={snapshot} onCommand={onCommand} onLeave={vi.fn()} testMode={false} />);
     const table = container.querySelector('.mahjong-table')!;
     Object.defineProperty(table, 'getBoundingClientRect', { value: () => ({ left: 0, top: 0, right: 400, bottom: 400, width: 400, height: 400, x: 0, y: 0, toJSON: () => ({}) }) });
+    const discardPile = table.querySelector('.mahjong-discard-pile')!;
+    Object.defineProperty(discardPile, 'getBoundingClientRect', { value: () => ({ left: 100, top: 100, right: 300, bottom: 300, width: 200, height: 200, x: 100, y: 100, toJSON: () => ({}) }) });
     const tile = container.querySelector('.mahjong-own-hand .mahjong-face')!;
 
     fireEvent(tile, new MouseEvent('pointerdown', { bubbles: true, clientX: 20, clientY: 320 }));
@@ -206,6 +219,12 @@ describe('MahjongGameView discard interaction', () => {
     fireEvent(tile, new MouseEvent('pointerup', { bubbles: true, clientX: 190, clientY: 180 }));
 
     expect(onCommand).toHaveBeenCalledWith('discard', { tileId: hand[0]!.id });
+    onCommand.mockClear();
+    const nextTile = container.querySelectorAll('.mahjong-own-hand .mahjong-face')[1]!;
+    fireEvent(nextTile, new MouseEvent('pointerdown', { bubbles: true, clientX: 20, clientY: 320 }));
+    fireEvent(nextTile, new MouseEvent('pointermove', { bubbles: true, clientX: 45, clientY: 280 }));
+    fireEvent(nextTile, new MouseEvent('pointerup', { bubbles: true, clientX: 50, clientY: 50 }));
+    expect(onCommand).not.toHaveBeenCalled();
   });
 });
 

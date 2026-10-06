@@ -93,6 +93,7 @@ export function App({ transport: providedTransport }: { readonly transport?: Cli
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const interactionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [interactionEffect, setInteractionEffect] = useState<RoomInteractionEffect | null>(null);
+  const isInRoom = Boolean(snapshot);
 
   const consumeSnapshot = useCallback((next: GameSnapshot) => {
     const previous = previousSnapshot.current;
@@ -128,9 +129,38 @@ export function App({ transport: providedTransport }: { readonly transport?: Cli
   useEffect(() => transport.subscribe(consumeSnapshot), [transport, consumeSnapshot]);
   useEffect(() => transport.onReplaced(() => setError('该会话已在其他页面接管')), [transport]);
   useLayoutEffect(() => {
-    document.body.classList.toggle('room-landscape-active', Boolean(snapshot));
-    return () => document.body.classList.remove('room-landscape-active');
-  }, [snapshot]);
+    const body = document.body;
+    body.classList.toggle('room-landscape-active', isInRoom);
+
+    const syncRoomOrientation = () => {
+      const deviceScreen = window.screen;
+      const reportedOrientation = deviceScreen.orientation?.type;
+      const isPortrait = reportedOrientation
+        ? reportedOrientation.startsWith('portrait')
+        : deviceScreen.width <= deviceScreen.height;
+      const forceLandscape = isInRoom && deviceScreen.width > 0 && deviceScreen.width <= 760 && isPortrait;
+      body.classList.toggle('force-mobile-landscape', forceLandscape);
+      if (forceLandscape) {
+        body.style.setProperty('--room-viewport-width', `${window.innerWidth}px`);
+        body.style.setProperty('--room-viewport-height', `${window.innerHeight}px`);
+      } else {
+        body.style.removeProperty('--room-viewport-width');
+        body.style.removeProperty('--room-viewport-height');
+      }
+    };
+    const onDeviceOrientationChange = () => window.requestAnimationFrame(syncRoomOrientation);
+
+    syncRoomOrientation();
+    window.addEventListener('orientationchange', onDeviceOrientationChange);
+    window.screen.orientation?.addEventListener('change', onDeviceOrientationChange);
+    return () => {
+      body.classList.remove('room-landscape-active', 'force-mobile-landscape');
+      body.style.removeProperty('--room-viewport-width');
+      body.style.removeProperty('--room-viewport-height');
+      window.removeEventListener('orientationchange', onDeviceOrientationChange);
+      window.screen.orientation?.removeEventListener('change', onDeviceOrientationChange);
+    };
+  }, [isInRoom]);
   useEffect(() => () => {
     if (noticeTimer.current) clearTimeout(noticeTimer.current);
     if (interactionTimer.current) clearTimeout(interactionTimer.current);

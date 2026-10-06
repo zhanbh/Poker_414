@@ -82,9 +82,14 @@ export function RoomChat({ messages, members, ownSeat, onSend, enableVoice = fal
       <button type="button" className="room-chat-toggle" onClick={() => setCollapsed((value) => !value)} aria-expanded={!collapsed}>
         {collapsed ? '💬 聊天' : '收起聊天'}
       </button>
+      {collapsed && enableVoice ? <button type="button" className="room-chat-voice-launch" aria-label="打开快捷语音" onClick={() => setCollapsed(false)}>🎙 语音</button> : null}
       {!collapsed ? (
         <section className="room-chat" aria-label="房间聊天">
           <div className="room-chat-heading"><h2>房间聊天</h2><span>仅在本房间保留</span></div>
+          {enableVoice ? <div className="room-chat-voice" aria-label="固定语音">
+            <div className="room-chat-voice-heading"><strong>快捷语音 · 点按即发送</strong><button type="button" onClick={() => setVoiceMuted((value) => !value)} aria-label={voiceMuted ? '开启语音播放' : '静音固定语音'}>{voiceMuted ? '🔇 已静音' : '🔊 声音开'}</button></div>
+            <div className="room-chat-voice-options">{ROOM_VOICE_PHRASES.map((phrase) => <button type="button" key={phrase.id} disabled={sending} onClick={() => void send({ kind: 'voice', voiceId: phrase.id }).catch(() => undefined)}>{phrase.text}</button>)}</div>
+          </div> : null}
           <div ref={messagesRef} className="room-chat-messages" aria-live="polite">
             {messages.length === 0 ? <p className="room-chat-empty">还没有消息，打个招呼吧</p> : messages.map((message) => (
               <div className={`room-chat-message ${message.kind}`} key={message.id}>
@@ -94,10 +99,6 @@ export function RoomChat({ messages, members, ownSeat, onSend, enableVoice = fal
               </div>
             ))}
           </div>
-          {enableVoice ? <div className="room-chat-voice" aria-label="固定语音">
-            <div className="room-chat-voice-heading"><strong>快捷语音</strong><button type="button" onClick={() => setVoiceMuted((value) => !value)} aria-label={voiceMuted ? '开启语音播放' : '静音固定语音'}>{voiceMuted ? '🔇 已静音' : '🔊 声音开'}</button></div>
-            <div className="room-chat-voice-options">{ROOM_VOICE_PHRASES.map((phrase) => <button type="button" key={phrase.id} disabled={sending} onClick={() => void send({ kind: 'voice', voiceId: phrase.id }).catch(() => undefined)}>{phrase.text}</button>)}</div>
-          </div> : null}
           <div className="room-chat-targets">
             <span className="room-chat-target-label">选择玩家发送互动</span>
             <p className="room-chat-target-hint">也可以直接点击牌桌上的玩家卡片</p>

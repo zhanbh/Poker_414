@@ -13,6 +13,14 @@ describe('房间聊天侧栏', () => {
     fireEvent.click(screen.getByRole('button', { name: '静音固定语音' }));
     expect(screen.getByRole('button', { name: '开启语音播放' })).toBeInTheDocument();
   });
+  it('收起聊天时仍提供清晰可见的快捷语音入口', () => {
+    render(<RoomChat messages={[]} members={[]} onSend={vi.fn()} enableVoice />);
+    fireEvent.click(screen.getByRole('button', { name: '收起聊天' }));
+    expect(screen.getByRole('button', { name: '打开快捷语音' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '打开快捷语音' }));
+    expect(screen.getByLabelText('固定语音')).toBeInTheDocument();
+    expect(screen.getByText('快捷语音 · 点按即发送')).toBeInTheDocument();
+  });
   it('可以收起和展开，并从聊天侧栏给玩家发送互动', async () => {
     const onSend = vi.fn().mockResolvedValue(undefined);
     render(

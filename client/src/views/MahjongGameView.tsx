@@ -12,7 +12,7 @@ function tileClass(tile: MahjongTile): string {
   return `honor dragon-${tile.rank}`;
 }
 
-function TileFace({ tile, selected = false, listenOption = false, pending = false, drawn = false, onClick, onPointerDown, onPointerMove, onPointerUp }: {
+function TileFace({ tile, selected = false, listenOption = false, pending = false, drawn = false, onClick, onPointerDown, onPointerMove, onPointerUp, onPointerCancel }: {
   readonly tile: MahjongTile;
   readonly selected?: boolean;
   readonly listenOption?: boolean;
@@ -22,13 +22,14 @@ function TileFace({ tile, selected = false, listenOption = false, pending = fals
   readonly onPointerDown?: (event: PointerEvent<HTMLButtonElement>) => void;
   readonly onPointerMove?: (event: PointerEvent<HTMLButtonElement>) => void;
   readonly onPointerUp?: (event: PointerEvent<HTMLButtonElement>) => void;
+  readonly onPointerCancel?: () => void;
 }) {
   const row = tile.suit === 'dots' ? 0 : tile.suit === 'bamboo' ? 1 : tile.suit === 'characters' ? 2 : 3;
   const column = typeof tile.rank === 'number' ? tile.rank - 1 : HONOR_SPRITE_COLUMNS[tile.rank];
   const face = <span className="mahjong-face-art" aria-hidden="true"><img src="/assets/mahjong-tiles.png" alt="" draggable={false} style={{ left: `${-column * 100}%`, top: `${-row * 100}%` }} /></span>;
   const className = `mahjong-face ${tileClass(tile)}${selected ? ' selected' : ''}${listenOption ? ' listen-option' : ''}${pending ? ' pending-discard' : ''}${drawn ? ' drawn' : ''}`;
   return onClick
-    ? <button type="button" className={className} onClick={onClick} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} aria-label={tile.label}>{face}</button>
+    ? <button type="button" className={className} onClick={onClick} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel} aria-label={tile.label}>{face}</button>
     : <span className={className} aria-label={tile.label}>{face}</span>;
 }
 
@@ -82,7 +83,7 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode }: {
   }, [snapshot.public.chat]);
   useEffect(() => () => { if (voiceBubbleTimerRef.current) clearTimeout(voiceBubbleTimerRef.current); }, []);
   const pointerStartRef = useRef<{ tileId: string; x: number; y: number; moved: boolean } | null>(null);
-  const suppressTileClickRef = useRef(false);
+  const suppressTileClickUntilRef = useRef(0);
   const lastTileTapRef = useRef<{ tileId: string; at: number } | null>(null);
   const ownSeat = snapshot.private.seat;
   const isSpectator = Boolean(snapshot.private.spectator);
@@ -115,7 +116,7 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode }: {
     setSelectedTileId(null);
   };
   const handleTileClick = (tileId: string) => {
-    if (suppressTileClickRef.current) { suppressTileClickRef.current = false; return; }
+    if (Date.now() < suppressTileClickUntilRef.current) { suppressTileClickUntilRef.current = 0; return; }
     const now = Date.now();
     if (lastTileTapRef.current?.tileId === tileId && now - lastTileTapRef.current.at <= 300 && availableActions.includes('discard')) {
       discardTile(tileId);
@@ -138,7 +139,7 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode }: {
   const handleTilePointerMove = (event: PointerEvent<HTMLButtonElement>) => {
     const start = pointerStartRef.current;
     if (!start) return;
-    if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 12) {
+    if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 18) {
       start.moved = true;
       setDraggingTileId(start.tileId);
     }
@@ -148,11 +149,24 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode }: {
     pointerStartRef.current = null;
     setDraggingTileId(null);
     if (!start?.moved) return;
-    const bounds = tableRef.current?.getBoundingClientRect();
-    if (bounds && event.clientX >= bounds.left && event.clientX <= bounds.right && event.clientY >= bounds.top && event.clientY <= bounds.bottom) {
-      suppressTileClickRef.current = true;
+    suppressTileClickUntilRef.current = Date.now() + 400;
+    const table = tableRef.current;
+    const bounds = table?.getBoundingClientRect();
+    const dropZone = table?.querySelector('.mahjong-discard-pile')?.getBoundingClientRect();
+    const insideDropZone = Boolean(dropZone
+      && event.clientX >= dropZone.left && event.clientX <= dropZone.right
+      && event.clientY >= dropZone.top && event.clientY <= dropZone.bottom);
+    if (bounds && insideDropZone) {
+      const elementAtRelease = document.elementFromPoint?.(event.clientX, event.clientY);
+      const overControl = elementAtRelease instanceof Element
+        && Boolean(elementAtRelease.closest('.mahjong-player-card, .mahjong-seat-melds, .mahjong-action-dock, .mahjong-table-settlement, .room-chat-shell'));
+      if (overControl) return;
       discardTile(start.tileId);
     }
+  };
+  const handleTilePointerCancel = () => {
+    pointerStartRef.current = null;
+    setDraggingTileId(null);
   };
   const chiOptions = snapshot.private.chiOptions ?? [];
   const settlement = snapshot.public.settlement;
@@ -179,7 +193,16 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode }: {
       .map((transfer) => `收 ${players.get(transfer.from)?.nickname ?? transfer.from} ${transferDetail(transfer)}`);
     const paid = transfers.filter((transfer) => transfer.from === player.seat)
       .map((transfer) => `付 ${players.get(transfer.to)?.nickname ?? transfer.to} ${transferDetail(transfer)}`);
-    return { seat: player.seat, nickname: player.nickname, before: player.score - change, after: player.score, change, flow: [...received, ...paid].join(' · ') || '无积分变化' };
+    return {
+      seat: player.seat,
+      nickname: player.nickname,
+      before: player.score - change,
+      after: player.score,
+      change,
+      isWinner: settlement.winnerSeat === player.seat,
+      isDiscarder: settlement.payingSeat === player.seat,
+      flow: [...received, ...paid].join(' · ') || '无积分变化',
+    };
   }) : [];
   const revealedHands = new Map([
     ...(snapshot.private.opponentHands ?? []),
@@ -280,7 +303,7 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode }: {
             {!isOwnSeat && visibleHand ? <div className="mahjong-revealed-hand" aria-label={`${player.nickname}的明牌`}>{visibleHand.map((tile) => <TileFace tile={tile} key={tile.id} />)}</div> : null}
             {!isOwnSeat && !visibleHand && player.handCount > 0 ? <div className="mahjong-concealed-hand" aria-label={`${player.nickname}的未公开手牌`}>{Array.from({ length: player.handCount }, (_, index) => <TileEdge key={`${seat}-hand-${index}`} />)}</div> : null}
             {isOwnSeat ? <>
-              <div className="mahjong-own-hand" aria-label="我的手牌">{displayHand.map((tile) => <TileFace key={tile.id} tile={tile} drawn={tile.id === drawnTileId} selected={tile.id === selectedTileId} listenOption={listenTileIds.has(tile.id)} pending={tile.id === draggingTileId} onClick={isMyTurn && !snapshot.private.isListening ? () => handleTileClick(tile.id) : undefined} onPointerDown={isMyTurn && !snapshot.private.isListening ? (event) => handleTilePointerDown(tile.id, event) : undefined} onPointerMove={isMyTurn && !snapshot.private.isListening ? handleTilePointerMove : undefined} onPointerUp={isMyTurn && !snapshot.private.isListening ? handleTilePointerUp : undefined} />)}</div>
+              <div className="mahjong-own-hand" aria-label="我的手牌">{displayHand.map((tile) => <TileFace key={tile.id} tile={tile} drawn={tile.id === drawnTileId} selected={tile.id === selectedTileId} listenOption={listenTileIds.has(tile.id)} pending={tile.id === draggingTileId} onClick={isMyTurn && !snapshot.private.isListening ? () => handleTileClick(tile.id) : undefined} onPointerDown={isMyTurn && !snapshot.private.isListening ? (event) => handleTilePointerDown(tile.id, event) : undefined} onPointerMove={isMyTurn && !snapshot.private.isListening ? handleTilePointerMove : undefined} onPointerUp={isMyTurn && !snapshot.private.isListening ? handleTilePointerUp : undefined} onPointerCancel={isMyTurn && !snapshot.private.isListening ? handleTilePointerCancel : undefined} />)}</div>
               {listenPreview ? <div className="mahjong-listen-preview" role="status"><strong>{snapshot.private.isListening ? '已听牌' : showPostDiscardListenDock ? '已出牌，可选择听牌' : '打出此牌可听'}</strong><span>胡：</span>{listenPreview.waits.map((tile) => <TileFace key={tile.id} tile={tile} />)}{snapshot.private.isListening && snapshot.private.baoTile ? <span className="mahjong-bao-preview"><b>宝</b><TileFace tile={snapshot.private.baoTile} /></span> : null}</div> : null}
             </> : null}
           </article>;
@@ -296,7 +319,7 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode }: {
         {settlement ? <section className="mahjong-settlement mahjong-table-settlement" role="status" aria-label="本局结算">
           <h2>本局结束</h2>
           <p>{settlementDescription}</p>
-          <div className="mahjong-score-ledger" aria-label="本局积分流水">{scoreRows.map((row) => <div className={`mahjong-score-row${row.seat === ownSeat ? ' mine' : ''}`} key={row.seat}><strong>{row.nickname}{row.seat === ownSeat ? '（我）' : ''}</strong><span>{row.before} → {row.after}</span><b className={row.change >= 0 ? 'positive' : 'negative'}>{row.change > 0 ? '+' : ''}{row.change} 分</b><small>{row.flow}</small></div>)}</div>
+          <div className="mahjong-score-ledger" aria-label="本局积分流水">{scoreRows.map((row) => <div className={`mahjong-score-row${row.seat === ownSeat ? ' mine' : ''}`} key={row.seat}><strong>{row.nickname}{row.seat === ownSeat ? '（我）' : ''}{row.isWinner ? <span className="mahjong-score-role winner">胡牌</span> : null}{row.isDiscarder ? <span className="mahjong-score-role discarder">点炮</span> : null}</strong><span>{row.before} → {row.after}</span><b className={row.change >= 0 ? 'positive' : 'negative'}>{row.change > 0 ? '+' : ''}{row.change} 分</b><small>{row.flow}</small></div>)}</div>
           {settlement.type !== 'draw' && snapshot.public.hostSeat === ownSeat ? <button type="button" onClick={() => action('next-hand')}>开始下一局</button> : settlement.type !== 'draw' ? <small>等待房主开始下一局</small> : <small>即将开始下一局</small>}
         </section> : null}
         {animationStage ? <div className={`mahjong-deal-overlay ${animationStage}`} role="status"><div className="mahjong-dice-cube">{snapshot.public.diceRoll?.join(' · ') ?? '掷骰'}</div><strong>{animationStage === 'dice' ? '庄家掷骰' : '正在发牌'}</strong>{animationStage === 'deal' ? <div className="dealing-tiles"><TileBack /><TileBack /><TileBack /><TileBack /></div> : null}</div> : null}

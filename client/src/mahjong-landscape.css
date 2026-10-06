@@ -28,9 +28,11 @@
   .mahjong-game .mahjong-seat-bottom .mahjong-own-hand { right: 16%; bottom: 1%; left: 17%; gap: 1px; }
   .mahjong-game .mahjong-seat-bottom .mahjong-own-hand .mahjong-face { width: clamp(25px, 4.2vw, 37px); height: clamp(37px, 11svh, 50px); }
   .mahjong-game .mahjong-seat-bottom .mahjong-seat-melds { bottom: 17%; left: 17%; right: 18%; max-height: 11%; }
+  .mahjong-game .mahjong-seat-left .mahjong-seat-melds, .mahjong-game .mahjong-seat-right .mahjong-seat-melds { top: 63%; bottom: auto; max-width: 19%; max-height: 25%; overflow: auto; }
   .mahjong-game .mahjong-seat-bottom .mahjong-listen-preview { right: 17%; bottom: 21%; left: 17%; max-height: 15%; overflow: auto; }
-  .mahjong-game .mahjong-action-dock { right: 1.5%; bottom: 8%; max-width: 15%; gap: 3px; }
+  .mahjong-game .mahjong-action-dock { top: 8%; right: 1.5%; bottom: auto; max-width: 15%; gap: 3px; }
   .mahjong-game .mahjong-action-circle { flex-basis: 30px; width: 30px; height: 30px; font-size: .65rem; }
+  .mahjong-game .mahjong-chi-picker { top: calc(100% + 6px); bottom: auto; }
   .mahjong-game .mahjong-wall-top { top: 20%; right: 18%; left: 18%; }
   .mahjong-game .mahjong-wall-bottom { right: 18%; bottom: 20%; left: 18%; }
   .mahjong-game .mahjong-wall-left, .mahjong-game .mahjong-wall-right { top: 20%; bottom: 27%; }

@@ -83,4 +83,21 @@ describe('登录路径', () => {
     expect(localStorage.getItem('414.sessionToken')).toBeNull();
     expect(screen.getByRole('status')).toHaveTextContent('每个标签页都是独立玩家');
   });
+
+  it('暂时隐藏德州扑克入口，并将旧保存选择回退到 414', () => {
+    localStorage.setItem('414.selectedGame', 'texas');
+    render(<App transport={{
+      login: async () => ({ sessionToken: 'session-a', playerId: 'player-a' }),
+      join: async () => snapshot('lobby'),
+      subscribe: () => () => undefined,
+      onReplaced: () => () => undefined,
+      activity: () => undefined,
+      command: async () => ({ ok: true as const, snapshot: snapshot('lobby') }),
+      leave: async () => undefined,
+    }} />);
+
+    expect(screen.getByText('414 内测')).toBeInTheDocument();
+    expect(screen.queryByText('德州扑克')).toBeNull();
+    expect(localStorage.getItem('414.selectedGame')).toBe('414');
+  });
 });

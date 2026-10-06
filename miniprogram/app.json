@@ -3,8 +3,6 @@
     "pages/access/index",
     "pages/lobby/index",
     "pages/game/index",
-    "pages/texas-lobby/index",
-    "pages/texas-game/index",
     "pages/mahjong-lobby/index",
     "pages/mahjong-game/index"
   ],

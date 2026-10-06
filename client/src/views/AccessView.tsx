@@ -24,7 +24,7 @@ export function AccessView({ onSubmit, error, busy, testMode, gameId = '414', on
           >
             <strong>{game.name}</strong>
             <span>{game.description}</span>
-            <small>{game.id === 'texas' ? '最多 8 人入座 · 牌局中后加入下一局；优先占用空位' : game.maxPlayers + ' 人桌 · 满员后自动观战'}</small>
+            <small>{game.maxPlayers} 人桌 · 满员后自动观战</small>
           </button>
         ))}
       </div>

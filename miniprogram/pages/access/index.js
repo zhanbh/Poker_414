@@ -1,4 +1,4 @@
-const { getServerOrigin } = require('../../utils/config');
+const { CLOUDRUN_SERVICE } = require('../../utils/config');
 const { GAME_SELECTIONS, isTexasSnapshot, isMahjongSnapshot, storageKey } = require('../../utils/games');
 
 Page({
@@ -9,16 +9,16 @@ Page({
     nickname: '',
     busy: false,
     error: '',
-    serverOrigin: '',
+    cloudRunService: CLOUDRUN_SERVICE,
   },
 
   onLoad() {
     this.app = getApp();
     this.transport = this.app.getTransport();
     const savedGame = wx.getStorageSync('414.selectedGame');
-    const gameId = savedGame === 'texas' || savedGame === 'mahjong' ? savedGame : '414';
+    const gameId = savedGame === 'mahjong' ? savedGame : '414';
     this.app.setGame(gameId);
-    this.setData({ gameId, serverOrigin: getServerOrigin() });
+    this.setData({ gameId });
     this.unsubscribe = this.transport.subscribe((snapshot) => this.onSnapshot(snapshot));
     this.restoreSession();
   },
@@ -29,7 +29,7 @@ Page({
 
   onGameChange(event) {
     const selectedGame = event.currentTarget.dataset.gameId;
-    const gameId = selectedGame === 'texas' || selectedGame === 'mahjong' ? selectedGame : '414';
+    const gameId = selectedGame === 'mahjong' ? selectedGame : '414';
     this.app.setGame(gameId);
     this.transport.selectGame(gameId);
     this.setData({ gameId, error: '' });
@@ -44,7 +44,7 @@ Page({
   },
 
   roomId() {
-    return this.data.gameId === 'texas' ? 'texas' : this.data.gameId === 'mahjong' ? 'mahjong' : '414';
+    return this.data.gameId === 'mahjong' ? 'mahjong' : '414';
   },
 
   async restoreSession() {
@@ -99,12 +99,16 @@ Page({
   },
 
   enterSnapshot(snapshot) {
+    if (isTexasSnapshot(snapshot)) {
+      this.transport.close();
+      this.app.setGame('414');
+      wx.showToast({ title: '德州扑克入口暂未开放', icon: 'none' });
+      wx.reLaunch({ url: '/pages/access/index' });
+      return;
+    }
     this.app.setSnapshot(snapshot);
-    const texas = isTexasSnapshot(snapshot);
     const mahjong = isMahjongSnapshot(snapshot);
-    const page = texas
-      ? (snapshot.public.phase === 'lobby' ? '/pages/texas-lobby/index' : '/pages/texas-game/index')
-      : mahjong
+    const page = mahjong
         ? (snapshot.public.phase === 'lobby' ? '/pages/mahjong-lobby/index' : '/pages/mahjong-game/index')
       : (snapshot.public.phase === 'lobby' ? '/pages/lobby/index' : '/pages/game/index');
     wx.reLaunch({ url: page });

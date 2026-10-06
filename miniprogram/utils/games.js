@@ -1,6 +1,5 @@
 const GAME_SELECTIONS = [
   { id: '414', name: '414', description: '四人私房扑克牌', maxPlayers: 4 },
-  { id: 'texas', name: '德州扑克', description: '两人以上即可开局的无限注德州扑克', maxPlayers: 8 },
   { id: 'mahjong', name: '麻将', description: '四人大众麻将基础玩法', maxPlayers: 4 },
 ];
 

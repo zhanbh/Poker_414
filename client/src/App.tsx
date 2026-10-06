@@ -44,7 +44,8 @@ function storageKey(gameId: GameId, kind: 'sessionToken' | 'nickname'): string {
 
 function storedGame(storage: Storage): GameId {
   const value = storage.getItem(GAME_KEY);
-  return value === 'texas' || value === 'mahjong' ? value : '414';
+  if (value === 'texas') storage.setItem(GAME_KEY, '414');
+  return value === 'mahjong' ? value : '414';
 }
 
 function disconnectedNames(previous: GameSnapshot | null, next: GameSnapshot): string[] {

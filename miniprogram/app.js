@@ -1,4 +1,5 @@
 const { MiniProgramTransport } = require('./utils/transport');
+const { CLOUDBASE_ENV_ID } = require('./utils/config');
 const { storageKey } = require('./utils/games');
 
 App({
@@ -9,6 +10,14 @@ App({
   },
 
   onLaunch() {
+    if (wx.cloud) {
+      wx.cloud.init({
+        env: CLOUDBASE_ENV_ID,
+        traceUser: true,
+      });
+    } else {
+      console.error('当前微信基础库不支持 CloudBase，请升级后重试');
+    }
     this.globalData.transport = new MiniProgramTransport();
   },
 
@@ -18,7 +27,7 @@ App({
   },
 
   setGame(gameId) {
-    this.globalData.gameId = gameId === 'texas' || gameId === 'mahjong' ? gameId : '414';
+    this.globalData.gameId = gameId === 'mahjong' ? gameId : '414';
     this.getTransport().selectGame(this.globalData.gameId);
     wx.setStorageSync('414.selectedGame', this.globalData.gameId);
   },

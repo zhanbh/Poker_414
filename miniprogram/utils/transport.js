@@ -1,13 +1,17 @@
-const { getSocketUrl } = require('./config');
+const { CLOUDRUN_SERVICE, SOCKET_PATH } = require('./config');
 const { EVENTS, requestId } = require('./protocol');
 
 class MiniProgramTransport {
   constructor(options = {}) {
-    this.url = options.url || getSocketUrl();
+    this.service = options.service || CLOUDRUN_SERVICE;
+    this.path = options.path || SOCKET_PATH;
     this.gameId = '414';
     this.socketTask = null;
     this.opened = false;
     this.connecting = null;
+    this.cancelConnect = null;
+    this.connectionGeneration = 0;
+    this.keepAliveTimer = null;
     this.pending = new Map();
     this.snapshotListeners = new Set();
     this.replacedListeners = new Set();
@@ -15,45 +19,72 @@ class MiniProgramTransport {
   }
 
   selectGame(gameId) {
-    this.gameId = gameId === 'texas' || gameId === 'mahjong' ? gameId : '414';
+    this.gameId = gameId === 'mahjong' ? gameId : '414';
   }
 
   connect() {
     if (this.opened) return Promise.resolve();
     if (this.connecting) return this.connecting;
+    if (!wx.cloud || typeof wx.cloud.connectContainer !== 'function') {
+      return Promise.reject(new Error('当前微信基础库不支持 CloudBase WebSocket，请升级后重试'));
+    }
 
-    this.connecting = new Promise((resolve, reject) => {
+    const generation = this.connectionGeneration;
+    let connectionPromise;
+    let cancel;
+    connectionPromise = new Promise((resolve, reject) => {
       let settled = false;
       const fail = (message) => {
         if (settled) return;
         settled = true;
-        this.connecting = null;
+        if (this.connecting === connectionPromise) this.connecting = null;
+        if (this.cancelConnect === cancel) this.cancelConnect = null;
         reject(new Error(message || '实时连接失败'));
       };
 
-      this.socketTask = wx.connectSocket({
-        url: this.url,
-        success: () => undefined,
-        fail: (error) => fail(error?.errMsg || '实时连接失败'),
-      });
+      cancel = () => fail('实时连接已关闭');
+      this.cancelConnect = cancel;
 
-      this.socketTask.onOpen(() => {
-        this.opened = true;
-        this.connecting = null;
-        settled = true;
-        resolve();
-      });
-      this.socketTask.onMessage((message) => this.handleMessage(message.data));
-      this.socketTask.onError((error) => {
-        if (!settled) fail(error?.errMsg || '实时连接失败');
-      });
-      this.socketTask.onClose(() => {
-        this.opened = false;
-        this.connecting = null;
-        this.rejectPending(new Error('实时连接已断开'));
+      Promise.resolve().then(() => wx.cloud.connectContainer({
+        service: this.service,
+        path: this.path,
+      })).then(({ socketTask } = {}) => {
+        if (!socketTask) {
+          fail('CloudBase 未返回 WebSocket 连接，请检查云托管服务配置');
+          return;
+        }
+        if (generation !== this.connectionGeneration) {
+          socketTask.close();
+          fail('实时连接已关闭');
+          return;
+        }
+
+        this.socketTask = socketTask;
+        socketTask.onOpen(() => {
+          this.opened = true;
+          if (this.connecting === connectionPromise) this.connecting = null;
+          if (this.cancelConnect === cancel) this.cancelConnect = null;
+          settled = true;
+          resolve();
+        });
+        socketTask.onMessage((message) => this.handleMessage(message.data));
+        socketTask.onError((error) => {
+          if (!settled) fail(error?.errMsg || '实时连接失败');
+        });
+        socketTask.onClose(() => {
+          this.opened = false;
+          this.stopKeepAlive();
+          if (this.socketTask === socketTask) this.socketTask = null;
+          if (!settled) fail('实时连接已断开');
+          else if (this.connecting === connectionPromise) this.connecting = null;
+          this.rejectPending(new Error('实时连接已断开'));
+        });
+      }).catch((error) => {
+        fail(error?.errMsg || error?.message || 'CloudBase WebSocket 连接失败');
       });
     });
-    return this.connecting;
+    this.connecting = connectionPromise;
+    return connectionPromise;
   }
 
   handleMessage(raw) {
@@ -110,7 +141,10 @@ class MiniProgramTransport {
 
   login(inviteCode, sessionToken) {
     const payload = sessionToken ? { sessionToken, gameId: this.gameId } : { inviteCode, gameId: this.gameId };
-    return this.send(EVENTS.login, payload);
+    return this.send(EVENTS.login, payload).then((result) => {
+      this.startKeepAlive();
+      return result;
+    });
   }
 
   join(nickname, roomId) {
@@ -135,6 +169,19 @@ class MiniProgramTransport {
     void this.send(EVENTS.activity, {}).catch(() => undefined);
   }
 
+  startKeepAlive() {
+    this.stopKeepAlive();
+    this.keepAliveTimer = setInterval(() => {
+      if (this.opened) void this.send(EVENTS.activity, {}).catch(() => undefined);
+    }, 25_000);
+  }
+
+  stopKeepAlive() {
+    if (!this.keepAliveTimer) return;
+    clearInterval(this.keepAliveTimer);
+    this.keepAliveTimer = null;
+  }
+
   subscribe(listener) {
     this.snapshotListeners.add(listener);
     return () => this.snapshotListeners.delete(listener);
@@ -146,11 +193,15 @@ class MiniProgramTransport {
   }
 
   close() {
+    this.connectionGeneration += 1;
+    this.cancelConnect?.();
+    this.stopKeepAlive();
     this.rejectPending(new Error('实时连接已关闭'));
     this.opened = false;
     this.connecting = null;
-    this.socketTask?.close();
+    const socketTask = this.socketTask;
     this.socketTask = null;
+    socketTask?.close();
   }
 }
 

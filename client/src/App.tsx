@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   AnyCommandEnvelope,
   CommandEnvelope,
@@ -127,6 +127,10 @@ export function App({ transport: providedTransport }: { readonly transport?: Cli
 
   useEffect(() => transport.subscribe(consumeSnapshot), [transport, consumeSnapshot]);
   useEffect(() => transport.onReplaced(() => setError('该会话已在其他页面接管')), [transport]);
+  useLayoutEffect(() => {
+    document.body.classList.toggle('room-landscape-active', Boolean(snapshot));
+    return () => document.body.classList.remove('room-landscape-active');
+  }, [snapshot]);
   useEffect(() => () => {
     if (noticeTimer.current) clearTimeout(noticeTimer.current);
     if (interactionTimer.current) clearTimeout(interactionTimer.current);

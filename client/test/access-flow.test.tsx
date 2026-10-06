@@ -20,6 +20,7 @@ describe('登录路径', () => {
   beforeEach(() => {
     localStorage.clear();
     sessionStorage.clear();
+    document.body.classList.remove('room-landscape-active');
     window.history.replaceState({}, '', '/');
   });
 
@@ -38,16 +39,19 @@ describe('登录路径', () => {
     };
     render(<App transport={transport} />);
     expect(screen.queryByText('开启单机多标签测试模式')).toBeNull();
+    expect(document.body.classList.contains('room-landscape-active')).toBe(false);
 
     fireEvent.change(screen.getByLabelText('邀请码'), { target: { value: 'wrong' } });
     fireEvent.change(screen.getByLabelText('昵称'), { target: { value: '甲' } });
     fireEvent.click(screen.getByRole('button', { name: '进入房间' }));
     expect(await screen.findByText('邀请码错误')).toBeInTheDocument();
     expect(screen.getByText('414 内测')).toBeInTheDocument();
+    expect(document.body.classList.contains('room-landscape-active')).toBe(false);
 
     fireEvent.change(screen.getByLabelText('邀请码'), { target: { value: 'inner-414' } });
     fireEvent.click(screen.getByRole('button', { name: '进入房间' }));
     await waitFor(() => expect(screen.getByText('等待开局')).toBeInTheDocument());
+    expect(document.body.classList.contains('room-landscape-active')).toBe(true);
     expect(localStorage.getItem('414.sessionToken')).toBe('session-a');
   });
 

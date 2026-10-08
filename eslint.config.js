@@ -45,4 +45,15 @@ module.exports = tseslint.config(
       },
     },
   },
+  {
+    files: ['minigame/**/*.js'],
+    languageOptions: {
+      globals: {
+        wx: 'readonly',
+        describe: 'readonly',
+        expect: 'readonly',
+        it: 'readonly',
+      },
+    },
+  },
 );

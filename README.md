@@ -46,6 +46,12 @@ npm run dev
 
 使用微信开发者工具导入 miniprogram/ 目录即可查看页面。详细导入、AppID、服务地址和 HTTPS/WSS 配置说明见 miniprogram/README.md。当前默认地址为 http://localhost:3000，真机测试前需要改成可访问的 HTTPS 地址，并在微信后台配置合法 socket 域名。
 
+## 微信小游戏端（麻将）
+
+标准微信小游戏客户端位于 `minigame/`，与上述小程序工程完全分开，使用 `compileType: game` 和 `game.js` Canvas 入口，不会修改 H5 或 `miniprogram/`。当前移植玩法为麻将，登录入口启动为竖屏，加入房间后动态切换横屏，退出后恢复竖屏，并复用同一个 `/414-ws` 房间服务。开发者工具中应直接导入 `minigame/` 目录。CloudBase/WSS 连接与小游戏合法 socket 域名配置要求见 [minigame/README.md](minigame/README.md)。
+
+小游戏客户端尚需在微信开发者工具模拟器和真机验证后才能上传体验版；微信小游戏代码不由现有 ECS 网站 CI/CD 自动发布。
+
 ### 单机四人测试模式
 
 如果只有一个 Chrome，可以使用同一个浏览器的 4 个标签页测试 414 或麻将：

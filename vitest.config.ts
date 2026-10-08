@@ -10,6 +10,7 @@ export default defineConfig({
       'server/test/**/*.test.ts',
       'client/test/**/*.test.tsx',
       'tests/**/*.test.ts',
+      'minigame/test/**/*.test.js',
     ],
     passWithNoTests: false,
   },

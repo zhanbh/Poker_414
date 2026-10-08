@@ -192,14 +192,16 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
       }
 
       if (event === EVENTS.join) {
-        const payload = (message.payload ?? {}) as { sessionToken?: string; nickname?: string; roomId?: string; gameId?: GameId };
+        const payload = (message.payload ?? {}) as { sessionToken?: string; nickname?: string; roomId?: string; gameId?: GameId; avatarUrl?: string };
         const sessionToken = payload.sessionToken ?? state.sessionToken;
         if (!sessionToken) throw new Error('请先登录');
         const gameId = payload.gameId === 'texas' || payload.gameId === 'mahjong'
           ? payload.gameId
           : state.gameId ?? gameIdForToken(sessionToken);
         const service = serviceFor(gameId);
-        const snapshot = service.join(sessionToken, payload.nickname ?? '', payload.roomId ?? (gameId === 'texas' ? 'texas' : gameId === 'mahjong' ? 'mahjong' : '414'));
+        const snapshot = gameId === 'mahjong'
+          ? mahjongRoomService.join(sessionToken, payload.nickname ?? '', payload.roomId ?? 'mahjong', payload.avatarUrl)
+          : service.join(sessionToken, payload.nickname ?? '', payload.roomId ?? (gameId === 'texas' ? 'texas' : '414'));
         addMiniSocket(state, sessionToken, gameId);
         acknowledgeMini(state, requestId, { ok: true, snapshot });
         sendSnapshots();
@@ -266,7 +268,7 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
       }
     });
 
-    socket.on(EVENTS.join, (payload: { sessionToken?: string; nickname?: string; roomId?: string; gameId?: GameId }, ack: unknown) => {
+    socket.on(EVENTS.join, (payload: { sessionToken?: string; nickname?: string; roomId?: string; gameId?: GameId; avatarUrl?: string }, ack: unknown) => {
       try {
         const sessionToken = payload?.sessionToken ?? socket.data.sessionToken;
         if (typeof sessionToken !== 'string') throw new Error('请先登录');
@@ -274,7 +276,9 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
           ? payload.gameId
           : socket.data.gameId ?? gameIdForToken(sessionToken);
         const service = serviceFor(gameId);
-        const snapshot = service.join(sessionToken, payload?.nickname ?? '', payload?.roomId ?? (gameId === 'texas' ? 'texas' : gameId === 'mahjong' ? 'mahjong' : '414'));
+        const snapshot = gameId === 'mahjong'
+          ? mahjongRoomService.join(sessionToken, payload?.nickname ?? '', payload?.roomId ?? 'mahjong', payload?.avatarUrl)
+          : service.join(sessionToken, payload?.nickname ?? '', payload?.roomId ?? (gameId === 'texas' ? 'texas' : '414'));
         addSocket(sessionToken, socket, gameId);
         acknowledge(ack, { ok: true, snapshot });
         sendSnapshots();

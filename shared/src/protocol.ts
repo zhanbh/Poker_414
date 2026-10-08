@@ -274,6 +274,7 @@ export interface MahjongPlayerView {
   readonly seat: MahjongSeat;
   readonly seatLabel: string;
   readonly nickname: string;
+  readonly avatarUrl?: string;
   readonly connected: boolean;
   readonly handCount: number;
   readonly score: number;

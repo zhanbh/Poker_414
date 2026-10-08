@@ -7,4 +7,5 @@ playwright-report/
 .env.*
 !.env.example
 miniprogram/project.private.config.json
+minigame/project.private.config.json
 *.log

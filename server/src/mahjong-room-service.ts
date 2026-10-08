@@ -66,6 +66,7 @@ interface MahjongPlayer {
   readonly id: string;
   readonly seat: MahjongSeat;
   nickname: string;
+  avatarUrl?: string;
   connected: boolean;
   score: number;
   isListening: boolean;
@@ -212,7 +213,7 @@ export class MahjongRoomService {
     return { sessionToken: session.sessionToken, playerId: session.playerId };
   }
 
-  join(sessionToken: string, nickname: string, roomId: string): MahjongSnapshot {
+  join(sessionToken: string, nickname: string, roomId: string, avatarUrl?: string): MahjongSnapshot {
     const session = this.sessions.get(sessionToken);
     if (roomId !== 'mahjong') throw new MahjongRoomServiceError('ROOM_NOT_FOUND', '麻将房间不存在');
     if (!isValidNickname(nickname)) throw new MahjongRoomServiceError('INVALID_NICKNAME', '昵称仅支持1–12位中文、字母、数字或下划线');
@@ -224,7 +225,7 @@ export class MahjongRoomService {
     if (this.state.phase !== 'lobby') return this.joinSpectator(sessionToken, nickname.trim());
     const seat = MAHJONG_SEATS.find((candidate) => this.state?.players[candidate] === null);
     if (!seat) return this.joinSpectator(sessionToken, nickname.trim());
-    this.addPlayer(seat, session, nickname.trim());
+    this.addPlayer(seat, session, nickname.trim(), avatarUrl);
     this.sessions.setIdentity(sessionToken, 'player', nickname.trim());
     this.sessions.touch(sessionToken, this.now());
     this.state.version += 1;
@@ -242,6 +243,7 @@ export class MahjongRoomService {
         seat: player.seat,
         seatLabel: MAHJONG_SEAT_LABELS[player.seat],
         nickname: player.nickname,
+        avatarUrl: player.avatarUrl,
         connected: player.connected,
         handCount: player.hand.length,
         score: player.score,
@@ -1145,10 +1147,10 @@ export class MahjongRoomService {
     return this.getSnapshot(sessionToken);
   }
 
-  private addPlayer(seat: MahjongSeat, session: Session, nickname: string): void {
+  private addPlayer(seat: MahjongSeat, session: Session, nickname: string, avatarUrl?: string): void {
     if (!this.state) throw new MahjongRoomServiceError('ROOM_NOT_FOUND', '麻将房间不存在');
     this.state.players[seat] = {
-      id: session.playerId, seat, nickname, connected: true, score: 1000,
+      id: session.playerId, seat, nickname, avatarUrl, connected: true, score: 1000,
       isListening: false, mustListenAfterChi: false, listenWaits: [], listenBao: null, lastDrawnTileId: null,
       hand: [], melds: [], discards: [],
     };

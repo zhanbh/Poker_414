@@ -1324,4 +1324,17 @@ describe('MahjongRoomService', () => {
     const snapshot = room.join(replacement.sessionToken, '甲', 'mahjong');
     expect(snapshot.private.seat).toBe('A');
   });
+
+  it('允许玩家入房后通过再次 join 更新授权昵称和头像', () => {
+    const room = new MahjongRoomService({ inviteCode: 'inner-414' });
+    const player = room.login('inner-414');
+    room.join(player.sessionToken, '雀友ABC12', 'mahjong');
+
+    const updated = room.join(player.sessionToken, '微信昵称', 'mahjong', 'https://avatar.example/user.png');
+    expect(updated.private.seat).toBe('A');
+    expect(updated.public.players[0]).toMatchObject({
+      nickname: '微信昵称',
+      avatarUrl: 'https://avatar.example/user.png',
+    });
+  });
 });

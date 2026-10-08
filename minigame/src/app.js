@@ -5,6 +5,27 @@ const { MahjongRenderer } = require('./renderer');
 const { gameScreen, isValidNickname, tileLabel } = require('./model');
 
 const INTERACTION_LABELS = { tomato: '🍅', water: '💦', heart: '💖', kiss: '💋' };
+const isLegacyGeneratedNickname = (nickname) => /^雀友_\d{4}$/.test(String(nickname || ''));
+function createGuestNickname() {
+  const timePart = Date.now().toString(36).slice(-2);
+  const randomPart = Math.floor(Math.random() * 36 ** 3).toString(36).padStart(3, '0');
+  return `雀友${(timePart + randomPart).toUpperCase()}`;
+}
+function normalizeWechatNickname(value) {
+  const allowed = Array.from(String(value || '').trim()).filter((character) =>
+    /^[A-Za-z0-9_〇㐀-䶿一-鿿]$/.test(character));
+  return allowed.slice(0, 12).join('');
+}
+function apiErrorText(error) {
+  if (typeof error === 'string') return error;
+  if (!error || typeof error !== 'object') return String(error || '');
+  return [error.errMsg, error.message, error.errno, error.errCode, error.err_code]
+    .filter((value) => value !== undefined && value !== null && value !== '')
+    .join(' ');
+}
+function isPrivacyGuideError(...errors) {
+  return /please go to mp to announce your privacy usage|errno\s*[:=]?\s*1026|-12034/i.test(errors.join(' '));
+}
 
 class MahjongGameApp {
   constructor(wxApi) {
@@ -19,11 +40,25 @@ class MahjongGameApp {
       screen: 'loading', loadingProgress: 0, loadingTip: '正在载入牌桌高清纹理与音效…',
       inviteCode: '', nickname: '', avatarUrl: '', chatDraft: '', error: '',
       statusMessage: '邀请码进入 · 仅供测试、学习和交流', connectionStatus: 'disconnected',
-      busy: false, chatOpen: false, selectedTileId: '', selectedTarget: null, focus: '', snapshot: null,
+      canRequestUserInfo: typeof this.wx.createUserInfoButton === 'function',
+      profileAuthorized: false, profileUpdating: false,
+      busy: false, chatOpen: false, chatReadId: '', selectedTileId: '', selectedTarget: null, focus: '', keyboardOpen: false, snapshot: null,
     };
     if (this.wx.getStorageSync) {
-      this.state.nickname = this.wx.getStorageSync(config.nicknameStorageKey) || '';
-      this.state.avatarUrl = this.wx.getStorageSync('mahjong_avatar_url') || '';
+      const savedNickname = this.wx.getStorageSync(config.nicknameStorageKey) || '';
+      if (isLegacyGeneratedNickname(savedNickname)) {
+        this.legacyNicknameSessionToken = this.wx.getStorageSync(config.sessionStorageKey) || '';
+        this.state.statusMessage = '旧版随机昵称已清除，可重新入房后授权微信资料';
+        if (this.wx.removeStorageSync) {
+          this.wx.removeStorageSync(config.nicknameStorageKey);
+          this.wx.removeStorageSync('mahjong_avatar_url');
+          this.wx.removeStorageSync(config.profileAuthorizedStorageKey);
+        }
+      } else {
+        this.state.nickname = savedNickname;
+        this.state.avatarUrl = this.wx.getStorageSync('mahjong_avatar_url') || '';
+        this.state.profileAuthorized = Boolean(savedNickname && this.wx.getStorageSync(config.profileAuthorizedStorageKey));
+      }
     }
     this.userInfoBtn = null;
     this.renderer.onAssetLoaded = () => this.draw();
@@ -68,8 +103,8 @@ class MahjongGameApp {
       this.transport.activity();
       if (this.state.screen === 'loading' || this.state.screen === 'entry') {
         this.startAnimationLoop();
-        this.updateUserInfoButton();
       }
+      this.updateUserInfoButton();
       if (this.state.snapshot && this.state.connectionStatus !== 'connected') this.scheduleRecovery(100);
     });
     this.wx.onHide(() => {
@@ -79,22 +114,27 @@ class MahjongGameApp {
       this.destroyUserInfoButton();
     });
     if (typeof this.wx.onWindowResize === 'function') this.wx.onWindowResize(() => {
+      if (this.state.keyboardOpen) return;
       this.resizeCanvas();
       this.draw();
       this.updateUserInfoButton(true);
     });
+    if (typeof this.wx.onKeyboardComplete === 'function') this.wx.onKeyboardComplete(() => {
+      this.state.focus = '';
+      this.scheduleCanvasRestoreAfterKeyboard();
+    });
     if (typeof this.wx.onDeviceOrientationChange === 'function') {
-      this.wx.onDeviceOrientationChange(() => { this.resizeCanvas(); this.draw(); });
+      this.wx.onDeviceOrientationChange(() => { this.resizeCanvas(); this.draw(); this.updateUserInfoButton(true); });
     }
     if (this.wx.cloud && typeof this.wx.cloud.init === 'function') {
       try { this.wx.cloud.init({ env: config.cloudBaseEnvId, traceUser: true }); } catch { /* Optional CloudBase runtime. */ }
     }
-    this.syncWeChatProfile();
     this.draw();
     this.startAnimationLoop();
   }
 
   draw() {
+    this.renderer.safeInsets = this.safeInsets;
     this.renderer.draw(this.state);
   }
 
@@ -169,41 +209,23 @@ class MahjongGameApp {
     this.state.loadingProgress = 100;
     this.state.screen = 'entry';
     this.draw();
-    this.updateUserInfoButton();
     this.restoreSession();
   }
 
-  syncWeChatProfile() {
-    if (typeof this.wx.getUserInfo !== 'function') return;
-    try {
-      this.wx.getUserInfo({
-        success: (res) => {
-          if (res && res.userInfo) {
-            const nick = res.userInfo.nickName;
-            const avatar = res.userInfo.avatarUrl;
-            if (nick && nick !== '微信用户') {
-              this.state.nickname = nick;
-              if (this.wx.setStorageSync) this.wx.setStorageSync(config.nicknameStorageKey, nick);
-            }
-            if (avatar) {
-              this.state.avatarUrl = avatar;
-              if (this.wx.setStorageSync) this.wx.setStorageSync('mahjong_avatar_url', avatar);
-            }
-            this.draw();
-          }
-        },
-      });
-    } catch { /* ignore */ }
-  }
-
   updateUserInfoButton(forceRecreate = false) {
-    if (typeof this.wx.createUserInfoButton !== 'function') return;
-    if (this.state.screen !== 'entry' || this.state.busy) {
+    if (typeof this.wx.createUserInfoButton !== 'function') {
+      this.state.canRequestUserInfo = false;
+      this.destroyUserInfoButton();
+      return;
+    }
+    const shouldShowOnEntry = this.state.screen === 'entry' && Boolean(this.state.inviteCode.trim()) && !this.state.profileAuthorized;
+    if (!shouldShowOnEntry || this.state.busy || this.state.profileUpdating) {
       this.destroyUserInfoButton();
       return;
     }
     if (forceRecreate) this.destroyUserInfoButton();
     if (this.userInfoBtn) return;
+    this.authorizationButtonError = false;
     try {
       const scale = this.renderer.viewport.scale || 1;
       const vx = this.renderer.viewport.x || 0;
@@ -216,29 +238,84 @@ class MahjongGameApp {
 
       this.userInfoBtn = this.wx.createUserInfoButton({
         type: 'text',
-        text: '',
+        text: '进入麻将房间',
+        withCredentials: false,
+        lang: 'zh_CN',
         style: {
           left, top, width, height,
-          backgroundColor: '#00000000',
-          borderColor: '#00000000',
+          backgroundColor: '#e7a52d',
+          borderColor: '#fff0ba',
+          color: '#15252b',
+          textAlign: 'center',
+          fontSize: 17,
+          lineHeight: height,
+          borderRadius: 10,
         },
       });
+      if (!this.userInfoBtn || typeof this.userInfoBtn.onTap !== 'function') {
+        this.userInfoBtn = null;
+        this.state.canRequestUserInfo = false;
+        this.authorizationButtonError = true;
+        this.state.statusMessage = '微信授权按钮不可用，请重新输入邀请码后重试';
+        this.state.error = '授权控件未就绪，暂未加入房间';
+        this.draw();
+        return;
+      }
       this.userInfoBtn.onTap((res) => {
-        if (res && res.userInfo) {
-          const nick = res.userInfo.nickName;
-          const avatar = res.userInfo.avatarUrl;
-          if (nick && nick !== '微信用户') {
-            this.state.nickname = nick;
-            if (this.wx.setStorageSync) this.wx.setStorageSync(config.nicknameStorageKey, nick);
-          }
-          if (avatar) {
-            this.state.avatarUrl = avatar;
-            if (this.wx.setStorageSync) this.wx.setStorageSync('mahjong_avatar_url', avatar);
-          }
-        }
-        void this.enterRoom();
+        this.state.statusMessage = '已收到授权按钮点击，正在读取微信资料…';
+        this.draw();
+        void this.handleUserInfoButtonResult(res);
       });
-    } catch { /* ignore */ }
+      this.state.statusMessage = '点击“进入麻将房间”，并在微信弹窗中确认昵称头像授权';
+      this.draw();
+    } catch (error) {
+      this.userInfoBtn = null;
+      this.state.canRequestUserInfo = false;
+      this.authorizationButtonError = true;
+      this.state.statusMessage = `微信授权按钮创建失败${error && error.errMsg ? `：${error.errMsg}` : ''}，请重新输入邀请码后重试`;
+      this.state.error = '授权控件未就绪，暂未加入房间';
+      this.draw();
+    }
+  }
+
+  async handleUserInfoButtonResult(result = {}) {
+    let userInfo = result && (result.userInfo || result.data && result.data.userInfo || result.detail && result.detail.userInfo);
+    let nickname = normalizeWechatNickname(userInfo && userInfo.nickName);
+    let avatarUrl = String(userInfo && userInfo.avatarUrl || '').trim();
+    const resultError = apiErrorText(result);
+    let userInfoError = '';
+    const denied = /auth deny|user deny|cancel|拒绝/i.test(resultError);
+    if ((!nickname || nickname === '微信用户') && !denied && typeof this.wx.getUserInfo === 'function') {
+      userInfo = await new Promise((resolve) => {
+        try {
+          this.wx.getUserInfo({
+            withCredentials: false,
+            lang: 'zh_CN',
+            success: (response) => resolve(response && (response.userInfo || response.data && response.data.userInfo)),
+            fail: (error) => { userInfoError = apiErrorText(error); resolve(null); },
+          });
+        } catch (error) { userInfoError = apiErrorText(error); resolve(null); }
+      });
+      nickname = normalizeWechatNickname(userInfo && userInfo.nickName);
+      avatarUrl = String(userInfo && userInfo.avatarUrl || '').trim();
+    }
+    if (!nickname || nickname === '微信用户' || !isValidNickname(nickname)) {
+      if (isPrivacyGuideError(resultError, userInfoError)) {
+        this.state.error = '微信未开放昵称头像接口：请配置隐私指引（昵称、头像）';
+        this.state.statusMessage = '昵称头像授权暂不可用 · 请先完善小游戏隐私保护指引';
+        this.draw();
+        return;
+      }
+      const errMsg = resultError || '接口未返回昵称头像';
+      this.state.error = '';
+      this.state.statusMessage = denied ? '未授权，改用随机昵称进入房间…' : '未取得有效微信昵称，改用随机昵称进入房间…';
+      await this.enterRoom({ nickname: createGuestNickname(), avatarUrl: '', profileAuthorized: false });
+      if (!denied && !/:ok$/.test(errMsg)) this.state.statusMessage = `微信资料不可用（${errMsg}），已使用随机昵称`;
+      this.draw();
+      return;
+    }
+    this.state.profileAuthorized = true;
+    await this.enterRoom({ nickname, avatarUrl, profileAuthorized: true });
   }
 
   destroyUserInfoButton() {
@@ -249,12 +326,17 @@ class MahjongGameApp {
   }
 
   resizeCanvas() {
-    const info = this.wx.getSystemInfoSync ? this.wx.getSystemInfoSync() : {};
+    const info = this.wx.getWindowInfo ? this.wx.getWindowInfo() : this.wx.getSystemInfoSync ? this.wx.getSystemInfoSync() : {};
     const width = info.windowWidth || info.screenWidth || 960;
     const height = info.windowHeight || info.screenHeight || 540;
     this.pixelRatio = info.pixelRatio || 1;
     this.canvas.width = Math.round(width * this.pixelRatio);
     this.canvas.height = Math.round(height * this.pixelRatio);
+    this.safeInsets = {
+      left: Math.max(0, info.safeArea?.left || 0) * this.pixelRatio,
+      right: Math.max(0, width - (info.safeArea?.right ?? width)) * this.pixelRatio,
+      bottom: Math.max(0, height - (info.safeArea?.bottom ?? height)) * this.pixelRatio,
+    };
   }
 
   setOrientation(value) {
@@ -278,6 +360,7 @@ class MahjongGameApp {
           if (this.state.error.startsWith('切换横屏失败') || this.state.error.startsWith('当前微信基础库')) this.state.error = '';
           this.resizeCanvas();
           this.draw();
+          this.updateUserInfoButton(true);
         },
         fail: (error) => {
           if (this.orientationRequested !== value) return;
@@ -338,6 +421,42 @@ class MahjongGameApp {
   async restoreSession() {
     const sessionToken = this.wx.getStorageSync(config.sessionStorageKey);
     const nickname = this.wx.getStorageSync(config.nicknameStorageKey);
+    if (this.legacyNicknameSessionToken) {
+      const legacyToken = this.legacyNicknameSessionToken;
+      this.legacyNicknameSessionToken = '';
+      try {
+        await this.transport.login('', legacyToken);
+        await this.transport.leave();
+      } catch { /* The old session may already have expired. */ }
+      if (this.wx.removeStorageSync) this.wx.removeStorageSync(config.sessionStorageKey);
+      this.state.statusMessage = '旧版随机昵称已清除，可重新入房后授权微信资料';
+      this.updateUserInfoButton();
+      this.draw();
+      return;
+    }
+    if (!this.state.profileAuthorized) {
+      if (sessionToken || nickname) {
+        this.state.nickname = '';
+        this.state.avatarUrl = '';
+        this.state.statusMessage = '正在清理未授权的旧测试会话…';
+        this.draw();
+        if (sessionToken) {
+          try {
+            await this.transport.login('', sessionToken);
+            await this.transport.leave();
+          } catch { /* Expired guest sessions need no further cleanup. */ }
+        }
+        if (this.wx.removeStorageSync) {
+          this.wx.removeStorageSync(config.sessionStorageKey);
+          this.wx.removeStorageSync(config.nicknameStorageKey);
+          this.wx.removeStorageSync('mahjong_avatar_url');
+          this.wx.removeStorageSync(config.profileAuthorizedStorageKey);
+        }
+        this.state.statusMessage = '旧测试会话已清理，请重新输入邀请码并点击进入';
+        this.draw();
+      }
+      return;
+    }
     const avatarUrl = this.wx.getStorageSync('mahjong_avatar_url') || this.state.avatarUrl;
     if (!sessionToken || !nickname) return;
     this.state.nickname = nickname;
@@ -376,8 +495,11 @@ class MahjongGameApp {
         this.draw();
       }, 1750);
     }
+    const enteringRoom = this.state.screen === 'entry';
     this.state.snapshot = snapshot;
     this.state.screen = gameScreen(snapshot);
+    if (enteringRoom) { this.state.chatOpen = false; this.state.chatReadId = ''; }
+    if (this.state.chatOpen) this.state.chatReadId = latestMessage?.id || '';
     this.state.busy = false;
     this.state.error = this.orientationError;
     this.state.statusMessage = snapshot.public.phase === 'lobby' ? '等待四位玩家就座' : '房间实时同步中';
@@ -385,37 +507,58 @@ class MahjongGameApp {
     const ids = (snapshot.private.hand || []).map((tile) => tile.id);
     if (!ids.includes(this.state.selectedTileId)) this.state.selectedTileId = '';
     this.draw();
+    this.updateUserInfoButton(true);
   }
 
   onKeyboardInput(event) {
     if (!this.state.focus) return;
     const field = this.state.focus;
-    this.state[field] = String(event.value || '').slice(0, field === 'nickname' ? 12 : field === 'inviteCode' ? 32 : 200);
+    this.state[field] = String(event.value || '').slice(0, field === 'inviteCode' ? 32 : 200);
     this.draw();
+    if (field === 'inviteCode') this.updateUserInfoButton();
   }
 
   onKeyboardConfirm(event = {}) {
     const field = this.state.focus;
     if (field && typeof event.value === 'string') {
-      const length = field === 'nickname' ? 12 : field === 'inviteCode' ? 32 : 200;
+      const length = field === 'inviteCode' ? 32 : 200;
       this.state[field] = event.value.slice(0, length);
     }
     this.hideKeyboard();
+    if (field === 'inviteCode') this.updateUserInfoButton(true);
+    else if (field === 'chatDraft' && this.state.chatDraft.trim()) void this.sendChat();
   }
 
   hideKeyboard() {
     if (typeof this.wx.hideKeyboard === 'function') this.wx.hideKeyboard({});
     this.state.focus = '';
+    const wasOpen = this.state.keyboardOpen;
+    if (!wasOpen) this.state.keyboardOpen = false;
     this.draw();
+    if (wasOpen) this.scheduleCanvasRestoreAfterKeyboard();
+  }
+
+  scheduleCanvasRestoreAfterKeyboard() {
+    if (this.keyboardResizeTimer) clearTimeout(this.keyboardResizeTimer);
+    this.keyboardResizeTimer = setTimeout(() => {
+      this.keyboardResizeTimer = null;
+      this.state.keyboardOpen = false;
+      this.resizeCanvas();
+      this.draw();
+      this.updateUserInfoButton(true);
+    }, 150);
   }
 
   showKeyboard(field) {
     this.state.focus = field;
+    this.state.keyboardOpen = true;
     this.state.error = '';
-    const defaults = { inviteCode: this.state.inviteCode, nickname: this.state.nickname, chatDraft: this.state.chatDraft };
-    const length = field === 'nickname' ? 12 : field === 'inviteCode' ? 32 : 200;
+    const defaults = { inviteCode: this.state.inviteCode, chatDraft: this.state.chatDraft };
+    const length = field === 'inviteCode' ? 32 : 200;
     if (typeof this.wx.showKeyboard !== 'function') {
       this.state.statusMessage = '当前基础库不支持键盘输入';
+      this.state.focus = '';
+      this.state.keyboardOpen = false;
       this.draw();
       return;
     }
@@ -425,6 +568,7 @@ class MahjongGameApp {
       confirmType: field === 'chatDraft' ? 'send' : 'done',
       fail: () => {
         this.state.focus = '';
+        this.state.keyboardOpen = false;
         this.state.error = '无法打开输入键盘，请重试';
         this.draw();
       },
@@ -439,14 +583,39 @@ class MahjongGameApp {
       (touch.clientX ?? touch.pageX ?? touch.x) * this.pixelRatio,
       (touch.clientY ?? touch.pageY ?? touch.y) * this.pixelRatio,
     );
+    const insideChat = target && (['chat-panel', 'toggle-chat', 'close-chat', 'send-chat'].includes(target.type)
+      || target.type === 'input' && target.data?.field === 'chatDraft');
+    if (this.state.chatOpen && !insideChat) {
+      // Dismissal consumes the tap so a covered tile or game action cannot fire accidentally.
+      this.closeChat();
+      return;
+    }
     if (target) void this.handleTarget(target);
+  }
+
+  closeChat() {
+    this.state.chatOpen = false;
+    if (this.state.focus === 'chatDraft' || this.state.keyboardOpen) this.hideKeyboard();
+    else this.draw();
   }
 
   async handleTarget(target) {
     if (this.state.screen === 'loading') return;
     const { type, data = {} } = target;
     if (type === 'input') { this.showKeyboard(data.field); return; }
-    if (type === 'toggle-chat') { this.state.chatOpen = !this.state.chatOpen; this.draw(); return; }
+    if (type === 'chat-panel') return;
+    if (type === 'close-chat') { this.closeChat(); return; }
+    if (type === 'toggle-chat') {
+      if (this.state.chatOpen) this.closeChat();
+      else {
+        this.state.chatOpen = true;
+        this.state.chatReadId = this.state.snapshot?.public.chat?.slice(-1)[0]?.id || '';
+        this.state.selectedTarget = null;
+        this.draw();
+      }
+      return;
+    }
+    if (type === 'profile') return;
     if (type === 'select-player') {
       this.state.selectedTarget = this.state.selectedTarget?.seat === data.seat ? null : data;
       this.draw();
@@ -461,7 +630,25 @@ class MahjongGameApp {
       }
       return;
     }
-    if (type === 'enter') { await this.enterRoom(); return; }
+    if (type === 'enter') {
+      if (this.userInfoBtn) return; // The WeChat-native overlay owns this tap and waits for consent.
+      if (this.state.inviteCode.trim() && !this.state.profileAuthorized && typeof this.wx.createUserInfoButton === 'function') {
+        // Never let a failed native-button setup silently skip consent and join as a guest.
+        this.updateUserInfoButton();
+        if (!this.userInfoBtn) {
+          this.state.error = this.authorizationButtonError
+            ? '微信授权按钮未能创建，请重新输入邀请码后再试'
+            : '正在准备微信授权，请稍后再点';
+          this.draw();
+        }
+        return;
+      }
+      if (!this.state.profileAuthorized && typeof this.wx.createUserInfoButton !== 'function') {
+        this.state.statusMessage = '当前微信环境不支持昵称头像授权，将使用临时昵称进入';
+      }
+      await this.enterRoom();
+      return;
+    }
     if (type === 'leave') { this.leaveRoom(); return; }
     if (type === 'start') { await this.runCommand('start-hand', {}); return; }
     if (type === 'command') { await this.runCommand(data.action, {}); return; }
@@ -470,19 +657,26 @@ class MahjongGameApp {
     if (type === 'interaction') { await this.sendInteraction(data.interaction); }
   }
 
-  async enterRoom() {
+  async enterRoom(options = {}) {
     const inviteCode = this.state.inviteCode.trim();
     if (!inviteCode) { this.state.error = '请输入邀请码'; this.draw(); return; }
 
-    let nickname = (this.state.nickname || (this.wx.getStorageSync && this.wx.getStorageSync(config.nicknameStorageKey)) || '').trim();
-    let avatarUrl = (this.state.avatarUrl || (this.wx.getStorageSync && this.wx.getStorageSync('mahjong_avatar_url')) || '').trim();
-
-    if (!nickname || nickname === '微信用户' || !isValidNickname(nickname)) {
-      nickname = `雀友_${Math.floor(1000 + Math.random() * 9000)}`;
-    }
+    const profileAuthorized = options.profileAuthorized ?? this.state.profileAuthorized;
+    let nickname = String(options.nickname ?? (profileAuthorized
+      ? (this.state.nickname || (this.wx.getStorageSync && this.wx.getStorageSync(config.nicknameStorageKey)) || '')
+      : '')).trim();
+    let avatarUrl = String(options.avatarUrl ?? (profileAuthorized
+      ? (this.state.avatarUrl || (this.wx.getStorageSync && this.wx.getStorageSync('mahjong_avatar_url')) || '')
+      : '')).trim();
+    if (profileAuthorized) nickname = normalizeWechatNickname(nickname);
+    const generatedNickname = !nickname || nickname === '微信用户' || !isValidNickname(nickname);
+    if (generatedNickname) nickname = createGuestNickname();
+    if (!profileAuthorized) avatarUrl = '';
 
     this.state.nickname = nickname;
     this.state.avatarUrl = avatarUrl;
+    this.state.profileAuthorized = Boolean(profileAuthorized && !generatedNickname);
+    this.state.error = '';
     this.state.busy = true;
     this.leaving = false;
     this.sessionReplaced = false;
@@ -494,17 +688,19 @@ class MahjongGameApp {
     try {
       const auth = await this.transport.login(inviteCode);
       if (!auth.sessionToken) throw new Error('服务端未返回会话凭证');
+      const snapshot = await this.transport.join(nickname, avatarUrl);
       if (this.wx.setStorageSync) {
         this.wx.setStorageSync(config.sessionStorageKey, auth.sessionToken);
         this.wx.setStorageSync(config.nicknameStorageKey, nickname);
-        if (avatarUrl) this.wx.setStorageSync('mahjong_avatar_url', avatarUrl);
+        this.wx.setStorageSync('mahjong_avatar_url', avatarUrl);
+        this.wx.setStorageSync(config.profileAuthorizedStorageKey, Boolean(this.state.profileAuthorized));
       }
-      const snapshot = await this.transport.join(nickname, avatarUrl);
       this.updateSnapshot(snapshot);
     } catch (error) {
       this.state.busy = false;
       this.state.error = error.message || '无法进入房间';
       this.state.statusMessage = '请检查邀请码或网络连接';
+      if (generatedNickname) this.state.nickname = '';
       this.updateUserInfoButton();
       this.draw();
     }
@@ -600,12 +796,18 @@ class MahjongGameApp {
         await this.transport.leave();
         this.wx.removeStorageSync(config.sessionStorageKey);
         this.wx.removeStorageSync(config.nicknameStorageKey);
+        this.wx.removeStorageSync('mahjong_avatar_url');
         if (this.interactionTimer) clearInterval(this.interactionTimer);
         if (this.interactionTimeout) clearTimeout(this.interactionTimeout);
         this.interactionTimer = null;
         this.interactionTimeout = null;
         this.state.snapshot = null;
         this.state.screen = 'entry';
+        this.state.nickname = '';
+        this.state.avatarUrl = '';
+        this.state.profileAuthorized = false;
+        this.state.profileUpdating = false;
+        this.wx.removeStorageSync(config.profileAuthorizedStorageKey);
         this.setOrientation('portrait');
         this.state.selectedTarget = null;
         this.state.selectedTileId = '';

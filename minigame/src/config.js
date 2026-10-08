@@ -7,4 +7,5 @@ module.exports = {
   roomId: 'mahjong',
   sessionStorageKey: 'mahjong.sessionToken',
   nicknameStorageKey: 'mahjong.nickname',
+  profileAuthorizedStorageKey: 'mahjong.profileAuthorized',
 };

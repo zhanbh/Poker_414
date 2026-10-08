@@ -15,7 +15,7 @@
   .mahjong-game .test-mode-banner, .mahjong-game .spectator-banner { margin: 2px 0; padding: 2px 6px; font-size: .6rem; }
   .mahjong-game .mahjong-table {
     width: 100%; height: max(250px, calc(100dvh - 108px)); min-height: 0; aspect-ratio: auto;
-    margin: 3px auto; border-width: 2px; border-radius: 14px;
+    margin: 3px auto; border-width: 8px; border-radius: 14px;
   }
   .mahjong-game .mahjong-seat-top .mahjong-player-card { top: 1%; left: 1.5%; width: 17%; transform: none; }
   .mahjong-game .mahjong-seat-top .mahjong-concealed-hand, .mahjong-game .mahjong-seat-top .mahjong-revealed-hand { top: 12%; }

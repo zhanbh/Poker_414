@@ -217,16 +217,34 @@ export class MahjongRoomService {
     const session = this.sessions.get(sessionToken);
     if (roomId !== 'mahjong') throw new MahjongRoomServiceError('ROOM_NOT_FOUND', '麻将房间不存在');
     if (!isValidNickname(nickname)) throw new MahjongRoomServiceError('INVALID_NICKNAME', '昵称仅支持1–12位中文、字母、数字或下划线');
-    if (session.mahjongSeat || session.role === 'spectator') return this.getSnapshot(sessionToken);
-    if (!this.state) this.state = this.emptyState(roomId, session.playerId);
-    if (Object.values(this.state.players).some((player) => player?.nickname === nickname.trim())) {
-      throw new MahjongRoomServiceError('NICKNAME_EXISTS', '昵称已经被使用，请更换昵称');
+    const cleanNickname = nickname.trim();
+    if (!this.state && !session.mahjongSeat && session.role !== 'spectator') this.state = this.emptyState(roomId, session.playerId);
+    const duplicate = this.state && Object.values(this.state.players).some((player) =>
+      player?.nickname === cleanNickname && player.id !== session.playerId);
+    if (duplicate) throw new MahjongRoomServiceError('NICKNAME_EXISTS', '昵称已经被使用，请稍后重试授权');
+
+    if (session.mahjongSeat || session.role === 'spectator') {
+      let changed = false;
+      if (session.mahjongSeat && this.state) {
+        const player = this.state.players[session.mahjongSeat];
+        if (player && player.id === session.playerId) {
+          changed = player.nickname !== cleanNickname || player.avatarUrl !== avatarUrl;
+          player.nickname = cleanNickname;
+          player.avatarUrl = avatarUrl;
+        }
+      }
+      if (session.role === 'spectator') changed = session.nickname !== cleanNickname;
+      this.sessions.setIdentity(sessionToken, session.role === 'spectator' ? 'spectator' : 'player', cleanNickname);
+      this.sessions.touch(sessionToken, this.now());
+      if (changed && this.state) this.state.version += 1;
+      return this.getSnapshot(sessionToken);
     }
+    if (!this.state) this.state = this.emptyState(roomId, session.playerId);
     if (this.state.phase !== 'lobby') return this.joinSpectator(sessionToken, nickname.trim());
     const seat = MAHJONG_SEATS.find((candidate) => this.state?.players[candidate] === null);
     if (!seat) return this.joinSpectator(sessionToken, nickname.trim());
-    this.addPlayer(seat, session, nickname.trim(), avatarUrl);
-    this.sessions.setIdentity(sessionToken, 'player', nickname.trim());
+    this.addPlayer(seat, session, cleanNickname, avatarUrl);
+    this.sessions.setIdentity(sessionToken, 'player', cleanNickname);
     this.sessions.touch(sessionToken, this.now());
     this.state.version += 1;
     return this.getSnapshot(sessionToken);

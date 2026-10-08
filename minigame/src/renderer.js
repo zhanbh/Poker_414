@@ -342,7 +342,7 @@ class MahjongRenderer {
       this.drawAvatar(state.avatarUrl, 142, 338, 32);
       this.text(state.nickname, 186, 354, 15, COLORS.text, 'left', '600');
     } else {
-      this.text('输入 6 位房间邀请码即可入局对战', 270, 354, 13, '#7d9fa8', 'center');
+      this.text('输入房间邀请码即可进入房间', 270, 354, 13, '#7d9fa8', 'center');
     }
 
     // Invite code section (hit 270, 409 falls inside 395~455)
@@ -364,7 +364,7 @@ class MahjongRenderer {
     this.text(state.statusMessage || '游戏仅供测试、学习和交流', 270, 706, 13, COLORS.muted, 'center');
     this.text('虚拟积分无现实价值，不涉及充值或兑现。', 270, 726, 12, '#76949f', 'center');
 
-    this.text('308 游戏茶馆 · 四人经典麻将', 270, 890, 13, '#537480', 'center');
+    this.text('308娱乐 出品', 270, 890, 13, '#537480', 'center');
   }
 
   drawHeader(state, phaseLabel) {

@@ -44,6 +44,7 @@ class MahjongGameApp {
     this.draw = this.draw.bind(this);
     this.onTouchEnd = this.onTouchEnd.bind(this);
     this.onKeyboardInput = this.onKeyboardInput.bind(this);
+    this.onKeyboardConfirm = this.onKeyboardConfirm.bind(this);
     this.unsubscribe = this.transport.subscribe((snapshot) => this.updateSnapshot(snapshot));
     this.unsubscribeStatus = this.transport.onStatus((status, message) => {
       this.state.connectionStatus = status;
@@ -61,12 +62,7 @@ class MahjongGameApp {
     });
     this.wx.onTouchEnd(this.onTouchEnd);
     if (typeof this.wx.onKeyboardInput === 'function') this.wx.onKeyboardInput(this.onKeyboardInput);
-    if (typeof this.wx.onKeyboardConfirm === 'function') {
-      this.wx.onKeyboardConfirm((event) => {
-        if (this.state.focus === 'chatDraft') this.state.chatDraft = event.value || this.state.chatDraft;
-        this.hideKeyboard();
-      });
-    }
+    if (typeof this.wx.onKeyboardConfirm === 'function') this.wx.onKeyboardConfirm(this.onKeyboardConfirm);
     this.wx.onShow(() => {
       this.visible = true;
       this.transport.activity();
@@ -398,6 +394,15 @@ class MahjongGameApp {
     this.draw();
   }
 
+  onKeyboardConfirm(event = {}) {
+    const field = this.state.focus;
+    if (field && typeof event.value === 'string') {
+      const length = field === 'nickname' ? 12 : field === 'inviteCode' ? 32 : 200;
+      this.state[field] = event.value.slice(0, length);
+    }
+    this.hideKeyboard();
+  }
+
   hideKeyboard() {
     if (typeof this.wx.hideKeyboard === 'function') this.wx.hideKeyboard({});
     this.state.focus = '';
@@ -406,9 +411,9 @@ class MahjongGameApp {
 
   showKeyboard(field) {
     this.state.focus = field;
+    this.state.error = '';
     const defaults = { inviteCode: this.state.inviteCode, nickname: this.state.nickname, chatDraft: this.state.chatDraft };
     const length = field === 'nickname' ? 12 : field === 'inviteCode' ? 32 : 200;
-    this.draw();
     if (typeof this.wx.showKeyboard !== 'function') {
       this.state.statusMessage = '当前基础库不支持键盘输入';
       this.draw();
@@ -416,8 +421,15 @@ class MahjongGameApp {
     }
     this.wx.showKeyboard({
       defaultValue: defaults[field], maxLength: length, multiple: false,
+      confirmHold: false,
       confirmType: field === 'chatDraft' ? 'send' : 'done',
+      fail: () => {
+        this.state.focus = '';
+        this.state.error = '无法打开输入键盘，请重试';
+        this.draw();
+      },
     });
+    this.draw();
   }
 
   onTouchEnd(event) {

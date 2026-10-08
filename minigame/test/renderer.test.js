@@ -10,10 +10,14 @@ function createContext(overrides = {}) {
 
 describe('native mini-game Canvas renderer', () => {
   it('maps entry form input regions into touch targets', () => {
-    const renderer = new MahjongRenderer({ width: 540, height: 960 }, createContext());
+    const labels = [];
+    const renderer = new MahjongRenderer({ width: 540, height: 960 }, createContext({ fillText: (value) => labels.push(String(value)) }));
     renderer.draw({ screen: 'entry', inviteCode: '', nickname: '', statusMessage: '' });
     expect(renderer.hit(270, 409)).toMatchObject({ type: 'input', data: { field: 'inviteCode' } });
     expect(renderer.hit(270, 654)).toMatchObject({ type: 'enter' });
+    expect(labels).toContain('输入房间邀请码即可进入房间');
+    expect(labels).not.toContain('输入 6 位房间邀请码即可入局对战');
+    expect(labels).toContain('308娱乐 出品');
   });
 
   it('uses the Mini Game orientation API and redraws after the orientation transition', () => {
@@ -37,6 +41,37 @@ describe('native mini-game Canvas renderer', () => {
     options.success();
     expect(resizeCount).toBe(2);
     expect(drawCount).toBe(2);
+  });
+
+  it('opens the native keyboard with explicit completion behavior and commits the final value', () => {
+    let keyboardOptions;
+    let hidden = false;
+    const app = {
+      wx: {
+        showKeyboard: (options) => { keyboardOptions = options; },
+        hideKeyboard: () => { hidden = true; },
+      },
+      state: { focus: '', inviteCode: '308', nickname: '', chatDraft: '', error: '' },
+      draw: () => {},
+    };
+    app.hideKeyboard = () => MahjongGameApp.prototype.hideKeyboard.call(app);
+
+    MahjongGameApp.prototype.showKeyboard.call(app, 'inviteCode');
+    expect(keyboardOptions).toMatchObject({ defaultValue: '308', maxLength: 32, multiple: false, confirmHold: false, confirmType: 'done' });
+    MahjongGameApp.prototype.onKeyboardConfirm.call(app, { value: '12345' });
+    expect(app.state.inviteCode).toBe('12345');
+    expect(hidden).toBe(true);
+  });
+
+  it('shows feedback if the native keyboard fails to open', () => {
+    const app = {
+      wx: { showKeyboard: (options) => options.fail() },
+      state: { focus: '', inviteCode: '', nickname: '', chatDraft: '', error: '' },
+      draw: () => {},
+    };
+    MahjongGameApp.prototype.showKeyboard.call(app, 'inviteCode');
+    expect(app.state.focus).toBe('');
+    expect(app.state.error).toBe('无法打开输入键盘，请重试');
   });
 
   it('draws a room and exposes the chat toggle as an interactive target', () => {

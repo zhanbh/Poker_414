@@ -666,12 +666,14 @@ class MahjongRenderer {
     this.drawChat(state);
   }
 
-  drawTile(tile, x, y, width, height, selected = false, rotation = 0) {
+  drawTile(tile, x, y, width, height, selected = false, rotation = 0, bodyDepth = 4) {
     const ctx = this.ctx;
     const radius = Math.min(5, width * 0.12);
-    ctx.save(); ctx.shadowColor = 'rgba(5, 24, 12, 0.5)'; ctx.shadowBlur = 3; ctx.shadowOffsetY = 3;
-    this.roundRect(x, y + 4, width, height, radius, '#2a6f33', '#19492a');
-    ctx.restore();
+    if (bodyDepth > 0) {
+      ctx.save(); ctx.shadowColor = 'rgba(5, 24, 12, 0.5)'; ctx.shadowBlur = 3; ctx.shadowOffsetY = 3;
+      this.roundRect(x, y + bodyDepth, width, height, radius, '#2a6f33', '#19492a');
+      ctx.restore();
+    }
     this.roundRect(x, y, width, height, radius,
       this.linearFill(x, y, x + width, y + height, [[0, '#ffffff'], [0.24, '#fdfdf7'], [0.86, '#eeeede'], [1, '#cfd7c8']], '#fafbf2'),
       selected ? '#ffe083' : '#9cae97');
@@ -747,25 +749,46 @@ class MahjongRenderer {
   }
 
   drawProjectedTile(table, tile, u, v, du, dv, rotation = 0, selected = false) {
-    const [topLeft, topRight, , bottomLeft] = this.planeRect(table, u, v, du, dv);
     const ctx = this.ctx;
+    const base = this.planeRect(table, u, v, du, dv);
+    // Keep the body thickness in screen space so it survives the table's foreshortening.
+    const depth = 5.5 + v * 2;
+    const top = base.map(([x, y]) => [x - 1, y - depth]);
+    const band = base.map(([x, y]) => [x - 0.25, y - 1.8]);
+    ctx.save();
+    ctx.shadowColor = 'rgba(6, 25, 12, 0.42)'; ctx.shadowBlur = 3; ctx.shadowOffsetY = 2;
+    this.polygon(base.map(([x, y]) => [x + 1.5, y + 1]), 'rgba(6, 25, 12, 0.25)');
+    ctx.restore();
+    this.polygon([band[3], band[2], base[2], base[3]], '#347e3f', '#225b30', 0.7);
+    this.polygon([band[1], band[2], base[2], base[1]], '#245d32', '#1c4a29', 0.7);
+    this.polygon([top[3], top[2], band[2], band[3]],
+      this.linearFill(0, top[3][1], 0, base[3][1], [[0, '#f3f2de'], [0.6, '#d6ddc4'], [1, '#a6b997']], '#d6ddc4'), '#8ea181', 0.7);
+    this.polygon([top[1], top[2], band[2], band[1]], '#aebd9e', '#849777', 0.7);
+    const [topLeft, topRight, , bottomLeft] = top;
     const sideways = Math.abs(Math.sin(rotation)) > 0.5;
     const width = sideways ? 40 : 28;
     const height = sideways ? 28 : 40;
     ctx.save();
     ctx.transform((topRight[0] - topLeft[0]) / width, (topRight[1] - topLeft[1]) / width,
       (bottomLeft[0] - topLeft[0]) / height, (bottomLeft[1] - topLeft[1]) / height, topLeft[0], topLeft[1]);
-    this.drawTile(tile, 0, 0, width, height, selected, rotation);
+    this.drawTile(tile, 0, 0, width, height, selected, rotation, 0);
     ctx.restore();
   }
 
-  drawStandingBack(table, u, v, du, dv, depth) {
+  drawStandingBack(table, u, v, du, dv, depth, side = 'front') {
     const points = this.planeRect(table, u, v, du, dv);
-    const top = points.map(([x, y]) => [x, y - depth]);
+    const sideFacing = side === 'left' || side === 'right';
+    const liftX = sideFacing ? depth * (side === 'left' ? -0.75 : 0.75) : 0;
+    const liftY = sideFacing ? depth * 0.45 : depth;
+    const top = points.map(([x, y]) => [x + liftX, y - liftY]);
     this.polygon(points.map(([x, y]) => [x + 2, y + 3]), 'rgba(6, 28, 13, 0.3)');
-    this.polygon([top[3], top[2], points[2], points[3]],
-      this.linearFill(0, top[3][1], 0, points[3][1], [[0, '#54ab29'], [1, '#1d6f25']], '#328f29'), '#185b25');
-    this.polygon([top[1], top[2], points[2], points[1]], '#1e6728', '#195627');
+    const green = this.linearFill(0, top[3][1], 0, points[3][1], [[0, '#54ab29'], [1, '#1d6f25']], '#328f29');
+    this.polygon([top[3], top[2], points[2], points[3]], sideFacing ? '#bbd3a6' : green, '#4b8040');
+    if (side === 'right') {
+      this.polygon([top[0], top[3], points[3], points[0]], green, '#185b25');
+    } else {
+      this.polygon([top[1], top[2], points[2], points[1]], sideFacing ? green : '#1e6728', '#195627');
+    }
     this.polygon(top, this.linearFill(0, top[0][1], 0, top[2][1], [[0, '#f9fff0'], [0.45, '#d7f0ce'], [1, '#87c96c']], '#d3edc4'), '#4d9b40');
   }
 
@@ -810,8 +833,8 @@ class MahjongRenderer {
       const sideStep = Math.min(0.037, (lastV - 0.255) / Math.max(1, count - 1));
       for (let index = 0; index < count; index += 1) {
         if (position === 2) this.drawStandingBack(table, 0.5 - count * 0.019 + index * 0.038, 0.133, 0.037, 0.024, 24);
-        else if (position === 1) this.drawStandingBack(table, 0.09, 0.22 + index * sideStep, 0.03, 0.035, 10);
-        else if (position === 3) this.drawStandingBack(table, 0.88, 0.22 + index * sideStep, 0.03, 0.035, 10);
+        else if (position === 1) this.drawStandingBack(table, 0.09, 0.22 + index * sideStep, 0.012, sideStep * 0.94, 24, 'left');
+        else if (position === 3) this.drawStandingBack(table, 0.898, 0.22 + index * sideStep, 0.012, sideStep * 0.94, 24, 'right');
         else this.drawStandingBack(table, 0.5 - count * 0.019 + index * 0.038, 0.8, 0.037, 0.024, 24);
       }
     });
@@ -822,14 +845,17 @@ class MahjongRenderer {
     const river = snapshot.public.discardRiver || [];
     const bottomOffset = this.roomLayout().bottomInset / (table.bottomY - table.topY);
     relativeSeats(snapshot.private.seat || 'A').forEach((seat, position) => {
-      river.filter((entry) => entry.seat === seat).slice(-18).forEach((entry, index) => {
+      const entries = river.filter((entry) => entry.seat === seat).slice(-18).map((entry, index) => ({ entry, index }));
+      // Paint the far rows first, including the seats whose river grows toward the camera.
+      if (position === 2 || position === 3) entries.reverse();
+      entries.forEach(({ entry, index }) => {
         const column = index % 6;
         const row = Math.floor(index / 6);
         const selected = entry.tile.id === snapshot.public.pendingDiscard?.tile.id;
-        if (position === 0) this.drawProjectedTile(table, entry.tile, 0.345 + column * 0.052, 0.55 + row * 0.043 - bottomOffset, 0.048, 0.039, 0, selected);
-        else if (position === 2) this.drawProjectedTile(table, entry.tile, (table.width < 880 ? 0.56 : 0.607) - column * 0.052, 0.282 - row * 0.047, 0.048, 0.043, Math.PI, selected);
-        else if (position === 1) this.drawProjectedTile(table, entry.tile, 0.2 + row * 0.048, 0.32 + column * 0.042, 0.044, 0.037, Math.PI / 2, selected);
-        else this.drawProjectedTile(table, entry.tile, 0.756 - row * 0.048, 0.53 - column * 0.042, 0.044, 0.037, -Math.PI / 2, selected);
+        if (position === 0) this.drawProjectedTile(table, entry.tile, 0.355 + column * 0.047, 0.56 + row * 0.06 - bottomOffset, 0.042, 0.049, 0, selected);
+        else if (position === 2) this.drawProjectedTile(table, entry.tile, (table.width < 880 ? 0.56 : 0.607) - column * 0.047, 0.28 - row * 0.052, 0.039, 0.044, Math.PI, selected);
+        else if (position === 1) this.drawProjectedTile(table, entry.tile, 0.19 + row * 0.052, 0.35 + column * 0.049, 0.049, 0.041, Math.PI / 2, selected);
+        else this.drawProjectedTile(table, entry.tile, 0.766 - row * 0.052, 0.595 - column * 0.049, 0.049, 0.041, -Math.PI / 2, selected);
       });
     });
   }

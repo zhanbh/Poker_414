@@ -4,6 +4,7 @@ const { createCommand } = require('./protocol');
 const { FourOneFourRenderer } = require('./renderer');
 
 const VALID_NICKNAME = /^[A-Za-z0-9_〇㐀-䶿一-鿿]{1,12}$/;
+const INTERACTION_LABELS = { tomato: '🍅 番茄', water: '💦 泼水', heart: '💖 比心', kiss: '💋 亲吻' };
 
 class FourOneFourGameApp {
   constructor(wxApi) {
@@ -13,22 +14,44 @@ class FourOneFourGameApp {
     this.transport = new GameTransport(wxApi);
     this.renderer = new FourOneFourRenderer(this.canvas, this.context);
     this.state = {
-      screen: 'entry', inviteCode: '', nickname: '', chatDraft: '', error: '',
-      statusMessage: '请输入邀请码和昵称', busy: false, snapshot: null,
-      selectedIds: [], selectedTarget: null, chatOpen: false, focus: '',
+      screen: 'entry',
+      inviteCode: '',
+      nickname: '',
+      chatDraft: '',
+      error: '',
+      statusMessage: '请输入邀请码和昵称',
+      busy: false,
+      snapshot: null,
+      selectedIds: [],
+      selectedTarget: null,
+      chatOpen: false,
+      chatTab: 'messages',
+      chatMode: 'text',
+      chatReadId: '',
+      playingVoiceId: '',
+      recordingVoice: false,
+      voiceStartTime: 0,
+      focus: '',
     };
     this.visible = true;
     this.leaving = false;
     this.recovering = false;
     this.lastInteractionId = '';
     this.interactionTimer = null;
+    this.interactionTimeout = null;
     this.orientation = null;
     this.pixelRatio = 1;
+    this.recorder = null;
+    this.recorderInitialized = false;
+
     this.resizeCanvas();
     this.draw = this.draw.bind(this);
+    this.onTouchStart = this.onTouchStart.bind(this);
     this.onTouchEnd = this.onTouchEnd.bind(this);
+    this.onTouchCancel = this.onTouchCancel.bind(this);
     this.onKeyboardInput = this.onKeyboardInput.bind(this);
     this.onKeyboardConfirm = this.onKeyboardConfirm.bind(this);
+
     this.transport.subscribe((snapshot) => this.updateSnapshot(snapshot));
     this.transport.onStatus((status) => {
       if (status === 'replaced') {
@@ -40,26 +63,43 @@ class FourOneFourGameApp {
         this.scheduleRecovery();
       }
     });
+
+    if (typeof wxApi.onTouchStart === 'function') wxApi.onTouchStart(this.onTouchStart);
     if (typeof wxApi.onTouchEnd === 'function') wxApi.onTouchEnd(this.onTouchEnd);
+    if (typeof wxApi.onTouchCancel === 'function') wxApi.onTouchCancel(this.onTouchCancel);
     if (typeof wxApi.onKeyboardInput === 'function') wxApi.onKeyboardInput(this.onKeyboardInput);
     if (typeof wxApi.onKeyboardConfirm === 'function') wxApi.onKeyboardConfirm(this.onKeyboardConfirm);
     if (typeof wxApi.onWindowResize === 'function') wxApi.onWindowResize(() => { this.resizeCanvas(); this.draw(); });
     if (typeof wxApi.onDeviceOrientationChange === 'function') wxApi.onDeviceOrientationChange(() => { this.resizeCanvas(); this.draw(); });
-    if (typeof wxApi.onShow === 'function') wxApi.onShow(() => {
-      this.visible = true;
-      if (this.transport.authenticated) this.transport.startKeepAlive();
-      this.transport.activity();
-      if (this.state.snapshot && !this.transport.opened) this.scheduleRecovery(100);
-    });
-    if (typeof wxApi.onHide === 'function') wxApi.onHide(() => {
-      this.visible = false;
-      this.transport.stopKeepAlive();
-      if (this.interactionTimer) clearInterval(this.interactionTimer);
-      this.interactionTimer = null;
-    });
-    if (wxApi.cloud && typeof wxApi.cloud.init === 'function') {
-      try { wxApi.cloud.init({ env: config.cloudBaseEnvId, traceUser: true }); } catch { /* CloudBase is optional in the simulator. */ }
+
+    if (typeof wxApi.onShow === 'function') {
+      wxApi.onShow(() => {
+        this.visible = true;
+        if (this.transport.authenticated) this.transport.startKeepAlive();
+        this.transport.activity();
+        if (this.state.snapshot && !this.transport.opened) this.scheduleRecovery(100);
+      });
     }
+
+    if (typeof wxApi.onHide === 'function') {
+      wxApi.onHide(() => {
+        this.visible = false;
+        this.transport.stopKeepAlive();
+        if (this.interactionTimer) clearInterval(this.interactionTimer);
+        if (this.interactionTimeout) clearTimeout(this.interactionTimeout);
+        this.interactionTimer = null;
+        this.interactionTimeout = null;
+      });
+    }
+
+    if (wxApi.cloud && typeof wxApi.cloud.init === 'function') {
+      try {
+        wxApi.cloud.init({ env: config.cloudBaseEnvId, traceUser: true });
+      } catch {
+        /* CloudBase is optional in the simulator. */
+      }
+    }
+
     this.state.nickname = wxApi.getStorageSync?.(config.nicknameStorageKey) || '';
     this.draw();
     void this.restoreSession();
@@ -74,7 +114,9 @@ class FourOneFourGameApp {
     this.canvas.height = Math.round(height * this.pixelRatio);
   }
 
-  draw() { this.renderer.draw(this.state); }
+  draw() {
+    this.renderer.draw(this.state);
+  }
 
   setOrientation(value) {
     if (this.orientation === value) return;
@@ -84,21 +126,77 @@ class FourOneFourGameApp {
       this.wx.setDeviceOrientation({
         value,
         success: () => { this.resizeCanvas(); this.draw(); },
-        fail: () => { if (value === 'landscape') this.state.error = '请旋转手机横屏体验牌桌'; this.resizeCanvas(); this.draw(); },
+        fail: () => {
+          if (value === 'landscape') this.state.error = '请旋转手机横屏体验牌桌';
+          this.resizeCanvas();
+          this.draw();
+        },
       });
-    } catch { /* Older developer tools can lack this API; resizing remains supported. */ }
+    } catch {
+      /* Older developer tools can lack this API; resizing remains supported. */
+    }
+  }
+
+  onTouchStart(event) {
+    const touch = event.touches?.[0];
+    if (!touch) return;
+    const target = this.renderer.hit(
+      (touch.clientX ?? touch.pageX ?? touch.x) * this.pixelRatio,
+      (touch.clientY ?? touch.pageY ?? touch.y) * this.pixelRatio,
+    );
+    if (target?.type === 'voice-bar') {
+      this.startVoiceRecording();
+    }
   }
 
   onTouchEnd(event) {
-    const touch = event.changedTouches?.[0] || event.touches?.[0];
-    if (!touch) return;
-    const target = this.renderer.hit((touch.clientX ?? touch.pageX ?? touch.x) * this.pixelRatio,
-      (touch.clientY ?? touch.pageY ?? touch.y) * this.pixelRatio);
-    if (!target) {
-      if (this.state.selectedTarget) { this.state.selectedTarget = null; this.draw(); }
+    if (this.state.recordingVoice) {
+      this.stopVoiceRecording(false);
       return;
     }
-    void this.handleTarget(target);
+    const touch = event.changedTouches?.[0] || event.touches?.[0];
+    if (!touch) return;
+    const target = this.renderer.hit(
+      (touch.clientX ?? touch.pageX ?? touch.x) * this.pixelRatio,
+      (touch.clientY ?? touch.pageY ?? touch.y) * this.pixelRatio,
+    );
+
+    const insideChat = target && (
+      [
+        'chat-panel', 'toggle-chat', 'close-chat', 'send-chat', 'chat-tab',
+        'toggle-chat-mode', 'voice-bar', 'send-phrase', 'play-voice',
+      ].includes(target.type) ||
+      (target.type === 'input' && target.data?.field === 'chatDraft')
+    );
+    if (this.state.chatOpen && !insideChat) {
+      this.closeChat();
+      return;
+    }
+
+    const insideInteraction = target && ['interaction', 'close-interaction', 'select-player', 'remove-player'].includes(target.type);
+    if (this.state.selectedTarget && !insideInteraction) {
+      this.state.selectedTarget = null;
+      this.draw();
+      if (!target) return;
+    }
+
+    if (target) void this.handleTarget(target);
+  }
+
+  onTouchCancel() {
+    if (this.state.recordingVoice) {
+      this.stopVoiceRecording(true);
+    }
+  }
+
+  closeChat() {
+    this.state.chatOpen = false;
+    this.state.chatTab = 'messages';
+    if (this.state.focus === 'chatDraft') {
+      this.state.focus = '';
+      if (typeof this.wx.hideKeyboard === 'function') this.wx.hideKeyboard({});
+    }
+    this.draw();
   }
 
   onKeyboardInput(event = {}) {
@@ -114,7 +212,11 @@ class FourOneFourGameApp {
     this.state.focus = '';
     if (typeof this.wx.hideKeyboard === 'function') this.wx.hideKeyboard({});
     this.draw();
-    if (field === 'chatDraft') void this.sendChat();
+    if (field === 'chatDraft') {
+      void this.sendChat();
+    } else if (field === 'inviteCode' && this.state.inviteCode.trim() && this.state.nickname.trim()) {
+      void this.enterRoom();
+    }
   }
 
   showKeyboard(field) {
@@ -130,8 +232,12 @@ class FourOneFourGameApp {
       defaultValue: this.state[field] || '',
       maxLength: field === 'chatDraft' ? 200 : field === 'nickname' ? 12 : 32,
       multiple: false,
-      confirmType: field === 'chatDraft' ? 'send' : 'done',
-      fail: () => { this.state.focus = ''; this.state.error = '无法打开输入键盘，请重试'; this.draw(); },
+      confirmType: field === 'chatDraft' ? 'send' : 'go',
+      fail: () => {
+        this.state.focus = '';
+        this.state.error = '无法打开输入键盘，请重试';
+        this.draw();
+      },
     });
   }
 
@@ -140,10 +246,40 @@ class FourOneFourGameApp {
     if (type === 'input') { this.showKeyboard(data.field); return; }
     if (type === 'enter') { await this.enterRoom(); return; }
     if (type === 'leave') { await this.leaveRoom(); return; }
-    if (type === 'toggle-chat' || type === 'close-chat') {
-      this.state.chatOpen = type === 'toggle-chat';
+    if (type === 'chat-panel') return;
+    if (type === 'voice-bar') return;
+
+    if (type === 'toggle-chat') {
+      this.state.chatOpen = !this.state.chatOpen;
       this.state.selectedTarget = null;
+      if (this.state.chatOpen) {
+        this.state.chatReadId = this.state.snapshot?.public?.chat?.slice(-1)[0]?.id || '';
+      }
       this.draw();
+      return;
+    }
+    if (type === 'close-chat') {
+      this.closeChat();
+      return;
+    }
+    if (type === 'chat-tab') {
+      this.state.chatTab = data.tab;
+      this.draw();
+      return;
+    }
+    if (type === 'toggle-chat-mode') {
+      this.state.chatMode = this.state.chatMode === 'voice' ? 'text' : 'voice';
+      this.draw();
+      return;
+    }
+    if (type === 'send-phrase') {
+      await this.transport.chat({ kind: 'phrase', text: data.phrase });
+      this.state.chatTab = 'messages';
+      this.draw();
+      return;
+    }
+    if (type === 'play-voice') {
+      this.playVoice(data.message);
       return;
     }
     if (type === 'select-player') {
@@ -151,25 +287,31 @@ class FourOneFourGameApp {
       this.draw();
       return;
     }
+    if (type === 'close-interaction') {
+      this.state.selectedTarget = null;
+      this.draw();
+      return;
+    }
     if (type === 'select-card') {
       const selected = new Set(this.state.selectedIds);
-      if (selected.has(data.cardId)) selected.delete(data.cardId); else selected.add(data.cardId);
+      if (selected.has(data.cardId)) selected.delete(data.cardId);
+      else selected.add(data.cardId);
       this.state.selectedIds = [...selected];
       this.transport.activity();
       this.draw();
       return;
     }
-    if (type === 'send-chat') { await this.sendChat(); return; }
+    if (type === 'send-chat') {
+      await this.sendChat();
+      return;
+    }
     if (type === 'interaction') {
-      try {
-        await this.transport.chat({ kind: 'interaction', interaction: data.interaction, target: data.target });
-        this.state.selectedTarget = null;
-      } catch (error) { this.state.error = error.message || '互动发送失败'; }
-      this.draw();
+      await this.sendInteraction(data.interaction, data.target);
       return;
     }
     if (type === 'remove-player') {
-      this.confirm('移除玩家', `确定移除 ${this.state.selectedTarget?.nickname || ''} 吗？`, () => this.runCommand('remove-player', { seat: data.seat }));
+      this.confirm('移除玩家', `确定移除 ${this.state.selectedTarget?.nickname || ''} 吗？`, () =>
+        this.runCommand('remove-player', { seat: data.seat }));
       return;
     }
     if (type === 'start') { await this.runCommand('start-hand', {}); return; }
@@ -179,6 +321,128 @@ class FourOneFourGameApp {
     if (type === 'difference') { await this.runCommand('play', { cardIds: this.state.selectedIds, declaration: 'difference' }); return; }
     if (type === 'pass') { await this.runCommand('pass', {}); return; }
     if (type === 'ready') { await this.runCommand('ready', {}); }
+  }
+
+  async sendInteraction(interaction, explicitTarget = null) {
+    let target = explicitTarget || this.state.selectedTarget;
+    if (!target) {
+      const players = this.state.snapshot?.public?.players || [];
+      const me = this.state.snapshot?.private?.seat;
+      const other = players.find((p) => p.seat !== me) || players[0];
+      if (other) target = { seat: other.seat, nickname: other.nickname };
+    }
+    if (!target) return;
+    try {
+      await this.transport.chat({ kind: 'interaction', interaction, target: { nickname: target.nickname, seat: target.seat } });
+      this.state.statusMessage = `已向 ${target.nickname} 发送 ${INTERACTION_LABELS[interaction] || '互动'}`;
+      this.state.selectedTarget = null;
+      this.draw();
+    } catch (error) {
+      this.state.error = error.message || '互动发送失败';
+      this.draw();
+    }
+  }
+
+  initRecorder() {
+    if (this.recorderInitialized || !this.wx || typeof this.wx.getRecorderManager !== 'function') return;
+    this.recorderInitialized = true;
+    try {
+      this.recorder = this.wx.getRecorderManager();
+      this.recorder.onStop((res) => {
+        if (!this.state.recordingVoice) return;
+        this.state.recordingVoice = false;
+        const durationSec = Math.max(1, Math.min(60, Math.round((Date.now() - this.state.voiceStartTime) / 1000)));
+        if (durationSec < 1) {
+          this.state.error = '说话时间太短';
+          this.draw();
+          return;
+        }
+        if (res && res.tempFilePath && typeof this.wx.getFileSystemManager === 'function') {
+          try {
+            const fs = this.wx.getFileSystemManager();
+            const base64 = fs.readFileSync(res.tempFilePath, 'base64');
+            void this.transport.chat({
+              kind: 'voice',
+              duration: durationSec,
+              audioData: base64,
+            });
+          } catch (readErr) {
+            this.state.error = readErr.message || '语音读取失败';
+            this.draw();
+          }
+        }
+        this.draw();
+      });
+      this.recorder.onError((err) => {
+        this.state.recordingVoice = false;
+        this.state.error = err.errMsg || '录音失败';
+        this.draw();
+      });
+    } catch {
+      this.recorder = null;
+    }
+  }
+
+  startVoiceRecording() {
+    this.initRecorder();
+    if (!this.recorder) return;
+    this.state.recordingVoice = true;
+    this.state.voiceStartTime = Date.now();
+    this.draw();
+    try {
+      this.recorder.start({
+        duration: 60000,
+        sampleRate: 16000,
+        numberOfChannels: 1,
+        encodeBitRate: 48000,
+        format: 'mp3',
+      });
+    } catch {
+      this.state.recordingVoice = false;
+      this.draw();
+    }
+  }
+
+  stopVoiceRecording(cancelled = false) {
+    if (!this.state.recordingVoice || !this.recorder) return;
+    if (cancelled) {
+      this.state.recordingVoice = false;
+      try { this.recorder.stop(); } catch { /* ignore */ }
+      this.draw();
+      return;
+    }
+    try { this.recorder.stop(); } catch { /* ignore */ }
+  }
+
+  playVoice(message) {
+    if (!message || !message.audioData || !this.wx || typeof this.wx.createInnerAudioContext !== 'function') return;
+    if (this.state.playingVoiceId === message.id) return;
+    try {
+      const fs = typeof this.wx.getFileSystemManager === 'function' ? this.wx.getFileSystemManager() : null;
+      let filePath = '';
+      if (fs && typeof this.wx.env?.USER_DATA_PATH === 'string') {
+        filePath = `${this.wx.env.USER_DATA_PATH}/voice_${message.id || Date.now()}.mp3`;
+        fs.writeFileSync(filePath, message.audioData, 'base64');
+      }
+      const audioCtx = this.wx.createInnerAudioContext();
+      if (filePath) audioCtx.src = filePath;
+      this.state.playingVoiceId = message.id;
+      this.draw();
+      audioCtx.onEnded(() => {
+        this.state.playingVoiceId = '';
+        audioCtx.destroy();
+        this.draw();
+      });
+      audioCtx.onError(() => {
+        this.state.playingVoiceId = '';
+        audioCtx.destroy();
+        this.draw();
+      });
+      audioCtx.play();
+    } catch {
+      this.state.playingVoiceId = '';
+      this.draw();
+    }
   }
 
   confirm(title, content, onConfirm) {
@@ -212,19 +476,16 @@ class FourOneFourGameApp {
   updateSnapshot(snapshot) {
     if (!snapshot?.public || snapshot.public.roomId !== '414' || !Array.isArray(snapshot.public.players)) return;
     const latestMessage = (snapshot.public.chat || []).slice(-1)[0];
-    if (latestMessage?.kind === 'interaction' && latestMessage.id !== this.lastInteractionId) {
+    if ((latestMessage?.kind === 'interaction' || latestMessage?.kind === 'phrase') && latestMessage.id !== this.lastInteractionId) {
       this.lastInteractionId = latestMessage.id;
       if (this.interactionTimer) clearInterval(this.interactionTimer);
-      const remaining = Math.max(0, 2000 - (Date.now() - latestMessage.createdAt));
-      if (remaining > 0) {
-        this.interactionTimer = setInterval(() => {
-          if (Date.now() - latestMessage.createdAt >= 2000) {
-            clearInterval(this.interactionTimer);
-            this.interactionTimer = null;
-          }
-          this.draw();
-        }, 40);
-      }
+      if (this.interactionTimeout) clearTimeout(this.interactionTimeout);
+      this.interactionTimer = setInterval(() => this.draw(), 33);
+      this.interactionTimeout = setTimeout(() => {
+        if (this.interactionTimer) clearInterval(this.interactionTimer);
+        this.interactionTimer = null;
+        this.interactionTimeout = null;
+      }, 3600);
     }
     this.state.snapshot = snapshot;
     this.state.screen = snapshot.public.phase === 'lobby' ? 'lobby' : 'table';

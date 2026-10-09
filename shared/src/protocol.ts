@@ -97,6 +97,7 @@ export interface CommandEnvelope {
 export interface PublicPlayerView {
   readonly seat: Seat;
   readonly nickname: string;
+  readonly avatarUrl?: string;
   readonly team: Team;
   readonly connected: boolean;
   readonly away: boolean;

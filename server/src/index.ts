@@ -201,7 +201,9 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
         const service = serviceFor(gameId);
         const snapshot = gameId === 'mahjong'
           ? mahjongRoomService.join(sessionToken, payload.nickname ?? '', payload.roomId ?? 'mahjong', payload.avatarUrl)
-          : service.join(sessionToken, payload.nickname ?? '', payload.roomId ?? (gameId === 'texas' ? 'texas' : '414'));
+          : gameId === 'texas'
+            ? service.join(sessionToken, payload.nickname ?? '', payload.roomId ?? 'texas')
+            : service.join(sessionToken, payload.nickname ?? '', payload.roomId ?? '414', payload.avatarUrl);
         addMiniSocket(state, sessionToken, gameId);
         acknowledgeMini(state, requestId, { ok: true, snapshot });
         sendSnapshots();
@@ -278,7 +280,9 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
         const service = serviceFor(gameId);
         const snapshot = gameId === 'mahjong'
           ? mahjongRoomService.join(sessionToken, payload?.nickname ?? '', payload?.roomId ?? 'mahjong', payload?.avatarUrl)
-          : service.join(sessionToken, payload?.nickname ?? '', payload?.roomId ?? (gameId === 'texas' ? 'texas' : '414'));
+          : gameId === 'texas'
+            ? service.join(sessionToken, payload?.nickname ?? '', payload?.roomId ?? 'texas')
+            : service.join(sessionToken, payload?.nickname ?? '', payload?.roomId ?? '414', payload?.avatarUrl);
         addSocket(sessionToken, socket, gameId);
         acknowledge(ack, { ok: true, snapshot });
         sendSnapshots();

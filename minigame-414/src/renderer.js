@@ -62,10 +62,29 @@ class FourOneFourRenderer {
     this.viewport = { scale: 1, x: 0, y: 0, width: 540, height: 960 };
     this.avatarCache = new Map();
     this.animTime = 0;
+    this.bgImage = null;
+    this.bgLoaded = false;
     this.particles = [];
     this.suits = [];
+    this.initBackground();
     this.initParticles();
     this.initSuits();
+  }
+
+  initBackground() {
+    try {
+      const image = typeof wx !== 'undefined' && typeof wx.createImage === 'function'
+        ? wx.createImage()
+        : typeof Image !== 'undefined' ? new Image() : null;
+      if (!image) return;
+      image.onload = () => {
+        this.bgLoaded = true;
+        if (typeof this.onAssetLoaded === 'function') this.onAssetLoaded();
+      };
+      image.onerror = () => { this.bgLoaded = false; };
+      image.src = 'assets/poker-entry-bg.jpg';
+      this.bgImage = image;
+    } catch { /* Keep the procedural gradient fallback. */ }
   }
 
   save() {
@@ -90,11 +109,18 @@ class FourOneFourRenderer {
           }
           if (img) {
             img.onload = () => { if (typeof this.onAssetLoaded === 'function') this.onAssetLoaded(); };
+            img.onerror = () => {
+              img.__avatarLoadFailed = true;
+              const host = String(url).match(/^https:\/\/([^/]+)/i)?.[1] || 'unknown host';
+              console.warn(`[414] avatar image failed to load from ${host}; check the mini-game downloadFile domain allowlist`);
+              if (typeof this.onAssetLoaded === 'function') this.onAssetLoaded();
+            };
             img.src = url;
             this.avatarCache.set(url, img);
           }
         } catch { /* ignore */ }
       }
+      if (img?.__avatarLoadFailed) return false;
       if (img && img.width) {
         this.save();
         if (square) this.roundRect(x, y, size, size, 6, null);
@@ -346,15 +372,33 @@ class FourOneFourRenderer {
 
   drawEntry(state) {
     const ctx = this.ctx;
-    // Luxury dark velvet background gradient
-    const bgGrad = this.linearFill(0, 0, 540, 960, [
-      [0, '#0a1d27'],
-      [0.35, '#0d2836'],
-      [0.75, '#07161f'],
-      [1, '#040d13'],
-    ], '#07161e');
-    ctx.fillStyle = bgGrad;
-    ctx.fillRect(0, 0, 540, 960);
+    let hasSceneBackground = false;
+    if (this.bgLoaded && this.bgImage?.width && typeof ctx.drawImage === 'function') {
+      try {
+        ctx.drawImage(this.bgImage, 0, 0, 540, 960);
+        hasSceneBackground = true;
+      } catch { /* Use the gradient fallback if the image cannot be drawn. */ }
+    }
+    if (hasSceneBackground) {
+      const overlay = this.linearFill(0, 0, 0, 960, [
+        [0, 'rgba(6, 17, 24, 0.48)'],
+        [0.35, 'rgba(6, 17, 24, 0.68)'],
+        [0.75, 'rgba(6, 17, 24, 0.86)'],
+        [1, 'rgba(4, 12, 18, 0.96)'],
+      ], 'rgba(6, 17, 24, 0.76)');
+      ctx.fillStyle = overlay;
+      ctx.fillRect(0, 0, 540, 960);
+    } else {
+      // Luxury dark velvet fallback while the scene image loads or if unavailable.
+      const bgGrad = this.linearFill(0, 0, 540, 960, [
+        [0, '#0a1d27'],
+        [0.35, '#0d2836'],
+        [0.75, '#07161f'],
+        [1, '#040d13'],
+      ], '#07161e');
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, 540, 960);
+    }
 
     // Decorative dynamic ambient poker suit watermarks in background
     this.drawSuits();
@@ -391,7 +435,7 @@ class FourOneFourRenderer {
 
     // Tip Banner
     this.roundRect(cardX + 25, cardY + 166, cardW - 50, 26, 6, 'rgba(212, 155, 41, 0.15)', 'rgba(212, 155, 41, 0.35)');
-    this.text('💡 输入邀请码后点击键盘【前往】即可直接进入', 270, cardY + 179, 10.5, '#ffd275', 'center', '600');
+    this.text('💡 按键盘【前往】或点【进入房间】继续', 270, cardY + 179, 10.5, '#ffd275', 'center', '600');
 
     // Authorization Notice
     const authAvailable = state.canRequestUserInfo && !state.profileAuthorized;
@@ -437,9 +481,10 @@ class FourOneFourRenderer {
     this.text(`第 ${pub.handNumber || 0} 局 · ${this.phaseLabel(pub.phase)}`, 74, 38, 11, '#b0c4cf');
     this.circle(184, 22, 3, '#8eddaa');
 
-    // Floating Chat Icon (Right side)
+    // Keep the chat launcher aligned with Mahjong's mid-right position,
+    // clear of the WeChat mini-program capsule in the top-right corner.
     const chatX = width - 42;
-    const chatY = 28;
+    const chatY = 315;
     this.circle(chatX, chatY, 22, state.chatOpen ? '#b7894b' : 'rgba(22, 54, 68, 0.85)', 'rgba(255, 228, 168, 0.7)', 1.5);
     this.roundRect(chatX - 11, chatY - 8, 22, 16, 7, '#ffe8ad');
     this.polygon([[chatX - 6, chatY + 5], [chatX - 8, chatY + 12], [chatX + 1, chatY + 6]], '#ffe8ad');

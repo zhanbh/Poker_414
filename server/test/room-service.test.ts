@@ -10,6 +10,40 @@ function service(): RoomService {
 }
 
 describe('单房间会话与命令服务', () => {
+  it('入房时保存并向房间快照返回玩家头像', () => {
+    const room = service();
+    const auth = room.login('inner-414');
+    const avatarUrl = 'https://wx.qlogo.cn/avatar/abc';
+
+    const snapshot = room.join(auth.sessionToken, '甲', '414', avatarUrl);
+
+    expect(snapshot.public.players[0]).toMatchObject({ nickname: '甲', avatarUrl });
+    expect(room.getState()?.players.A?.avatarUrl).toBe(avatarUrl);
+  });
+
+  it('同一会话重新入房时补充或更新头像，不会清除已有头像', () => {
+    const room = service();
+    const auth = room.login('inner-414');
+    const firstAvatar = 'https://wx.qlogo.cn/avatar/first';
+    const secondAvatar = 'https://wx.qlogo.cn/avatar/second';
+    room.join(auth.sessionToken, '甲', '414', firstAvatar);
+
+    const updated = room.join(auth.sessionToken, '甲', '414', secondAvatar);
+    const unchanged = room.join(auth.sessionToken, '甲', '414');
+
+    expect(updated.public.players[0]?.avatarUrl).toBe(secondAvatar);
+    expect(unchanged.public.players[0]?.avatarUrl).toBe(secondAvatar);
+  });
+
+  it('忽略非 HTTPS 或过长的头像地址', () => {
+    const room = service();
+    const auth = room.login('inner-414');
+
+    const snapshot = room.join(auth.sessionToken, '甲', '414', 'http://example.com/avatar.png');
+
+    expect(snapshot.public.players[0]).not.toHaveProperty('avatarUrl');
+  });
+
   it('固定邀请码登录后前四人入座，满员后自动进入观战，并返回私密手牌视图', () => {
     const room = service();
     expect(() => room.login('wrong')).toThrow(/邀请码/);

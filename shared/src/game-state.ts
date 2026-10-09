@@ -22,6 +22,7 @@ export const AWAY_TIMEOUT_MS = 30_000;
 export interface PlayerState {
   id: string;
   nickname: string;
+  avatarUrl?: string;
   seat: Seat;
   team: Team;
   hand: Card[];
@@ -128,7 +129,7 @@ export function createGameState(roomId: string, hostId: string): GameState {
 
 export function joinPlayer(
   state: GameState,
-  player: { readonly id: string; readonly nickname: string },
+  player: { readonly id: string; readonly nickname: string; readonly avatarUrl?: string },
   now: number,
 ): GameState {
   if (state.phase !== 'lobby') throw new GameStateError('ROOM_STARTED', '牌局已经开始，不能加入');
@@ -144,6 +145,7 @@ export function joinPlayer(
   const seatedPlayer: PlayerState = {
     id: player.id,
     nickname: player.nickname,
+    ...(player.avatarUrl ? { avatarUrl: player.avatarUrl } : {}),
     seat,
     team: teamOf(seat),
     hand: [],

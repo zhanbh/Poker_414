@@ -40,6 +40,11 @@ export interface RoomServiceOptions {
 
 const MAX_SPECTATORS = 4;
 
+function normalizeAvatarUrl(value: string | undefined): string | undefined {
+  const avatarUrl = typeof value === 'string' ? value.trim() : '';
+  return avatarUrl.length <= 2_048 && /^https:\/\//i.test(avatarUrl) ? avatarUrl : undefined;
+}
+
 export interface AuthResult {
   readonly sessionToken: string;
   readonly playerId: string;
@@ -88,12 +93,28 @@ export class RoomService {
     return { sessionToken: session.sessionToken, playerId: session.playerId };
   }
 
-  join(sessionToken: string, nickname: string, roomId: string): RoomSnapshot {
+  join(sessionToken: string, nickname: string, roomId: string, avatarUrl?: string): RoomSnapshot {
     const session = this.sessions.get(sessionToken);
     if (roomId !== '414') throw new RoomServiceError('ROOM_NOT_FOUND', '房间号不存在');
     if (!isValidNickname(nickname)) throw new RoomServiceError('INVALID_NICKNAME', '昵称仅支持1–12位中文、字母、数字或下划线');
 
-    if (session.seat || session.role === 'spectator') return this.getSnapshot(sessionToken);
+    const cleanAvatarUrl = normalizeAvatarUrl(avatarUrl);
+    if (session.seat || session.role === 'spectator') {
+      const existingSeat = session.seat;
+      const currentState = this.state;
+      const existingPlayer = existingSeat && currentState?.players[existingSeat];
+      if (existingSeat && currentState && existingPlayer && cleanAvatarUrl && existingPlayer.avatarUrl !== cleanAvatarUrl) {
+        this.state = {
+          ...currentState,
+          version: currentState.version + 1,
+          players: {
+            ...currentState.players,
+            [existingSeat]: { ...existingPlayer, avatarUrl: cleanAvatarUrl },
+          },
+        };
+      }
+      return this.getSnapshot(sessionToken);
+    }
     if (!this.state) this.state = createGameState(roomId, session.playerId);
     const hasOpenPlayerSeat = Object.values(this.state.players).some((player) => player === null);
     if (!hasOpenPlayerSeat) {
@@ -104,7 +125,11 @@ export class RoomService {
       return this.getSnapshot(sessionToken);
     }
     try {
-      const joined = joinPlayer(this.state, { id: session.playerId, nickname: nickname.trim() }, this.now());
+      const joined = joinPlayer(this.state, {
+        id: session.playerId,
+        nickname: nickname.trim(),
+        ...(cleanAvatarUrl ? { avatarUrl: cleanAvatarUrl } : {}),
+      }, this.now());
       const hasHost = Object.values(joined.players).some((player) => player?.id === joined.hostId);
       this.state = hasHost ? joined : { ...joined, hostId: session.playerId };
     } catch (error) {
@@ -138,6 +163,7 @@ export class RoomService {
       .map((player) => ({
         seat: player.seat,
         nickname: player.nickname,
+        ...(player.avatarUrl ? { avatarUrl: player.avatarUrl } : {}),
         team: player.team,
         connected: player.connected,
         away: player.away,

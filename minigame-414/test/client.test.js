@@ -41,6 +41,21 @@ describe('414 mini-game project split', () => {
     });
   });
 
+  it('does not enter a room when there is no invite code, even if a saved session exists', async () => {
+    let loginCalled = false;
+    const app = {
+      state: { inviteCode: '', profileAuthorized: true, error: '', statusMessage: '' },
+      wx: { getStorageSync: () => 'stale-session' },
+      transport: { login: async () => { loginCalled = true; } },
+      draw: () => {},
+    };
+
+    await FourOneFourGameApp.prototype.enterRoom.call(app);
+
+    expect(loginCalled).toBe(false);
+    expect(app.state.error).toBe('请输入邀请码');
+  });
+
   it('sorts the visible hand and renders the correct card suit labels', () => {
     const cards = [
       { id: 'a', kind: 'standard', suit: 'spades', rank: 'A' },
@@ -68,7 +83,9 @@ describe('414 mini-game project split', () => {
     });
     expect(roomRenderer.targets.some((target) => target.type === 'start')).toBe(true);
     expect(roomRenderer.targets.some((target) => target.type === 'leave')).toBe(true);
-    expect(roomRenderer.targets.some((target) => target.type === 'toggle-chat')).toBe(true);
+    expect(roomRenderer.targets.find((target) => target.type === 'toggle-chat')).toMatchObject({
+      x: 894, y: 291, width: 48, height: 48,
+    });
     expect(roomRenderer.targets.some((target) => target.type === 'select-player' && target.data.seat === 'B')).toBe(true);
   });
 
@@ -217,6 +234,123 @@ describe('414 mini-game project split', () => {
     expect(entryOptions).toEqual({ nickname: '扑克大神', avatarUrl: 'https://avatar.example/poker.png', profileAuthorized: true });
   });
 
+  it('fetches a missing avatar without replacing the nickname already returned by the authorization button', async () => {
+    let entryOptions;
+    const app = {
+      state: { error: '', statusMessage: '' },
+      wx: {
+        getUserInfo: ({ success }) => success({ userInfo: { nickName: '备用昵称', avatarUrl: 'https://avatar.example/from-get-user-info.png' } }),
+      },
+      draw: () => {},
+      enterRoom: async (options) => { entryOptions = options; },
+    };
+
+    await FourOneFourGameApp.prototype.handleUserInfoButtonResult.call(app, {
+      userInfo: { nickName: '已授权昵称' },
+    });
+
+    expect(entryOptions).toEqual({
+      nickname: '已授权昵称',
+      avatarUrl: 'https://avatar.example/from-get-user-info.png',
+      profileAuthorized: true,
+    });
+  });
+
+  it('requests privacy consent and microphone permission before enabling voice chat', async () => {
+    const calls = [];
+    const app = {
+      state: { error: '', statusMessage: '' },
+      wx: {
+        requirePrivacyAuthorize: ({ success }) => { calls.push('privacy'); success(); },
+        authorize: ({ scope, success }) => { calls.push(scope); success(); },
+      },
+      draw: () => {},
+    };
+
+    await expect(FourOneFourGameApp.prototype.authorizeVoiceRecording.call(app)).resolves.toBe(true);
+    expect(calls).toEqual(['privacy', 'scope.record']);
+  });
+
+  it('shows an actionable message when WeChat blocks recording for missing privacy configuration', async () => {
+    const app = {
+      state: { error: '', statusMessage: '' },
+      wx: {
+        requirePrivacyAuthorize: ({ fail }) => fail({ errMsg: 'start:fail please go to mp open official popup errno=1026' }),
+        authorize: () => { throw new Error('must not request microphone before privacy is accepted'); },
+      },
+      draw: () => {},
+    };
+
+    await expect(FourOneFourGameApp.prototype.authorizeVoiceRecording.call(app)).resolves.toBe(false);
+    expect(app.state.error).toMatch(/隐私保护指引中声明麦克风/);
+  });
+
+  it('uses a locally authorized avatar when an older server snapshot omits it', () => {
+    const app = {
+      state: { avatarUrl: 'https://avatar.example/me.png', selectedIds: [], error: '', statusMessage: '' },
+      wx: { getStorageSync: () => '' },
+      destroyUserInfoButton: () => {},
+      stopAnimationLoop: () => {},
+      setOrientation: () => {},
+      draw: () => {},
+    };
+    const snapshot = {
+      public: { roomId: '414', phase: 'lobby', players: [{ seat: 'A', nickname: '玩家' }] },
+      private: { seat: 'A', hand: [] },
+    };
+
+    FourOneFourGameApp.prototype.updateSnapshot.call(app, snapshot);
+
+    expect(app.state.snapshot.public.players[0].avatarUrl).toBe('https://avatar.example/me.png');
+  });
+
+  it('uses the same room-entry authorization action for the keyboard Go key', () => {
+    const app = {
+      state: { focus: 'inviteCode', inviteCode: '308' },
+      wx: { hideKeyboard: () => {} },
+      draw: () => {},
+      handleEntryAction: () => { app.entryActionCount += 1; },
+      entryActionCount: 0,
+    };
+
+    FourOneFourGameApp.prototype.onKeyboardConfirm.call(app, { value: '308' });
+
+    expect(app.state.focus).toBe('');
+    expect(app.entryActionCount).toBe(1);
+  });
+
+  it('enters as guest only when the user explicitly denies profile authorization', async () => {
+    let entryOptions;
+    const app = {
+      state: { error: '', statusMessage: '' },
+      wx: {},
+      draw: () => {},
+      enterRoom: async (options) => { entryOptions = options; },
+    };
+
+    await FourOneFourGameApp.prototype.handleUserInfoButtonResult.call(app, {
+      errMsg: 'getUserInfo:fail auth deny',
+    });
+
+    expect(entryOptions).toMatchObject({ avatarUrl: '', profileAuthorized: false });
+    expect(entryOptions.nickname).toMatch(/^牌友[A-Z0-9]{5}$/);
+  });
+
+  it('does not silently enter as guest when profile lookup fails without an explicit denial', async () => {
+    let entered = false;
+    const app = {
+      state: { error: '', statusMessage: '' },
+      wx: {},
+      draw: () => {},
+      enterRoom: async () => { entered = true; },
+    };
+
+    await FourOneFourGameApp.prototype.handleUserInfoButtonResult.call(app, {});
+
+    expect(entered).toBe(false);
+    expect(app.state.error).toMatch(/未能读取微信昵称头像/);
+  });
+
   it('updates entry animation effects and renders dynamic particle and suit elements', () => {
     const renderer = mockRenderer(540, 960);
     expect(renderer.particles.length).toBe(32);
@@ -254,4 +388,3 @@ describe('414 mini-game project split', () => {
     expect(app.animationRunning).toBe(false);
   });
 });
-

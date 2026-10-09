@@ -17,7 +17,7 @@ describe('native mini-game Canvas renderer', () => {
     expect(renderer.hit(270, 654)).toMatchObject({ type: 'enter' });
     expect(renderer.targets.some((target) => target.type === 'input' && target.data.field === 'nickname')).toBe(false);
     expect(labels).toContain('进入房间');
-    expect(labels).toContain('308 麻将 · 微信小游戏');
+    expect(labels).toContain('308娱乐 · 微信小游戏');
     expect(labels).not.toContain('414 麻将');
     expect(labels).not.toContain('授权昵称头像并进入');
     expect(labels).not.toContain('点击填写昵称（可授权微信资料）');
@@ -135,6 +135,65 @@ describe('native mini-game Canvas renderer', () => {
     expect(renderer.targets.some((target) => target.type === 'profile')).toBe(false);
     expect(labels).not.toContain('授权昵称头像');
     expect(renderer.hit(620, 388)).toMatchObject({ type: 'input', data: { field: 'chatDraft' } });
+  });
+
+  it('marks every publicly listening player on their player card', () => {
+    const labels = [];
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels.push(String(value)) }));
+    const state = {
+      selectedTarget: null,
+      snapshot: {
+        public: {
+          phase: 'playing',
+          players: [{ seat: 'B', nickname: '听牌玩家', score: 1000, isListening: true, melds: [], discards: [] }],
+          chat: [],
+        },
+        private: { seat: 'A' },
+      },
+    };
+
+    renderer.drawPlayerCard(state, 'B', 120, 120, 94, 114);
+
+    expect(labels).toContain('听');
+  });
+
+  it('shows a detailed Mahjong settlement ledger and lets the host advance', () => {
+    const labels = [];
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels.push(String(value)) }));
+    const state = {
+      snapshot: {
+        public: {
+          handNumber: 3,
+          hostSeat: 'A',
+          players: [
+            { seat: 'A', nickname: '玩家甲', score: 1030 },
+            { seat: 'B', nickname: '玩家乙', score: 990 },
+            { seat: 'C', nickname: '玩家丙', score: 990 },
+            { seat: 'D', nickname: '玩家丁', score: 990 },
+          ],
+          settlement: {
+            type: 'self-draw', winnerSeat: 'A', winnerNickname: '玩家甲', winPattern: 'standard', baseScore: 5,
+            payments: { A: 30, B: -10, C: -10, D: -10 },
+            transfers: [
+              { from: 'B', to: 'A', fan: 2, amount: 10 },
+              { from: 'C', to: 'A', fan: 2, amount: 10 },
+              { from: 'D', to: 'A', fan: 2, amount: 10 },
+            ],
+          },
+        },
+        private: { seat: 'A', spectator: false },
+      },
+    };
+
+    renderer.drawSettlement(state);
+
+    expect(labels).toContain('第 3 局 · 本局结算');
+    expect(labels).toContain('玩家甲 胡牌 · 自摸');
+    expect(labels).toContain('玩家甲 · 胡牌');
+    expect(labels).toContain('开始下一局');
+    expect(renderer.targets.some((target) => target.type === 'command' && target.data.action === 'next-hand')).toBe(true);
+    expect(renderer.hit(100, 10)).toMatchObject({ type: 'settlement-block' });
+    expect(renderer.hit(24, 31)).toMatchObject({ type: 'leave' });
   });
 
   it('passes the authorized profile directly into room entry', async () => {
@@ -681,4 +740,3 @@ describe('native mini-game Canvas renderer', () => {
     expect(renderer.targets.some((t) => t.type === 'close-interaction')).toBe(true);
   });
 });
-

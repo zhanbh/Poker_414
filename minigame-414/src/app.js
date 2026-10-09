@@ -30,6 +30,17 @@ function isPrivacyGuideError(...errors) {
   return /please go to mp to announce your privacy|errno\s*[:=]?\s*1026|-12034|privacy/i.test(errors.join(' '));
 }
 
+function voiceAuthorizationError(error) {
+  const message = apiErrorText(error);
+  if (isPrivacyGuideError(message)) {
+    return '微信隐私校验阻止了录音。请在小游戏后台的隐私保护指引中声明麦克风用于房间语音，并启用官方隐私授权弹窗。';
+  }
+  if (/auth deny|user deny|permission|authorize/i.test(message)) {
+    return '未获得麦克风授权。请同意语音权限，或在小游戏右上角“…”→设置中开启麦克风。';
+  }
+  return message || '录音失败，请检查麦克风权限后重试';
+}
+
 class FourOneFourGameApp {
   constructor(wxApi) {
     this.wx = wxApi;
@@ -159,7 +170,6 @@ class FourOneFourGameApp {
     this.renderer.onAssetLoaded = () => this.draw();
     this.draw();
     this.startAnimationLoop();
-    void this.restoreSession();
   }
 
   updateUserInfoButton(forceRecreate = false) {
@@ -234,9 +244,9 @@ class FourOneFourGameApp {
     let avatarUrl = String(userInfo?.avatarUrl || '').trim();
     const resultError = apiErrorText(result);
     let userInfoError = '';
-    const denied = /auth deny|user deny|cancel|拒绝/i.test(resultError);
-    if ((!nickname || nickname === '微信用户') && !denied && typeof this.wx.getUserInfo === 'function') {
-      userInfo = await new Promise((resolve) => {
+    let denied = /auth deny|user deny|cancel|拒绝/i.test(resultError);
+    if ((!nickname || nickname === '微信用户' || !avatarUrl) && !denied && typeof this.wx.getUserInfo === 'function') {
+      const fallbackUserInfo = await new Promise((resolve) => {
         try {
           this.wx.getUserInfo({
             withCredentials: false,
@@ -246,20 +256,26 @@ class FourOneFourGameApp {
           });
         } catch (error) { userInfoError = apiErrorText(error); resolve(null); }
       });
-      nickname = normalizeWechatNickname(userInfo?.nickName);
-      avatarUrl = String(userInfo?.avatarUrl || '').trim();
+      const fallbackNickname = normalizeWechatNickname(fallbackUserInfo?.nickName);
+      if (!nickname || nickname === '微信用户') nickname = fallbackNickname;
+      if (!avatarUrl) avatarUrl = String(fallbackUserInfo?.avatarUrl || '').trim();
     }
-    if (!nickname || nickname === '微信用户' || !VALID_NICKNAME.test(nickname)) {
+    if (nickname && !avatarUrl) {
+      console.warn('[414] WeChat returned a nickname but no avatarUrl after the profile fallback');
+    }
+    if (denied) {
       this.state.error = '';
-      if (denied) {
-        this.state.statusMessage = '未授权微信资料，使用随机昵称进入房间…';
-      } else if (isPrivacyGuideError(resultError, userInfoError)) {
-        this.state.statusMessage = '隐私指引未配置，使用随机昵称进入房间…';
-      } else {
-        this.state.statusMessage = '未获取到微信资料，使用随机昵称进入房间…';
-      }
+      this.state.statusMessage = '你已拒绝微信资料授权，将以游客身份进入房间…';
       this.draw();
       await this.enterRoom({ nickname: createGuestNickname(), avatarUrl: '', profileAuthorized: false });
+      return;
+    }
+    if (!nickname || nickname === '微信用户' || !VALID_NICKNAME.test(nickname)) {
+      this.state.error = isPrivacyGuideError(resultError, userInfoError)
+        ? '微信隐私授权配置未完成，请先完善隐私指引；未自动切换游客'
+        : '未能读取微信昵称头像，请重试授权；未自动切换游客';
+      this.state.statusMessage = '只有明确拒绝微信资料授权时，才会以游客身份进入';
+      this.draw();
       return;
     }
     this.state.profileAuthorized = true;
@@ -281,7 +297,11 @@ class FourOneFourGameApp {
       this.draw();
       return;
     }
-    if (this.userInfoBtn) return;
+    if (this.userInfoBtn) {
+      this.state.statusMessage = '请点击“进入房间”并确认昵称头像授权';
+      this.draw();
+      return;
+    }
     if (!this.state.profileAuthorized && typeof this.wx.createUserInfoButton === 'function') {
       this.updateUserInfoButton();
       if (!this.userInfoBtn) {
@@ -296,7 +316,10 @@ class FourOneFourGameApp {
       return;
     }
     if (!this.state.profileAuthorized && typeof this.wx.createUserInfoButton !== 'function') {
-      this.state.statusMessage = '当前微信环境不支持昵称头像授权，将使用临时昵称进入';
+      this.state.error = '当前微信环境不支持昵称头像授权，暂时无法进入房间';
+      this.state.statusMessage = '未收到明确拒绝授权，未切换游客身份';
+      this.draw();
+      return;
     }
     await this.enterRoom();
   }
@@ -469,10 +492,7 @@ class FourOneFourGameApp {
     if (field === 'chatDraft') {
       void this.sendChat();
     } else if (field === 'inviteCode') {
-      this.updateUserInfoButton(true);
-      if (this.state.inviteCode.trim()) {
-        void this.handleEntryAction();
-      }
+      void this.handleEntryAction();
     }
   }
 
@@ -526,7 +546,11 @@ class FourOneFourGameApp {
       return;
     }
     if (type === 'toggle-chat-mode') {
-      this.state.chatMode = this.state.chatMode === 'voice' ? 'text' : 'voice';
+      if (this.state.chatMode === 'voice') {
+        this.state.chatMode = 'text';
+      } else if (await this.authorizeVoiceRecording()) {
+        this.state.chatMode = 'voice';
+      }
       this.draw();
       return;
     }
@@ -609,12 +633,13 @@ class FourOneFourGameApp {
       this.recorder.onStop((res) => {
         if (!this.state.recordingVoice) return;
         this.state.recordingVoice = false;
-        const durationSec = Math.max(1, Math.min(60, Math.round((Date.now() - this.state.voiceStartTime) / 1000)));
-        if (durationSec < 1) {
+        const elapsedMs = Date.now() - this.state.voiceStartTime;
+        if (elapsedMs < 600) {
           this.state.error = '说话时间太短';
           this.draw();
           return;
         }
+        const durationSec = Math.max(1, Math.min(15, Math.ceil(elapsedMs / 1000)));
         if (res && res.tempFilePath && typeof this.wx.getFileSystemManager === 'function') {
           try {
             const fs = this.wx.getFileSystemManager();
@@ -633,7 +658,7 @@ class FourOneFourGameApp {
       });
       this.recorder.onError((err) => {
         this.state.recordingVoice = false;
-        this.state.error = err.errMsg || '录音失败';
+        this.state.error = voiceAuthorizationError(err);
         this.draw();
       });
     } catch {
@@ -641,22 +666,58 @@ class FourOneFourGameApp {
     }
   }
 
+  async authorizeVoiceRecording() {
+    const request = (api, options) => new Promise((resolve) => {
+      let finished = false;
+      const finish = (allowed, error) => {
+        if (finished) return;
+        finished = true;
+        if (!allowed) {
+          this.state.error = voiceAuthorizationError(error);
+          this.state.statusMessage = '授权完成后再次切换语音，再按住说话';
+          this.draw();
+        }
+        resolve(allowed);
+      };
+      try {
+        api({ ...options, success: () => finish(true), fail: (error) => finish(false, error) });
+      } catch (error) {
+        finish(false, error);
+      }
+    });
+
+    if (typeof this.wx.requirePrivacyAuthorize === 'function') {
+      const privacyAllowed = await request(this.wx.requirePrivacyAuthorize.bind(this.wx), {});
+      if (!privacyAllowed) return false;
+    }
+    if (typeof this.wx.authorize === 'function') {
+      return request(this.wx.authorize.bind(this.wx), { scope: 'scope.record' });
+    }
+    return true;
+  }
+
   startVoiceRecording() {
     this.initRecorder();
-    if (!this.recorder) return;
+    if (!this.recorder) {
+      this.state.error = '当前微信环境不支持语音录制';
+      this.draw();
+      return;
+    }
     this.state.recordingVoice = true;
     this.state.voiceStartTime = Date.now();
     this.draw();
     try {
       this.recorder.start({
-        duration: 60000,
+        // The server accepts up to 15 seconds and 250 KB of base64 audio.
+        duration: 15000,
         sampleRate: 16000,
         numberOfChannels: 1,
         encodeBitRate: 48000,
         format: 'mp3',
       });
-    } catch {
+    } catch (error) {
       this.state.recordingVoice = false;
+      this.state.error = voiceAuthorizationError(error);
       this.draw();
     }
   }
@@ -747,8 +808,8 @@ class FourOneFourGameApp {
       this.state.busy = false;
       const rawMsg = error && error.message ? error.message : '';
       if (/TLS handshake failed|_code:8/i.test(rawMsg)) {
-        this.state.error = 'TLS握手被重置：308.company未备案被机房阻断；请在麻将云开发配置“环境共享”';
-        this.state.statusMessage = '公网TLS握手受阻 · 请在云开发控制台开通环境共享';
+        this.state.error = '308.company 的 WebSocket TLS 握手失败；无法仅凭此错误判断备案原因';
+        this.state.statusMessage = '请检查云端授权、TLS 证书及 WebSocket 网络链路';
       } else if (/url not in domain list/i.test(rawMsg)) {
         this.state.error = '域名未在合法列表：请在开发者工具中关闭“域名校验”，或在公众平台配置 308.company';
         this.state.statusMessage = '小游戏域名未在白名单中';
@@ -764,6 +825,23 @@ class FourOneFourGameApp {
 
   updateSnapshot(snapshot) {
     if (!snapshot?.public || snapshot.public.roomId !== '414' || !Array.isArray(snapshot.public.players)) return;
+    const ownSeat = snapshot.private?.seat;
+    const localAvatarUrl = this.state.avatarUrl || this.wx.getStorageSync?.(config.avatarUrlStorageKey) || '';
+    if (ownSeat && localAvatarUrl) {
+      const ownPlayer = snapshot.public.players.find((player) => player.seat === ownSeat);
+      if (ownPlayer && !ownPlayer.avatarUrl) {
+        console.warn('[414] room snapshot omitted avatarUrl; using the locally authorized profile for this player');
+        snapshot = {
+          ...snapshot,
+          public: {
+            ...snapshot.public,
+            players: snapshot.public.players.map((player) => player.seat === ownSeat
+              ? { ...player, avatarUrl: localAvatarUrl }
+              : player),
+          },
+        };
+      }
+    }
     this.destroyUserInfoButton();
     const latestMessage = (snapshot.public.chat || []).slice(-1)[0];
     if ((latestMessage?.kind === 'interaction' || latestMessage?.kind === 'phrase') && latestMessage.id !== this.lastInteractionId) {
@@ -815,28 +893,6 @@ class FourOneFourGameApp {
     } catch (error) { this.state.error = error.message || '消息发送失败'; }
     this.state.chatOpen = true;
     this.draw();
-  }
-
-  async restoreSession() {
-    const token = this.wx.getStorageSync?.(config.sessionStorageKey);
-    const nickname = this.wx.getStorageSync?.(config.nicknameStorageKey);
-    const avatarUrl = this.wx.getStorageSync?.(config.avatarUrlStorageKey) || '';
-    if (!token || !nickname) return;
-    this.state.nickname = nickname;
-    this.state.avatarUrl = avatarUrl;
-    this.state.busy = true;
-    this.state.statusMessage = '正在恢复房间会话…';
-    this.draw();
-    try {
-      await this.transport.login('', token);
-      const snapshot = await this.transport.join(nickname, avatarUrl);
-      this.updateSnapshot(snapshot);
-    } catch {
-      this.state.busy = false;
-      this.state.statusMessage = '无法恢复上次会话，请输入邀请码重新进入';
-      this.updateUserInfoButton();
-      this.draw();
-    }
   }
 
   scheduleRecovery(delay = 1500) {

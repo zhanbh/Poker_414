@@ -566,7 +566,7 @@ class MahjongRenderer {
     this.roundRect(240, 215, 60, 60, 12, null, 'rgba(255, 215, 120, 0.45)');
     this.text('雀', 270, 245, 36, '#fffdf6', 'center', '700');
 
-    this.text('308 麻将', 270, 320, 38, COLORS.gold, 'center', '700');
+    this.text('308娱乐', 270, 320, 38, COLORS.gold, 'center', '700');
     this.text('四人经典 · 私房约战 · 雅致雀台', 270, 365, 15, COLORS.muted, 'center', '500');
     this.text('───  ◆  ───', 270, 400, 12, 'rgba(255, 199, 94, 0.45)', 'center');
 
@@ -611,7 +611,7 @@ class MahjongRenderer {
     // Brand header
     this.roundRect(238, 80, 64, 24, 6, '#861c24', '#d49b29');
     this.text('私房雀局', 270, 92, 12, '#ffdb88', 'center', '600');
-    this.text('308 麻将 · 微信小游戏', 270, 140, 30, COLORS.gold, 'center', '700');
+    this.text('308娱乐 · 微信小游戏', 270, 140, 30, COLORS.gold, 'center', '700');
     this.text('与网页版、小程序实时同步同一房间', 270, 180, 14, COLORS.muted, 'center');
 
     // Compact translucent frosted glass card
@@ -653,7 +653,7 @@ class MahjongRenderer {
     this.ctx.beginPath(); this.ctx.moveTo(offset + 36, 22); this.ctx.lineTo(offset + 27, 31); this.ctx.lineTo(offset + 36, 40);
     this.ctx.strokeStyle = '#f9dfa4'; this.ctx.lineWidth = 2.5; this.ctx.stroke();
     this.targets.push({ x: offset + 8, y: 7, width: 48, height: 48, type: 'leave', data: {} });
-    this.text('308 麻将', offset + 65, 24, 18, '#ffe5a4', 'left', '700');
+    this.text('308娱乐', offset + 65, 24, 18, '#ffe5a4', 'left', '700');
     this.text(`${phaseLabel} · 第 ${state.snapshot.public.handNumber || 0} 局`, offset + 66, 44, 10, '#e0d6b7');
     this.circle(offset + 174, 23, 3, state.connectionStatus === 'connected' ? '#8eddaa' : '#edbe59');
   }
@@ -707,6 +707,10 @@ class MahjongRenderer {
         this.text('庄', avatarX + 56, y + 58, 17, '#fff2bc', 'center', '700');
       }
       if (state.snapshot.public.winAnnouncement?.winnerSeat === seat) this.text('胡', avatarX + 61, y - 8, 26, '#ffe08c', 'center', '700');
+      if (player.isListening) {
+        this.roundRect(avatarX + 3, y + 4, 25, 19, 5, '#a94432', '#ffe29a');
+        this.text('听', avatarX + 15.5, y + 13.5, 12, '#fff6d7', 'center', '700');
+      }
     } else {
       this.roundRect(avatarX, y, avatarSize, avatarSize, 9, 'rgba(15, 42, 30, 0.35)', 'rgba(238, 214, 158, 0.4)');
       this.text('+', x + width / 2, y + 29, 29, 'rgba(245, 229, 183, 0.58)', 'center');
@@ -1233,13 +1237,6 @@ class MahjongRenderer {
     this.drawDiscards(state, table);
     this.drawMelds(state, table);
     this.drawTableMedallion(state);
-    if (snapshot.public.phase === 'settled' && snapshot.public.settlement) {
-      const result = snapshot.public.settlement.type === 'draw'
-        ? '流局 · 本局不计分'
-        : `${snapshot.public.settlement.winnerNickname || snapshot.public.settlement.winnerSeat} 胡牌 · ${snapshot.public.settlement.winPattern || '平和'}`;
-      this.roundRect(width / 2 - 160, 320, 320, 46, 6, 'rgba(39, 60, 31, 0.9)', '#b7a15c');
-      this.text(this.fitText(result, 300, 16, '700'), width / 2, 343, 16, '#f9df98', 'center', '700');
-    }
     const order = relativeSeats(snapshot.private.seat || 'A');
     order.forEach((seat, index) => {
       const card = cards[index];
@@ -1253,6 +1250,106 @@ class MahjongRenderer {
     this.drawChatIcon(state);
     if (state.selectedTarget) this.drawInteractionPicker(state);
     this.drawChat(state);
+    if (snapshot.public.phase === 'settled' && snapshot.public.settlement) this.drawSettlement(state);
+  }
+
+  drawSettlement(state) {
+    const snapshot = state.snapshot;
+    const settlement = snapshot.public.settlement;
+    if (!settlement) return;
+
+    const { width, height } = this.roomLayout();
+    const panelWidth = Math.min(700, width - 28);
+    const panelHeight = 450;
+    const x = (width - panelWidth) / 2;
+    const y = (height - panelHeight) / 2;
+    const players = snapshot.public.players || [];
+    const playerBySeat = new Map(players.map((player) => [player.seat, player]));
+    const transfers = settlement.transfers || [];
+    const amountLabel = (transfer) => transfer.fan && settlement.baseScore
+      ? `${transfer.fan}番×${settlement.baseScore}=${transfer.amount}分`
+      : `${transfer.amount}分`;
+
+    let resultLabel;
+    if (settlement.type === 'draw') {
+      resultLabel = '流局 · 本局不计分 · 原庄家不变';
+    } else {
+      const pattern = settlement.isBaoZhongBao ? '宝中宝'
+        : settlement.winPattern === 'big-wind' ? '大风'
+          : settlement.winPattern === 'bao' ? '搂宝'
+            : settlement.type === 'self-draw' ? '自摸' : '平和';
+      resultLabel = `${settlement.winnerNickname || playerBySeat.get(settlement.winnerSeat)?.nickname || settlement.winnerSeat} 胡牌 · ${pattern}`;
+      if (settlement.isCardang && !settlement.isBaoZhongBao) resultLabel += ' · 卡当';
+      if (settlement.type === 'discard-win' && settlement.payingSeat) {
+        const payer = playerBySeat.get(settlement.payingSeat);
+        resultLabel += ` · ${payer?.nickname || settlement.payingSeat} 点炮`;
+      }
+    }
+
+    this.targets.push({ x: 0, y: 0, width, height, type: 'settlement-block', data: {} });
+    this.ctx.fillStyle = 'rgba(2, 9, 13, 0.72)';
+    this.ctx.fillRect(0, 0, width, height);
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+    ctx.shadowBlur = 22;
+    ctx.shadowOffsetY = 8;
+    this.roundRect(x, y, panelWidth, panelHeight, 16, 'rgba(12, 34, 42, 0.98)', '#d6aa55');
+    ctx.restore();
+    this.roundRect(x + 5, y + 5, panelWidth - 10, panelHeight - 10, 12, null, 'rgba(255, 224, 154, 0.35)');
+
+    this.text(`第 ${snapshot.public.handNumber || 1} 局 · 本局结算`, width / 2, y + 30, 21, '#ffd878', 'center', '700');
+    this.text(this.fitText(resultLabel, panelWidth - 44, 14, '600'), width / 2, y + 60, 14, '#f5f1dc', 'center', '600');
+    if (settlement.baseScore) this.text(`基础分 ${settlement.baseScore} 分`, width / 2, y + 84, 11, '#afc6bf', 'center');
+    ctx.beginPath();
+    ctx.moveTo(x + 18, y + 101);
+    ctx.lineTo(x + panelWidth - 18, y + 101);
+    ctx.strokeStyle = 'rgba(255, 222, 151, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    const rowTop = y + 111;
+    const rowHeight = 58;
+    players.forEach((player, index) => {
+      const rowY = rowTop + index * rowHeight;
+      const change = settlement.payments?.[player.seat] ?? 0;
+      const before = player.score - change;
+      const received = transfers.filter((transfer) => transfer.to === player.seat)
+        .map((transfer) => `收 ${playerBySeat.get(transfer.from)?.nickname || transfer.from} ${amountLabel(transfer)}`);
+      const paid = transfers.filter((transfer) => transfer.from === player.seat)
+        .map((transfer) => `付 ${playerBySeat.get(transfer.to)?.nickname || transfer.to} ${amountLabel(transfer)}`);
+      const flow = [...received, ...paid].join(' · ') || '无积分变化';
+      const role = settlement.winnerSeat === player.seat ? ' · 胡牌'
+        : settlement.payingSeat === player.seat ? ' · 点炮' : '';
+      const rowFill = player.seat === snapshot.private.seat ? 'rgba(255, 205, 104, 0.13)' : 'rgba(255, 255, 255, 0.055)';
+      this.roundRect(x + 14, rowY, panelWidth - 28, rowHeight - 4, 7, rowFill,
+        player.seat === snapshot.private.seat ? 'rgba(255, 209, 102, 0.75)' : 'rgba(143, 195, 202, 0.2)');
+      const nameWidth = Math.max(120, panelWidth * 0.31);
+      const scoreX = x + Math.min(panelWidth * 0.51, nameWidth + 40);
+      const deltaX = x + panelWidth - 24;
+      this.text(this.fitText(`${player.nickname}${role}`, nameWidth, 12, '600'), x + 25, rowY + 16, 12,
+        settlement.winnerSeat === player.seat ? '#ffe18b' : '#f2f4e8', 'left', '600');
+      this.text(`${before} → ${player.score}`, scoreX, rowY + 16, 12, '#dce7dc', 'left');
+      const deltaLabel = `${change > 0 ? '+' : ''}${change} 分`;
+      this.text(deltaLabel, deltaX, rowY + 16, 13,
+        change > 0 ? '#8be1b0' : change < 0 ? '#ffb5a8' : '#b7d0d8', 'right', '700');
+      this.text(this.fitText(flow, panelWidth - 48, 10), x + 25, rowY + 40, 10, '#a9c0c5', 'left');
+    });
+
+    const buttonY = y + panelHeight - 48;
+    const canAdvance = settlement.type !== 'draw'
+      && snapshot.public.hostSeat === snapshot.private.seat
+      && !snapshot.private.spectator;
+    if (canAdvance) {
+      this.button('开始下一局', width / 2 - 92, buttonY, 184, 34, 'command', { action: 'next-hand' }, 'primary');
+    } else {
+      const footer = settlement.type === 'draw' ? '即将开始下一局' : '等待房主开始下一局';
+      this.text(footer, width / 2, buttonY + 17, 12, '#b7d0d8', 'center');
+    }
+
+    // Keep the room exit available while the settlement overlay blocks the table.
+    const leaveX = this.roomLayout().leftInset - 8;
+    this.targets.push({ x: leaveX, y: 7, width: 48, height: 48, type: 'leave', data: {} });
   }
 
   drawOpponentHands(state, table) {

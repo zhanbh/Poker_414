@@ -24,7 +24,17 @@ function apiErrorText(error) {
     .join(' ');
 }
 function isPrivacyGuideError(...errors) {
-  return /please go to mp to announce your privacy usage|errno\s*[:=]?\s*1026|-12034/i.test(errors.join(' '));
+  return /please go to mp.*privacy|errno\s*[:=]?\s*1026|-12034/i.test(errors.join(' '));
+}
+function voiceAuthorizationError(error) {
+  const message = apiErrorText(error);
+  if (isPrivacyGuideError(message)) {
+    return '微信隐私校验阻止了录音。请在小游戏后台的隐私保护指引中声明麦克风用于房间语音，并启用官方隐私授权弹窗。';
+  }
+  if (/auth deny|user deny|permission|authorize/i.test(message)) {
+    return '未获得麦克风授权。请同意语音权限，或在小游戏右上角“…”→设置中开启麦克风。';
+  }
+  return message || '录音失败，请检查麦克风权限后重试';
 }
 
 class MahjongGameApp {
@@ -700,7 +710,11 @@ class MahjongGameApp {
       return;
     }
     if (type === 'toggle-chat-mode') {
-      this.state.chatMode = this.state.chatMode === 'voice' ? 'text' : 'voice';
+      if (this.state.chatMode === 'voice') {
+        this.state.chatMode = 'text';
+      } else if (await this.authorizeVoiceRecording()) {
+        this.state.chatMode = 'voice';
+      }
       if (this.state.keyboardOpen) this.hideKeyboard();
       this.draw();
       return;
@@ -925,19 +939,50 @@ class MahjongGameApp {
       this.recorder.onError((err) => {
         this.state.recordingVoice = false;
         this.recordingCancelled = false;
+        this.state.error = voiceAuthorizationError(err);
         this.draw();
-        if (err && /auth deny|authorize/i.test(err.errMsg || '')) {
-          if (typeof this.wx.showModal === 'function') {
-            this.wx.showModal({ title: '录音权限未开启', content: '请在小游戏设置中允许使用麦克风以发送语音。', showCancel: false });
-          }
-        }
       });
     } catch { /* ignore */ }
   }
 
+  async authorizeVoiceRecording() {
+    this.state.error = '';
+    const request = (api, options) => new Promise((resolve) => {
+      let finished = false;
+      const finish = (allowed, error) => {
+        if (finished) return;
+        finished = true;
+        if (!allowed) {
+          this.state.error = voiceAuthorizationError(error);
+          this.state.statusMessage = '授权完成后再次切换语音，再按住说话';
+          this.draw();
+        }
+        resolve(allowed);
+      };
+      try {
+        api({ ...options, success: () => finish(true), fail: (error) => finish(false, error) });
+      } catch (error) {
+        finish(false, error);
+      }
+    });
+
+    if (typeof this.wx.requirePrivacyAuthorize === 'function') {
+      const privacyAllowed = await request(this.wx.requirePrivacyAuthorize.bind(this.wx), {});
+      if (!privacyAllowed) return false;
+    }
+    if (typeof this.wx.authorize === 'function') {
+      return request(this.wx.authorize.bind(this.wx), { scope: 'scope.record' });
+    }
+    return true;
+  }
+
   startVoiceRecording() {
     this.initRecorder();
-    if (!this.recorder) return;
+    if (!this.recorder) {
+      this.state.error = '当前微信环境不支持语音录制';
+      this.draw();
+      return;
+    }
     this.recordingCancelled = false;
     try {
       this.recorder.start({
@@ -947,7 +992,11 @@ class MahjongGameApp {
         encodeBitRate: 32000,
         format: 'mp3',
       });
-    } catch { /* best effort */ }
+    } catch (error) {
+      this.state.recordingVoice = false;
+      this.state.error = voiceAuthorizationError(error);
+      this.draw();
+    }
   }
 
   stopVoiceRecording(cancel = false) {

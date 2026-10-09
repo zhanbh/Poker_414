@@ -61,6 +61,11 @@ class FourOneFourRenderer {
     this.targets = [];
     this.viewport = { scale: 1, x: 0, y: 0, width: 540, height: 960 };
     this.avatarCache = new Map();
+    this.animTime = 0;
+    this.particles = [];
+    this.suits = [];
+    this.initParticles();
+    this.initSuits();
   }
 
   save() {
@@ -240,6 +245,105 @@ class FourOneFourRenderer {
     }
   }
 
+  initParticles() {
+    this.particles = Array.from({ length: 32 }, () => ({
+      x: Math.random() * 540,
+      y: Math.random() * 960,
+      r: 1.0 + Math.random() * 2.2,
+      speedY: 0.35 + Math.random() * 0.65,
+      speedX: (Math.random() - 0.5) * 0.35,
+      alpha: 0.2 + Math.random() * 0.6,
+      pulse: Math.random() * Math.PI * 2,
+      pulseSpeed: 0.02 + Math.random() * 0.035,
+    }));
+  }
+
+  initSuits() {
+    this.suits = [
+      { char: '♠', x: 90, baseY: 180, size: 180, color: COLORS.gold, baseAlpha: 0.05, phase: 0 },
+      { char: '♥', x: 450, baseY: 220, size: 160, color: '#ef4444', baseAlpha: 0.05, phase: 1.5 },
+      { char: '♣', x: 80, baseY: 820, size: 150, color: COLORS.gold, baseAlpha: 0.05, phase: 3.1 },
+      { char: '♦', x: 460, baseY: 800, size: 170, color: '#ef4444', baseAlpha: 0.05, phase: 4.7 },
+      { char: '♠', x: 470, baseY: 480, size: 85, color: '#38bdf8', baseAlpha: 0.035, phase: 2.1 },
+      { char: '♦', x: 68, baseY: 490, size: 80, color: '#f59e0b', baseAlpha: 0.035, phase: 5.3 },
+    ];
+  }
+
+  updateEntryEffects(deltaMs = 16) {
+    this.animTime += deltaMs;
+    for (const p of this.particles) {
+      p.y -= p.speedY;
+      p.x += p.speedX;
+      p.pulse += p.pulseSpeed;
+      if (p.y < -10) {
+        p.y = 970;
+        p.x = Math.random() * 540;
+      }
+      if (p.x < -10) p.x = 550;
+      if (p.x > 550) p.x = -10;
+    }
+  }
+
+  drawParticles() {
+    const ctx = this.ctx;
+    if (!ctx || typeof ctx.arc !== 'function') return;
+    for (const p of this.particles) {
+      const alpha = Math.max(0.05, Math.min(1, p.alpha * (0.65 + 0.35 * Math.sin(p.pulse))));
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255, 215, 120, ${alpha.toFixed(2)})`;
+      ctx.fill();
+
+      if (p.r > 2.0) {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r * 2.2, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 195, 77, ${(alpha * 0.25).toFixed(2)})`;
+        ctx.fill();
+      }
+    }
+  }
+
+  drawSuits() {
+    const ctx = this.ctx;
+    const t = this.animTime * 0.0015;
+    for (const s of this.suits) {
+      const floatY = s.baseY + Math.sin(t + s.phase) * 9;
+      const alpha = Math.max(0.02, Math.min(0.09, s.baseAlpha + Math.sin(t * 0.8 + s.phase) * 0.025));
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      this.text(s.char, s.x, floatY, s.size, s.color, 'center');
+      ctx.restore();
+    }
+  }
+
+  drawButtonShimmer(bx, by, bw, bh) {
+    const ctx = this.ctx;
+    if (!ctx || typeof ctx.save !== 'function' || typeof ctx.clip !== 'function') return;
+    const period = 3200;
+    const progress = (this.animTime % period) / period;
+    if (progress > 0.45) return;
+    const p = progress / 0.45;
+    const shimmerX = bx - 60 + p * (bw + 120);
+
+    ctx.save();
+    this.roundRect(bx, by, bw, bh, 10, null, null);
+    try {
+      ctx.clip();
+      const grad = this.linearFill(shimmerX - 35, by, shimmerX + 35, by + bh, [
+        [0, 'rgba(255, 255, 255, 0)'],
+        [0.5, 'rgba(255, 255, 255, 0.28)'],
+        [1, 'rgba(255, 255, 255, 0)'],
+      ], null);
+      if (grad) {
+        ctx.fillStyle = grad;
+        ctx.fillRect(shimmerX - 35, by, 70, bh);
+      }
+    } catch {
+      /* Safe fallback */
+    }
+    ctx.restore();
+  }
+
   drawEntry(state) {
     const ctx = this.ctx;
     // Luxury dark velvet background gradient
@@ -252,29 +356,30 @@ class FourOneFourRenderer {
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, 540, 960);
 
-    // Decorative ambient poker suit watermarks in background
-    ctx.save();
-    ctx.globalAlpha = 0.05;
-    this.text('♠', 90, 180, 180, COLORS.gold, 'center');
-    this.text('♥', 450, 220, 160, '#ef4444', 'center');
-    this.text('♣', 80, 820, 150, COLORS.gold, 'center');
-    this.text('♦', 460, 800, 170, '#ef4444', 'center');
-    ctx.restore();
+    // Decorative dynamic ambient poker suit watermarks in background
+    this.drawSuits();
+
+    // Floating starlight & gold dust particles
+    this.drawParticles();
 
     // Brand Header
-    this.roundRect(228, 86, 84, 26, 6, '#861c24', '#d49b29');
+    const badgePulse = Math.sin(this.animTime * 0.003);
+    const badgeBorder = badgePulse > 0 ? '#e6af3f' : '#d49b29';
+    this.roundRect(228, 86, 84, 26, 6, '#861c24', badgeBorder);
     this.text('私房牌局', 270, 99, 13, '#ffdb88', 'center', '600');
 
     this.text('414 私房扑克 · 微信小游戏', 270, 152, 29, COLORS.gold, 'center', '700');
     this.text('经典四人二打二 · 跨端实时互通', 270, 192, 14, COLORS.muted, 'center');
 
-    // Frosted Glass Card
+    // Frosted Glass Card with breathing golden border glow
     const cardX = 75;
     const cardY = 270;
     const cardW = 390;
     const cardH = 370;
-    this.roundRect(cardX, cardY, cardW, cardH, 20, 'rgba(10, 28, 38, 0.68)', 'rgba(218, 170, 75, 0.45)');
-    this.roundRect(cardX + 6, cardY + 6, cardW - 12, cardH - 12, 16, null, 'rgba(255, 225, 140, 0.12)');
+    const borderAlpha = (0.35 + 0.18 * Math.sin(this.animTime * 0.0024)).toFixed(2);
+    const innerAlpha = (0.10 + 0.08 * Math.sin(this.animTime * 0.0024 + 1.2)).toFixed(2);
+    this.roundRect(cardX, cardY, cardW, cardH, 20, 'rgba(10, 28, 38, 0.68)', `rgba(218, 170, 75, ${borderAlpha})`);
+    this.roundRect(cardX + 6, cardY + 6, cardW - 12, cardH - 12, 16, null, `rgba(255, 225, 140, ${innerAlpha})`);
 
     this.text('✦ 加入牌局 ✦', 270, cardY + 36, 18, COLORS.gold, 'center', '700');
 
@@ -294,6 +399,9 @@ class FourOneFourRenderer {
 
     // Enter Button
     this.button(state.busy ? '正在进入…' : '进入房间', cardX + 25, cardY + 240, cardW - 50, 56, 'enter', {}, state.busy);
+    if (!state.busy) {
+      this.drawButtonShimmer(cardX + 25, cardY + 240, cardW - 50, 56);
+    }
 
     // Status Message
     const cardMsg = state.statusMessage || (state.error ? state.error : '请输入 6 位房间邀请码');

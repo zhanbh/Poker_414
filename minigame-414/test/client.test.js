@@ -216,4 +216,42 @@ describe('414 mini-game project split', () => {
     });
     expect(entryOptions).toEqual({ nickname: '扑克大神', avatarUrl: 'https://avatar.example/poker.png', profileAuthorized: true });
   });
+
+  it('updates entry animation effects and renders dynamic particle and suit elements', () => {
+    const renderer = mockRenderer(540, 960);
+    expect(renderer.particles.length).toBe(32);
+    expect(renderer.suits.length).toBe(6);
+    const initialAnimTime = renderer.animTime;
+    renderer.updateEntryEffects(33);
+    expect(renderer.animTime).toBe(initialAnimTime + 33);
+    expect(() => {
+      renderer.draw({ screen: 'entry', inviteCode: '', nickname: '', statusMessage: '', error: '' });
+    }).not.toThrow();
+  });
+
+  it('runs animation loop when on entry screen and stops when leaving entry', () => {
+    const frames = [];
+    const app = {
+      animationRunning: false,
+      animationId: null,
+      lastFrameTime: 0,
+      visible: true,
+      state: { screen: 'entry' },
+      renderer: {
+        updateEntryEffects: () => {},
+      },
+      draw: () => {},
+      scheduleNextFrame: (cb) => { frames.push(cb); },
+      startAnimationLoop: FourOneFourGameApp.prototype.startAnimationLoop,
+      stopAnimationLoop: FourOneFourGameApp.prototype.stopAnimationLoop,
+    };
+    app.startAnimationLoop();
+    expect(frames.length).toBe(1);
+    const frame = frames.shift();
+    frame();
+    expect(frames.length).toBe(1);
+    app.stopAnimationLoop();
+    expect(app.animationRunning).toBe(false);
+  });
 });
+

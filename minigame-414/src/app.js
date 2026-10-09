@@ -72,6 +72,9 @@ class FourOneFourGameApp {
     this.pixelRatio = 1;
     this.recorder = null;
     this.recorderInitialized = false;
+    this.animationRunning = false;
+    this.animationId = null;
+    this.lastFrameTime = 0;
 
     this.resizeCanvas();
     this.draw = this.draw.bind(this);
@@ -107,12 +110,14 @@ class FourOneFourGameApp {
         if (this.transport.authenticated) this.transport.startKeepAlive();
         this.transport.activity();
         if (this.state.snapshot && !this.transport.opened) this.scheduleRecovery(100);
+        if (this.state.screen === 'entry') this.startAnimationLoop();
       });
     }
 
     if (typeof wxApi.onHide === 'function') {
       wxApi.onHide(() => {
         this.visible = false;
+        this.stopAnimationLoop();
         this.transport.stopKeepAlive();
         if (this.interactionTimer) clearInterval(this.interactionTimer);
         if (this.interactionTimeout) clearTimeout(this.interactionTimeout);
@@ -141,6 +146,7 @@ class FourOneFourGameApp {
     }
     this.renderer.onAssetLoaded = () => this.draw();
     this.draw();
+    this.startAnimationLoop();
     void this.restoreSession();
   }
 
@@ -295,6 +301,61 @@ class FourOneFourGameApp {
 
   draw() {
     this.renderer.draw(this.state);
+  }
+
+  startAnimationLoop() {
+    if (this.animationRunning) return;
+    this.animationRunning = true;
+    this.lastFrameTime = Date.now();
+    const tick = () => {
+      if (!this.animationRunning) return;
+      if (this.state.screen === 'entry' && this.visible) {
+        const now = Date.now();
+        const delta = Math.min(100, Math.max(1, now - (this.lastFrameTime || now)));
+        this.lastFrameTime = now;
+        if (typeof this.renderer.updateEntryEffects === 'function') {
+          this.renderer.updateEntryEffects(delta);
+        }
+        this.draw();
+        this.scheduleNextFrame(tick);
+      } else {
+        this.animationRunning = false;
+        this.animationId = null;
+      }
+    };
+    this.scheduleNextFrame(tick);
+  }
+
+  scheduleNextFrame(cb) {
+    if (typeof requestAnimationFrame === 'function') {
+      this.animationId = requestAnimationFrame(cb);
+    } else if (typeof GameGlobal !== 'undefined' && typeof GameGlobal.requestAnimationFrame === 'function') {
+      this.animationId = GameGlobal.requestAnimationFrame(cb);
+    } else if (this.canvas && typeof this.canvas.requestAnimationFrame === 'function') {
+      this.animationId = this.canvas.requestAnimationFrame(cb);
+    } else if (this.wx && typeof this.wx.requestAnimationFrame === 'function') {
+      this.animationId = this.wx.requestAnimationFrame(cb);
+    } else {
+      this.animationId = setTimeout(cb, 16);
+    }
+  }
+
+  stopAnimationLoop() {
+    this.animationRunning = false;
+    if (this.animationId !== null) {
+      if (typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(this.animationId);
+      } else if (typeof GameGlobal !== 'undefined' && typeof GameGlobal.cancelAnimationFrame === 'function') {
+        GameGlobal.cancelAnimationFrame(this.animationId);
+      } else if (this.canvas && typeof this.canvas.cancelAnimationFrame === 'function') {
+        this.canvas.cancelAnimationFrame(this.animationId);
+      } else if (this.wx && typeof this.wx.cancelAnimationFrame === 'function') {
+        this.wx.cancelAnimationFrame(this.animationId);
+      } else {
+        clearTimeout(this.animationId);
+      }
+      this.animationId = null;
+    }
   }
 
   setOrientation(value) {
@@ -703,6 +764,7 @@ class FourOneFourGameApp {
     }
     this.state.snapshot = snapshot;
     this.state.screen = snapshot.public.phase === 'lobby' ? 'lobby' : 'table';
+    this.stopAnimationLoop();
     this.state.busy = false;
     this.state.error = '';
     this.state.statusMessage = snapshot.public.phase === 'lobby' ? '等待玩家进入房间' : '房间实时同步中';
@@ -801,6 +863,7 @@ class FourOneFourGameApp {
         this.state.statusMessage = '已退出房间，可重新进入';
         this.setOrientation('portrait');
         this.updateUserInfoButton();
+        this.startAnimationLoop();
         this.draw();
       } catch (error) {
         this.state.error = error.message || '退出失败';

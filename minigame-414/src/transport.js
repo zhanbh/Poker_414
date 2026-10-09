@@ -13,6 +13,35 @@ class GameTransport {
     this.snapshotListeners = new Set();
     this.statusListeners = new Set();
     this.keepAliveTimer = null;
+    this.cloudInstance = null;
+  }
+
+  async getCloudInstance() {
+    const wxCloud = this.wx?.cloud;
+    if (!wxCloud) return null;
+    if (this.cloudInstance) return this.cloudInstance;
+
+    if (config.resourceAppid && typeof wxCloud.Cloud === 'function') {
+      try {
+        const crossCloud = new wxCloud.Cloud({
+          resourceAppid: config.resourceAppid,
+          resourceEnv: config.cloudBaseEnvId,
+        });
+        await crossCloud.init();
+        this.cloudInstance = crossCloud;
+        return crossCloud;
+      } catch (err) {
+        console.warn('跨账号云开发初始化失败，尝试默认环境:', err);
+      }
+    }
+
+    if (typeof wxCloud.init === 'function') {
+      try {
+        await wxCloud.init({ env: config.cloudBaseEnvId, traceUser: true });
+      } catch { /* ignore */ }
+    }
+    this.cloudInstance = wxCloud;
+    return wxCloud;
   }
 
   connect() {
@@ -39,20 +68,22 @@ class GameTransport {
       });
     });
     this.connecting = (async () => {
-      const cloud = this.wx.cloud;
-      if (cloud && typeof cloud.connectContainer === 'function') {
-        try {
+      let cloudError = null;
+      try {
+        const cloud = await this.getCloudInstance();
+        if (cloud && typeof cloud.connectContainer === 'function') {
           const result = await cloud.connectContainer({ service: config.cloudRunService, path: config.socketPath });
           await attach(result && result.socketTask);
           return;
-        } catch (error) {
-          try { this.socketTask?.close({ code: 1000 }); } catch { /* best effort */ }
-          this.socketTask = null;
-          this.opened = false;
-          this.cloudError = error;
         }
+      } catch (error) {
+        try { this.socketTask?.close({ code: 1000 }); } catch { /* best effort */ }
+        this.socketTask = null;
+        this.opened = false;
+        cloudError = error;
+        this.cloudError = error;
       }
-      if (typeof this.wx.connectSocket !== 'function') throw this.cloudError || new Error('当前小游戏环境不支持 WebSocket');
+      if (typeof this.wx?.connectSocket !== 'function') throw cloudError || new Error('当前小游戏环境不支持 WebSocket');
       await attach(this.wx.connectSocket({ url: config.socketUrl, tcpNoDelay: true }));
     })().catch((error) => { throw new Error(error?.message || 'WebSocket 连接失败'); })
       .finally(() => { this.connecting = null; });

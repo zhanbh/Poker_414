@@ -734,7 +734,10 @@ class FourOneFourGameApp {
     } catch (error) {
       this.state.busy = false;
       const rawMsg = error && error.message ? error.message : '';
-      if (/url not in domain list/i.test(rawMsg)) {
+      if (/TLS handshake failed|_code:8/i.test(rawMsg)) {
+        this.state.error = 'TLS握手被重置：308.company未备案被机房阻断；请在麻将云开发配置“环境共享”';
+        this.state.statusMessage = '公网TLS握手受阻 · 请在云开发控制台开通环境共享';
+      } else if (/url not in domain list/i.test(rawMsg)) {
         this.state.error = '域名未在合法列表：请在开发者工具中关闭“域名校验”，或在公众平台配置 308.company';
         this.state.statusMessage = '小游戏域名未在白名单中';
       } else {

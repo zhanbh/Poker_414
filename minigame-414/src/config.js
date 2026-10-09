@@ -1,5 +1,6 @@
 module.exports = {
   cloudBaseEnvId: 'prod-d0gncxity070cbe6f',
+  resourceAppid: 'wx2dcc59ed40743e72',
   cloudRunService: 'express-xgjy',
   socketPath: '/414-ws',
   socketUrl: 'wss://308.company/414-ws',

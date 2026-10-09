@@ -7,4 +7,6 @@ module.exports = {
   roomId: '414',
   sessionStorageKey: '414-game.sessionToken',
   nicknameStorageKey: '414-game.nickname',
+  avatarUrlStorageKey: '414-game.avatarUrl',
+  profileAuthorizedStorageKey: '414-game.profileAuthorized',
 };

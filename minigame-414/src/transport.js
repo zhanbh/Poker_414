@@ -118,8 +118,10 @@ class GameTransport {
     return this.sendRaw(event, payload);
   }
 
-  join(nickname) {
-    return this.send(EVENTS.join, { nickname, roomId: config.roomId, gameId: config.gameId }).then((result) => result.snapshot);
+  join(nickname, avatarUrl) {
+    const payload = { nickname, roomId: config.roomId, gameId: config.gameId };
+    if (avatarUrl) payload.avatarUrl = avatarUrl;
+    return this.send(EVENTS.join, payload).then((result) => result.snapshot);
   }
   leave() { return this.send(EVENTS.leave, {}).then((result) => { this.close(); return result; }); }
   command(payload) { return this.send(EVENTS.command, payload); }

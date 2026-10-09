@@ -60,6 +60,51 @@ class FourOneFourRenderer {
     this.ctx = context;
     this.targets = [];
     this.viewport = { scale: 1, x: 0, y: 0, width: 540, height: 960 };
+    this.avatarCache = new Map();
+  }
+
+  save() {
+    if (this.ctx && typeof this.ctx.save === 'function') this.ctx.save();
+  }
+
+  restore() {
+    if (this.ctx && typeof this.ctx.restore === 'function') this.ctx.restore();
+  }
+
+  drawAvatar(url, x, y, size, square = false) {
+    const ctx = this.ctx;
+    const r = size / 2;
+    if (url && typeof url === 'string') {
+      let img = this.avatarCache.get(url);
+      if (!img) {
+        try {
+          if (typeof wx !== 'undefined' && typeof wx.createImage === 'function') {
+            img = wx.createImage();
+          } else if (typeof Image !== 'undefined') {
+            img = new Image();
+          }
+          if (img) {
+            img.onload = () => { if (typeof this.onAssetLoaded === 'function') this.onAssetLoaded(); };
+            img.src = url;
+            this.avatarCache.set(url, img);
+          }
+        } catch { /* ignore */ }
+      }
+      if (img && img.width) {
+        this.save();
+        if (square) this.roundRect(x, y, size, size, 6, null);
+        else { ctx.beginPath(); ctx.arc(x + r, y + r, r, 0, Math.PI * 2); }
+        if (typeof ctx.clip === 'function') ctx.clip();
+        try {
+          if (typeof ctx.drawImage === 'function') ctx.drawImage(img, x, y, size, size);
+          this.restore();
+          return true;
+        } catch {
+          this.restore();
+        }
+      }
+    }
+    return false;
   }
 
   roundRect(x, y, w, h, radius, fill, stroke, lineWidth = 1.5) {
@@ -225,27 +270,33 @@ class FourOneFourRenderer {
 
     // Frosted Glass Card
     const cardX = 75;
-    const cardY = 250;
+    const cardY = 270;
     const cardW = 390;
-    const cardH = 430;
+    const cardH = 370;
     this.roundRect(cardX, cardY, cardW, cardH, 20, 'rgba(10, 28, 38, 0.68)', 'rgba(218, 170, 75, 0.45)');
     this.roundRect(cardX + 6, cardY + 6, cardW - 12, cardH - 12, 16, null, 'rgba(255, 225, 140, 0.12)');
 
-    this.text('✦ 加入房间 ✦', 270, cardY + 32, 18, COLORS.gold, 'center', '700');
+    this.text('✦ 加入牌局 ✦', 270, cardY + 36, 18, COLORS.gold, 'center', '700');
 
-    // Inputs
-    this.input('邀请码', state.inviteCode, cardX + 25, cardY + 72, cardW - 50, 'inviteCode');
-    this.input('昵称', state.nickname, cardX + 25, cardY + 155, cardW - 50, 'nickname');
+    // Invite Code Input (single input, no nickname input needed!)
+    this.input('邀请码', state.inviteCode, cardX + 25, cardY + 70, cardW - 50, 'inviteCode');
+
+    // Mode Tag
+    this.text('四人二打二 · 跨端实时互通', 270, cardY + 144, 12, '#8ba4ae', 'center');
 
     // Tip Banner
-    this.roundRect(cardX + 25, cardY + 225, cardW - 50, 28, 6, 'rgba(212, 155, 41, 0.15)', 'rgba(212, 155, 41, 0.35)');
-    this.text('💡 输入邀请码后点击键盘【前往】即可直接进入', 270, cardY + 239, 11, '#ffd275', 'center', '600');
+    this.roundRect(cardX + 25, cardY + 166, cardW - 50, 26, 6, 'rgba(212, 155, 41, 0.15)', 'rgba(212, 155, 41, 0.35)');
+    this.text('💡 输入邀请码后点击键盘【前往】即可直接进入', 270, cardY + 179, 10.5, '#ffd275', 'center', '600');
+
+    // Authorization Notice
+    const authAvailable = state.canRequestUserInfo && !state.profileAuthorized;
+    this.text(authAvailable ? '首次进入需确认微信昵称头像授权' : '输入房间邀请码即可入局对战', 270, cardY + 214, 11.5, '#76949f', 'center');
 
     // Enter Button
-    this.button(state.busy ? '正在进入…' : '进入房间', cardX + 25, cardY + 275, cardW - 50, 56, 'enter', {}, state.busy);
+    this.button(state.busy ? '正在进入…' : '进入房间', cardX + 25, cardY + 240, cardW - 50, 56, 'enter', {}, state.busy);
 
     // Status Message
-    this.text(state.statusMessage || '请输入房间邀请码和昵称', 270, cardY + 365, 13, COLORS.muted, 'center');
+    this.text(state.statusMessage || state.error || '请输入 6 位房间邀请码', 270, cardY + 326, 12, state.error ? '#f87171' : COLORS.muted, 'center');
 
     // Footer
     this.text('虚拟筹码不具有现金或财产价值，仅供测试、学习和交流', 270, 875, 11, '#537280', 'center');
@@ -434,8 +485,14 @@ class FourOneFourRenderer {
       // Avatar circle
       const avX = x + 24;
       const avY = y + height / 2;
-      this.circle(avX, avY, 18, isMe ? '#226050' : '#1e4859', isMe ? COLORS.gold : '#508398', 1.5);
-      this.text(player.nickname ? player.nickname.slice(0, 1) : seat, avX, avY, 14, '#ffffff', 'center', '700');
+      const avatarD = 36;
+      const hasImage = this.drawAvatar(player.avatarUrl, avX - avatarD / 2, avY - avatarD / 2, avatarD, false);
+      if (!hasImage) {
+        this.circle(avX, avY, 18, isMe ? '#226050' : '#1e4859', isMe ? COLORS.gold : '#508398', 1.5);
+        this.text(player.nickname ? player.nickname.slice(0, 1) : seat, avX, avY, 14, '#ffffff', 'center', '700');
+      } else {
+        this.circle(avX, avY, 18, null, isMe ? COLORS.gold : '#508398', 1.5);
+      }
 
       // Nickname & Seat label
       this.text(this.fit(player.nickname, 86, 13), x + 48, y + 17, 13, '#f2f8fa', 'left', '600');

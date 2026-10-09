@@ -4,6 +4,7 @@ const project = require('../project.config.json');
 const { createCommand } = require('../src/protocol');
 const { sortCards } = require('../src/cards');
 const { FourOneFourRenderer, cardLabel } = require('../src/renderer');
+const { FourOneFourGameApp } = require('../src/app');
 
 function mockRenderer(width, height) {
   const gradient = { addColorStop() {} };
@@ -55,6 +56,7 @@ describe('414 mini-game project split', () => {
     const entryRenderer = mockRenderer(540, 960);
     entryRenderer.draw({ screen: 'entry', inviteCode: '', nickname: '', statusMessage: '', error: '' });
     expect(entryRenderer.hit(100, 350)?.data.field).toBe('inviteCode');
+    expect(entryRenderer.targets.some((target) => target.type === 'input' && target.data.field === 'nickname')).toBe(false);
 
     const roomRenderer = mockRenderer(960, 540);
     roomRenderer.draw({
@@ -153,5 +155,65 @@ describe('414 mini-game project split', () => {
         },
       });
     }).not.toThrow();
+  });
+
+  it('creates wx.createUserInfoButton overlay on entry when inviteCode is entered', () => {
+    let buttonOptions;
+    let onTap;
+    const app = {
+      wx: {
+        createUserInfoButton: (options) => {
+          buttonOptions = options;
+          return { onTap: (fn) => { onTap = fn; }, destroy: () => {} };
+        },
+      },
+      renderer: { viewport: { scale: 1, x: 0, y: 0 } },
+      pixelRatio: 1,
+      state: { screen: 'entry', inviteCode: '414', profileAuthorized: false, busy: false },
+      handleUserInfoButtonResult: (result) => { app.result = result; },
+      userInfoBtn: null,
+      draw: () => {},
+    };
+    FourOneFourGameApp.prototype.updateUserInfoButton.call(app);
+    expect(buttonOptions.text).toBe('进入房间');
+    expect(buttonOptions.style).toMatchObject({ left: 100, top: 510, width: 340, height: 56 });
+    const result = { userInfo: { nickName: '测试扑克用户', avatarUrl: 'https://avatar.url/414.jpg' } };
+    onTap(result);
+    expect(app.result).toBe(result);
+  });
+
+  it('joins immediately with a generated guest nickname when WeChat profile is not authorized', async () => {
+    let joined;
+    const app = {
+      wx: { getStorageSync: () => '', setStorageSync: () => {} },
+      state: { inviteCode: '414', nickname: '', avatarUrl: '', profileAuthorized: false, error: '', statusMessage: '', busy: false },
+      transport: {
+        login: async () => ({ sessionToken: 's-414' }),
+        join: async (nickname, avatar) => {
+          joined = { nickname, avatar };
+          return { public: { roomId: '414', phase: 'lobby', players: [] }, private: { seat: 'A' } };
+        },
+      },
+      destroyUserInfoButton: () => {},
+      updateSnapshot: () => {},
+      draw: () => {},
+    };
+    await FourOneFourGameApp.prototype.enterRoom.call(app);
+    expect(joined.nickname).toMatch(/^牌友[A-Z0-9]{5}$/);
+    expect(joined.avatar).toBe('');
+    expect(app.state.profileAuthorized).toBe(false);
+    expect(app.state.error).toBe('');
+  });
+
+  it('passes authorized profile directly into room entry', async () => {
+    let entryOptions;
+    const app = {
+      state: { inviteCode: '414', nickname: '', avatarUrl: '', profileAuthorized: false, statusMessage: '', error: '' },
+      enterRoom: async (options) => { entryOptions = options; },
+    };
+    await FourOneFourGameApp.prototype.handleUserInfoButtonResult.call(app, {
+      userInfo: { nickName: '扑克大神', avatarUrl: 'https://avatar.example/poker.png' },
+    });
+    expect(entryOptions).toEqual({ nickname: '扑克大神', avatarUrl: 'https://avatar.example/poker.png', profileAuthorized: true });
   });
 });

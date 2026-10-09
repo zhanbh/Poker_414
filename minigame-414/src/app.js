@@ -126,11 +126,23 @@ class FourOneFourGameApp {
       });
     }
 
-    if (wxApi.cloud && typeof wxApi.cloud.init === 'function') {
-      try {
-        wxApi.cloud.init({ env: config.cloudBaseEnvId, traceUser: true });
-      } catch {
-        /* CloudBase is optional in the simulator. */
+    if (wxApi.cloud) {
+      if (config.resourceAppid && typeof wxApi.cloud.Cloud === 'function') {
+        try {
+          const cross = new wxApi.cloud.Cloud({
+            resourceAppid: config.resourceAppid,
+            resourceEnv: config.cloudBaseEnvId,
+          });
+          cross.init().catch(() => {});
+        } catch {
+          /* CloudBase cross-account fallback */
+        }
+      } else if (typeof wxApi.cloud.init === 'function') {
+        try {
+          wxApi.cloud.init({ env: config.cloudBaseEnvId, traceUser: true });
+        } catch {
+          /* CloudBase is optional in the simulator. */
+        }
       }
     }
 

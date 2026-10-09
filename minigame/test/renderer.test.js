@@ -62,13 +62,16 @@ describe('native mini-game Canvas renderer', () => {
     app.scheduleCanvasRestoreAfterKeyboard = () => { app.state.keyboardOpen = false; };
 
     MahjongGameApp.prototype.showKeyboard.call(app, 'inviteCode');
-    expect(keyboardOptions).toMatchObject({ defaultValue: '308', maxLength: 32, multiple: false, confirmHold: false, confirmType: 'done' });
+    expect(keyboardOptions).toMatchObject({ defaultValue: '308', maxLength: 32, multiple: false, confirmHold: false, confirmType: 'go' });
     let entered = false;
+    let entryActionCalled = false;
     app.updateUserInfoButton = () => { entered = true; };
+    app.handleEntryAction = () => { entryActionCalled = true; };
     MahjongGameApp.prototype.onKeyboardConfirm.call(app, { value: '12345' });
     expect(app.state.inviteCode).toBe('12345');
     expect(hidden).toBe(true);
     expect(entered).toBe(true);
+    expect(entryActionCalled).toBe(true);
   });
 
   it('places the native WeChat consent button directly over the entry button after an invite is entered', () => {

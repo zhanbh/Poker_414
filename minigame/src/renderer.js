@@ -1,8 +1,8 @@
 const { relativeSeats, playerForSeat, tileLabel, actionLabel, chatText, CLASSIC_CHAT_PHRASES } = require('./model');
 
 const INTERACTIONS = [
-  { id: 'tomato', label: '🍅' }, { id: 'water', label: '💦' },
-  { id: 'heart', label: '💖' }, { id: 'kiss', label: '💋' },
+  { id: 'tomato', label: '🍅 番茄' }, { id: 'water', label: '💦 泼水' },
+  { id: 'heart', label: '💖 比心' }, { id: 'kiss', label: '💋 亲吻' },
 ];
 const COLORS = {
   background: '#07161f', panel: '#153847', panelLight: '#204e60', felt: '#086259',
@@ -543,34 +543,35 @@ class MahjongRenderer {
     this.text('414 麻将 · 微信小游戏', 270, 140, 30, COLORS.gold, 'center', '700');
     this.text('与网页版、小程序实时同步同一房间', 270, 180, 14, COLORS.muted, 'center');
 
-    // Frosted glass card
-    this.roundRect(30, 230, 480, 510, 22, 'rgba(14, 38, 50, 0.88)', '#296778');
-    this.roundRect(36, 236, 468, 498, 18, null, 'rgba(255, 199, 94, 0.2)');
+    // Compact translucent frosted glass card
+    this.roundRect(75, 345, 390, 360, 20, 'rgba(10, 26, 34, 0.62)', 'rgba(224, 180, 80, 0.45)');
+    this.roundRect(81, 351, 378, 348, 16, null, 'rgba(255, 220, 140, 0.15)');
 
-    this.text('加入麻将房间', 270, 280, 25, COLORS.text, 'center', '700');
-    this.text('──  ◆  ──', 270, 308, 12, 'rgba(255, 199, 94, 0.45)', 'center');
+    this.text('加入牌局', 270, 375, 18, COLORS.gold, 'center', '700');
+
+    // Compact invite code input box
+    this.roundRect(100, 390, 340, 54, 10, 'rgba(6, 18, 24, 0.78)', state.focus === 'inviteCode' ? COLORS.gold : 'rgba(56, 116, 134, 0.65)', 1.5);
+    this.text('🔑', 124, 417, 16, COLORS.gold, 'center');
+    this.text(state.inviteCode || '点击输入邀请码', 148, 417, 15, state.inviteCode ? '#ffdf79' : '#6f8b96', 'left', state.inviteCode ? '600' : 'normal');
+    this.targets.push({ x: 100, y: 390, width: 340, height: 54, type: 'input', data: { field: 'inviteCode' } });
+
+    // Mode tag
+    this.text('四人大众麻将 · 跨端实时互通', 270, 470, 12, '#8ba4ae', 'center');
+
+    // Keyboard '前往' tip banner
+    this.roundRect(110, 492, 320, 26, 6, 'rgba(212, 155, 41, 0.15)', 'rgba(212, 155, 41, 0.35)');
+    this.text('💡 输入邀请码后点击键盘【前往】即可直接进入', 270, 505, 10.5, '#ffd275', 'center', '600');
 
     const authAvailable = state.canRequestUserInfo && !state.profileAuthorized;
-    this.text(authAvailable ? '输入邀请码，点击进入房间并确认昵称头像授权' : '输入邀请码即可进入房间', 270, 354, 13, '#7d9fa8', 'center');
-
-    // Invite code section
-    this.text('房间邀请码', 75, 385, 14, COLORS.muted);
-    this.roundRect(70, 395, 400, 60, 10, 'rgba(7, 21, 28, 0.88)', state.focus === 'inviteCode' ? COLORS.gold : '#2c6170');
-    this.text('🔑', 96, 425, 17, COLORS.gold, 'center');
-    this.text(state.inviteCode || '点击输入邀请码', 122, 425, 16, state.inviteCode ? COLORS.text : '#6f8b96');
-    this.targets.push({ x: 70, y: 395, width: 400, height: 60, type: 'input', data: { field: 'inviteCode' } });
-
-    // Room info
-    this.text('四人大众麻将 · 跨端实时互通', 270, 500, 13, '#6f8b96', 'center');
-    this.text('───  ◆  ───', 270, 530, 12, 'rgba(255, 199, 94, 0.35)', 'center');
+    this.text(authAvailable ? '首次进入需确认微信昵称头像授权' : '输入 6 位房间邀请码即可入局对战', 270, 542, 11.5, '#76949f', 'center');
 
     // Enter Button
     const btnLabel = state.busy ? '正在连接…' : '进入麻将房间';
     this.button(btnLabel, 110, 625, 320, 58, 'enter', {}, 'primary', state.busy);
 
     // Compliance & status footer
-    this.text(state.statusMessage || '游戏仅供测试、学习和交流', 270, 706, 13, COLORS.muted, 'center');
-    this.text('虚拟积分无现实价值，不涉及充值或兑现。', 270, 726, 12, '#76949f', 'center');
+    this.text(state.statusMessage || state.error || '游戏仅供测试、学习和交流', 270, 725, 12, state.error ? '#f87171' : COLORS.muted, 'center');
+    this.text('虚拟积分无现实价值，不涉及充值或兑现。', 270, 745, 11, '#537480', 'center');
 
     this.text('308娱乐 出品', 270, 890, 13, '#537480', 'center');
   }
@@ -607,7 +608,6 @@ class MahjongRenderer {
 
   drawPlayerCard(state, seat, x, y, width, height) {
     const player = playerForSeat(state.snapshot, seat);
-    const isOwn = seat === state.snapshot.private.seat && !state.snapshot.private.spectator;
     const selected = state.selectedTarget && state.selectedTarget.seat === seat;
     const active = state.snapshot.public.phase === 'playing' && state.snapshot.public.currentTurn === seat;
     const avatarSize = 64;
@@ -625,7 +625,9 @@ class MahjongRenderer {
       this.text(this.fitText(player.nickname, width - 8, 12, '600'), x + width / 2, y + 82, 12, '#fff2d4', 'center', '600');
       this.roundRect(x, y + 93, width, 20, 3, 'rgba(24, 34, 23, 0.78)');
       this.text(`${player.score} 分`, x + width / 2, y + 104, 14, '#ffdf79', 'center', '700');
-      if (!isOwn) this.targets.push({ x, y, width, height, type: 'select-player', data: { seat, nickname: player.nickname } });
+      this.circle(avatarX + 54, y + 10, 9, 'rgba(32, 54, 30, 0.9)', 'rgba(255, 215, 120, 0.7)');
+      this.text('🎁', avatarX + 54, y + 13, 8.5, '#ffd875', 'center');
+      this.targets.push({ x, y, width, height, type: 'select-player', data: { seat, nickname: player.nickname } });
       if (state.snapshot.public.dealer === seat || state.snapshot.public.dealerSeat === seat) {
         this.roundRect(avatarX + 44, y + 46, 25, 24, 4, '#c38c2e', '#f3d78e');
         this.text('庄', avatarX + 56, y + 58, 17, '#fff2bc', 'center', '700');
@@ -1222,25 +1224,76 @@ class MahjongRenderer {
 
     // Tabs in header
     const currentTab = state.chatTab || 'messages';
-    this.text('聊天', x + 16, y + 23, 15, '#f7df9c', 'left', '700');
+    this.text('聊天', x + 14, y + 23, 14, '#f7df9c', 'left', '700');
 
     // Tab 1: 消息
     const tab1Active = currentTab === 'messages';
-    this.roundRect(x + 58, y + 9, 54, 24, 4, tab1Active ? '#a0743b' : 'rgba(12, 32, 20, 0.6)', tab1Active ? '#f3d78e' : '#4f6855');
-    this.text('消息', x + 85, y + 21, 12, tab1Active ? '#fff5d6' : '#abb8a4', 'center', '600');
-    this.targets.push({ x: x + 58, y: y + 9, width: 54, height: 24, type: 'chat-tab', data: { tab: 'messages' } });
+    this.roundRect(x + 42, y + 9, 46, 24, 4, tab1Active ? '#a0743b' : 'rgba(12, 32, 20, 0.6)', tab1Active ? '#f3d78e' : '#4f6855');
+    this.text('消息', x + 65, y + 21, 11, tab1Active ? '#fff5d6' : '#abb8a4', 'center', '600');
+    this.targets.push({ x: x + 42, y: y + 9, width: 46, height: 24, type: 'chat-tab', data: { tab: 'messages' } });
 
     // Tab 2: ⚡ 快捷语
     const tab2Active = currentTab === 'phrases';
-    this.roundRect(x + 118, y + 9, 74, 24, 4, tab2Active ? '#a0743b' : 'rgba(12, 32, 20, 0.6)', tab2Active ? '#f3d78e' : '#4f6855');
-    this.text('⚡ 快捷语', x + 155, y + 21, 12, tab2Active ? '#fff5d6' : '#abb8a4', 'center', '600');
-    this.targets.push({ x: x + 118, y: y + 9, width: 74, height: 24, type: 'chat-tab', data: { tab: 'phrases' } });
+    this.roundRect(x + 92, y + 9, 72, 24, 4, tab2Active ? '#a0743b' : 'rgba(12, 32, 20, 0.6)', tab2Active ? '#f3d78e' : '#4f6855');
+    this.text('⚡ 快捷语', x + 128, y + 21, 11, tab2Active ? '#fff5d6' : '#abb8a4', 'center', '600');
+    this.targets.push({ x: x + 92, y: y + 9, width: 72, height: 24, type: 'chat-tab', data: { tab: 'phrases' } });
+
+    // Tab 3: 🎁 互动
+    const tab3Active = currentTab === 'interactions';
+    this.roundRect(x + 168, y + 9, 58, 24, 4, tab3Active ? '#a0743b' : 'rgba(12, 32, 20, 0.6)', tab3Active ? '#f3d78e' : '#4f6855');
+    this.text('🎁 互动', x + 197, y + 21, 11, tab3Active ? '#fff5d6' : '#abb8a4', 'center', '600');
+    this.targets.push({ x: x + 168, y: y + 9, width: 58, height: 24, type: 'chat-tab', data: { tab: 'interactions' } });
 
     // Close button
     ctx.beginPath(); ctx.moveTo(x + width - 28, y + 17); ctx.lineTo(x + width - 18, y + 27);
     ctx.moveTo(x + width - 18, y + 17); ctx.lineTo(x + width - 28, y + 27);
     ctx.strokeStyle = '#d9cdb0'; ctx.lineWidth = 1.5; ctx.stroke();
     this.targets.push({ x: x + width - 40, y: y + 7, width: 32, height: 32, type: 'close-chat', data: {} });
+
+    if (currentTab === 'interactions') {
+      const players = state.snapshot?.public?.players || [];
+      const ownSeat = state.snapshot?.private?.seat;
+      const otherPlayers = players.filter((p) => p.seat !== ownSeat);
+      const defaultTarget = otherPlayers[0] || players[0];
+      const activeTarget = state.selectedTarget || defaultTarget;
+
+      this.text('互动目标:', x + 16, y + 46, 11, '#f3dfb0', 'left', '600');
+      const chipY = y + 54;
+      let cx = x + 16;
+      players.forEach((p) => {
+        const isCurrent = activeTarget && activeTarget.seat === p.seat;
+        const name = p.seat === ownSeat ? `${p.nickname}(我)` : p.nickname;
+        const chipW = Math.max(50, Math.min(84, name.length * 11 + 14));
+        this.roundRect(cx, chipY, chipW, 22, 4, isCurrent ? '#a0743b' : 'rgba(12, 32, 20, 0.65)', isCurrent ? '#f3d78e' : '#4f6855');
+        this.text(this.fitText(name, chipW - 6, 10.5), cx + chipW / 2, chipY + 11, 10.5, isCurrent ? '#fff5d6' : '#abb8a4', 'center', '600');
+        this.targets.push({ x: cx, y: chipY, width: chipW, height: 22, type: 'select-interaction-target', data: { seat: p.seat, nickname: p.nickname } });
+        cx += chipW + 6;
+      });
+
+      const items = [
+        { id: 'tomato', icon: '🍅', name: '扔番茄', desc: '爆汁飞溅' },
+        { id: 'water', icon: '💦', name: '泼冷水', desc: '激荡水波' },
+        { id: 'heart', icon: '💖', name: '赠比心', desc: '心跳光晕' },
+        { id: 'kiss', icon: '💋', name: '飞个吻', desc: '热吻盖章' },
+      ];
+      const colW = (width - 32) / 2;
+      const itemH = 44;
+      const gridStartY = y + 84;
+      items.forEach((item, idx) => {
+        const col = idx % 2;
+        const row = Math.floor(idx / 2);
+        const px = x + 12 + col * (colW + 8);
+        const py = gridStartY + row * (itemH + 8);
+        this.roundRect(px, py, colW, itemH, 7, 'rgba(18, 44, 30, 0.92)', '#7a9668', 1.5);
+        this.text(item.icon, px + 22, py + 22, 20, COLORS.text, 'center');
+        this.text(item.name, px + 68, py + 14, 12, '#fbeecc', 'center', '700');
+        this.text(item.desc, px + 68, py + 29, 9.5, '#a4bfa0', 'center');
+        this.targets.push({ x: px, y: py, width: colW, height: itemH, type: 'interaction', data: { interaction: item.id, target: activeTarget } });
+      });
+
+      this.text(activeTarget ? `点击发送给 [${activeTarget.nickname}]` : '也可直接点击牌桌上的玩家头像互动', x + width / 2, y + 196, 10.5, '#ffd275', 'center');
+      return;
+    }
 
     if (currentTab === 'phrases') {
       // Show Quick Phrases grid (2 columns x 4 rows)
@@ -1323,13 +1376,19 @@ class MahjongRenderer {
   }
 
   drawInteractionPicker(state) {
-    const x = this.roomLayout().width / 2 - 150;
-    const y = 328;
-    this.roundRect(x, y, 300, 73, 12, 'rgba(24, 43, 30, 0.96)', '#be9c5d');
-    this.text(this.fitText(`送给 ${state.selectedTarget.nickname}`, 270, 13), x + 14, y + 18, 13, '#f3dfb0');
+    const width = 316;
+    const height = 82;
+    const x = this.roomLayout().width / 2 - width / 2;
+    const y = 308;
+    this.roundRect(x, y, width, height, 12, 'rgba(18, 38, 25, 0.96)', '#be9c5d');
+    this.text(this.fitText(`送给 ${state.selectedTarget.nickname}`, 240, 13), x + 16, y + 20, 13, '#f3dfb0', 'left', '600');
+    // Close button
+    this.text('✕', x + width - 18, y + 20, 13, '#d0c4a8', 'center');
+    this.targets.push({ x: x + width - 34, y: y + 6, width: 28, height: 28, type: 'close-interaction', data: {} });
+
     INTERACTIONS.forEach((item, index) => {
-      const bx = x + 16 + index * 70;
-      this.button(item.label, bx, y + 33, 56, 28, 'interaction', { interaction: item.id }, 'secondary');
+      const bx = x + 12 + index * 74;
+      this.button(item.label, bx, y + 36, 68, 34, 'interaction', { interaction: item.id }, 'secondary');
     });
   }
 

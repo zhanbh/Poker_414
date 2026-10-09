@@ -296,7 +296,8 @@ class FourOneFourRenderer {
     this.button(state.busy ? '正在进入…' : '进入房间', cardX + 25, cardY + 240, cardW - 50, 56, 'enter', {}, state.busy);
 
     // Status Message
-    this.text(state.statusMessage || state.error || '请输入 6 位房间邀请码', 270, cardY + 326, 12, state.error ? '#f87171' : COLORS.muted, 'center');
+    const cardMsg = state.statusMessage || (state.error ? state.error : '请输入 6 位房间邀请码');
+    this.text(this.fit(cardMsg, cardW - 30, 12), 270, cardY + 326, 12, state.error ? '#f87171' : COLORS.muted, 'center');
 
     // Footer
     this.text('虚拟筹码不具有现金或财产价值，仅供测试、学习和交流', 270, 875, 11, '#537280', 'center');

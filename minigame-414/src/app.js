@@ -27,7 +27,7 @@ function apiErrorText(error) {
 }
 
 function isPrivacyGuideError(...errors) {
-  return /please go to mp to announce your privacy usage|errno\s*[:=]?\s*1026|-12034/i.test(errors.join(' '));
+  return /please go to mp to announce your privacy|errno\s*[:=]?\s*1026|-12034|privacy/i.test(errors.join(' '));
 }
 
 class FourOneFourGameApp {
@@ -232,18 +232,16 @@ class FourOneFourGameApp {
       avatarUrl = String(userInfo?.avatarUrl || '').trim();
     }
     if (!nickname || nickname === '微信用户' || !VALID_NICKNAME.test(nickname)) {
-      if (isPrivacyGuideError(resultError, userInfoError)) {
-        this.state.error = '微信未开放昵称头像接口：请配置隐私指引（昵称、头像）';
-        this.state.statusMessage = '昵称头像授权暂不可用 · 请先完善小游戏隐私保护指引';
-        this.draw();
-        return;
-      }
-      const errMsg = resultError || '接口未返回昵称头像';
       this.state.error = '';
-      this.state.statusMessage = denied ? '未授权，改用随机昵称进入房间…' : '未取得有效微信昵称，改用随机昵称进入房间…';
-      await this.enterRoom({ nickname: createGuestNickname(), avatarUrl: '', profileAuthorized: false });
-      if (!denied && !/:ok$/.test(errMsg)) this.state.statusMessage = `微信资料不可用（${errMsg}），已使用随机昵称`;
+      if (denied) {
+        this.state.statusMessage = '未授权微信资料，使用随机昵称进入房间…';
+      } else if (isPrivacyGuideError(resultError, userInfoError)) {
+        this.state.statusMessage = '隐私指引未配置，使用随机昵称进入房间…';
+      } else {
+        this.state.statusMessage = '未获取到微信资料，使用随机昵称进入房间…';
+      }
       this.draw();
+      await this.enterRoom({ nickname: createGuestNickname(), avatarUrl: '', profileAuthorized: false });
       return;
     }
     this.state.profileAuthorized = true;
@@ -674,8 +672,14 @@ class FourOneFourGameApp {
       this.updateSnapshot(snapshot);
     } catch (error) {
       this.state.busy = false;
-      this.state.statusMessage = '请检查邀请码、网络或小游戏合法域名配置';
-      this.state.error = error.message || '无法进入房间';
+      const rawMsg = error && error.message ? error.message : '';
+      if (/url not in domain list/i.test(rawMsg)) {
+        this.state.error = '域名未在合法列表：请在开发者工具中关闭“域名校验”，或在公众平台配置 308.company';
+        this.state.statusMessage = '小游戏域名未在白名单中';
+      } else {
+        this.state.error = rawMsg || '无法进入房间';
+        this.state.statusMessage = '请检查邀请码、网络或小游戏域名配置';
+      }
       if (generatedNickname) this.state.nickname = '';
       this.updateUserInfoButton();
       this.draw();

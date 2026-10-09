@@ -121,7 +121,7 @@ export function App({ transport: providedTransport }: { readonly transport?: Cli
     if (latest?.kind === 'interaction' && latest.interaction && latest.targetSeat && latest.id !== previousLatest?.id) {
       setInteractionEffect({ id: latest.id, targetSeat: latest.targetSeat, interaction: latest.interaction });
       if (interactionTimer.current) clearTimeout(interactionTimer.current);
-      interactionTimer.current = setTimeout(() => setInteractionEffect(null), 1_200);
+      interactionTimer.current = setTimeout(() => setInteractionEffect(null), 1_450);
     }
     previousSnapshot.current = next;
     setSnapshot(next);

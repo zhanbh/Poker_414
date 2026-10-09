@@ -35,13 +35,36 @@ function actionLabel(action) {
   })[action] || action;
 }
 
+const CLASSIC_CHAT_PHRASES = [
+  '快点啊，等得我花儿都谢了！',
+  '你是GG还是MM？',
+  '怎么又断线了？网络不大好啊！',
+  '打错了打错了，这把不算行不行？',
+  '不要吵了不要吵了，专心玩游戏吧！',
+  '手气真好，挡都挡不住！',
+  '与你合作真是太愉快了！',
+  '大家好，很高兴见到各位！',
+];
+
 function chatText(message) {
   if (message.kind === 'text') return `${message.senderNickname}: ${message.text}`;
+  if (message.kind === 'voice') return `${message.senderNickname}: 🎙️ ${message.duration || 1}" ▶`;
   if (message.kind === 'interaction') {
     const icon = ({ tomato: '🍅', water: '💦', heart: '💖', kiss: '💋' })[message.interaction] || '✨';
     return `${message.senderNickname} ${icon} ${message.targetNickname}`;
   }
+  if (message.kind === 'phrase') return `${message.senderNickname}: 💬 ${message.text}`;
   return `${message.senderNickname}: [消息]`;
 }
 
-module.exports = { SEATS, relativeSeats, playerForSeat, tileLabel, gameScreen, isValidNickname, actionLabel, chatText };
+module.exports = {
+  SEATS,
+  relativeSeats,
+  playerForSeat,
+  tileLabel,
+  gameScreen,
+  isValidNickname,
+  actionLabel,
+  chatText,
+  CLASSIC_CHAT_PHRASES,
+};

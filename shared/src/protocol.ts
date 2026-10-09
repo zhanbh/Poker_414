@@ -23,20 +23,35 @@ export type RoomChatInteraction = 'tomato' | 'water' | 'heart' | 'kiss';
 
 export interface RoomChatMessage {
   readonly id: string;
-  readonly kind: 'text' | 'interaction' | 'voice';
+  readonly kind: 'text' | 'interaction' | 'voice' | 'phrase';
   readonly senderNickname: string;
   readonly senderSeat?: string;
   readonly text?: string;
   readonly interaction?: RoomChatInteraction;
   readonly voiceId?: string;
+  readonly duration?: number;
+  readonly audioData?: string;
   readonly targetNickname?: string;
   readonly targetSeat?: string;
   readonly createdAt: number;
 }
 
+export const CLASSIC_CHAT_PHRASES = [
+  '快点啊，等得我花儿都谢了！',
+  '你是GG还是MM？',
+  '怎么又断线了？网络不大好啊！',
+  '打错了打错了，这把不算行不行？',
+  '不要吵了不要吵了，专心玩游戏吧！',
+  '手气真好，挡都挡不住！',
+  '与你合作真是太愉快了！',
+  '大家好，很高兴见到各位！',
+] as const;
+
 export type RoomChatPayload =
   | { readonly kind: 'text'; readonly text: string }
-  | { readonly kind: 'interaction'; readonly interaction: RoomChatInteraction; readonly target: { readonly nickname: string; readonly seat?: string } };
+  | { readonly kind: 'interaction'; readonly interaction: RoomChatInteraction; readonly target: { readonly nickname: string; readonly seat?: string } }
+  | { readonly kind: 'voice'; readonly duration: number; readonly audioData: string }
+  | { readonly kind: 'phrase'; readonly text: string };
 export interface GameSelection {
   readonly id: GameId;
   readonly name: string;
@@ -380,6 +395,15 @@ export function isRoomChatPayload(value: unknown): value is RoomChatPayload {
   if (!value || typeof value !== 'object') return false;
   const candidate = value as Partial<RoomChatPayload>;
   if (candidate.kind === 'text') return typeof candidate.text === 'string';
+  if (candidate.kind === 'phrase') return typeof candidate.text === 'string' && candidate.text.trim().length > 0;
+  if (candidate.kind === 'voice') {
+    return typeof candidate.duration === 'number'
+      && candidate.duration >= 0.5
+      && candidate.duration <= 30
+      && typeof candidate.audioData === 'string'
+      && candidate.audioData.length > 0
+      && candidate.audioData.length <= 250_000;
+  }
   if (candidate.kind !== 'interaction' || !ROOM_CHAT_INTERACTIONS.has(candidate.interaction as RoomChatInteraction)) return false;
   const target = candidate.target;
   return Boolean(target && typeof target === 'object'

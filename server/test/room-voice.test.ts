@@ -11,5 +11,13 @@ describe('快捷语音下线', () => {
     expect(() => room.recordChat(auth.sessionToken, { kind: 'voice', voiceId: 'quick' } as never)).toThrow('聊天消息格式无效');
     expect(isRoomChatPayload({ kind: 'text', text: '你好' })).toBe(true);
     expect(isRoomChatPayload({ kind: 'interaction', interaction: 'heart', target: { nickname: '乙' } })).toBe(true);
+    expect(isRoomChatPayload({ kind: 'phrase', text: '快点啊，等得我花儿都谢了！' })).toBe(true);
+    expect(isRoomChatPayload({ kind: 'voice', duration: 3, audioData: 'bXAzLWJhc2U2NA==' })).toBe(true);
+
+    const chatMsg = room.recordChat(auth.sessionToken, { kind: 'voice', duration: 3, audioData: 'bXAzLWJhc2U2NA==' });
+    expect(chatMsg).toMatchObject({ kind: 'voice', duration: 3, audioData: 'bXAzLWJhc2U2NA==' });
+
+    const phraseMsg = room.recordChat(auth.sessionToken, { kind: 'phrase', text: '快点啊，等得我花儿都谢了！' });
+    expect(phraseMsg).toMatchObject({ kind: 'phrase', text: '快点啊，等得我花儿都谢了！' });
   });
 });

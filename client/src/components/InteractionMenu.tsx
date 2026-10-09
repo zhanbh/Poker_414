@@ -35,8 +35,42 @@ export function interactionIcon(interaction: RoomChatInteraction): string {
 
 export function InteractionEffect({ interaction }: { readonly interaction: RoomChatInteraction }) {
   return (
-    <span className="room-interaction-effect" aria-label={`${interactionLabel(interaction)}动画`}>
-      {interactionIcon(interaction)}
+    <span
+      className={`room-interaction-effect room-interaction-${interaction}`}
+      aria-label={`${interactionLabel(interaction)}动画`}
+    >
+      <span className="room-interaction-symbol">{interactionIcon(interaction)}</span>
+      <span className="room-interaction-particles" aria-hidden="true">
+        <span className="fx-particle p1" />
+        <span className="fx-particle p2" />
+        <span className="fx-particle p3" />
+        <span className="fx-particle p4" />
+        <span className="fx-particle p5" />
+        <span className="fx-particle p6" />
+      </span>
+      {interaction === 'tomato' && (
+        <span className="interaction-tomato-splat" aria-hidden="true" />
+      )}
+      {interaction === 'water' && (
+        <>
+          <span className="interaction-water-ripple ripple-1" aria-hidden="true" />
+          <span className="interaction-water-ripple ripple-2" aria-hidden="true" />
+        </>
+      )}
+      {interaction === 'heart' && (
+        <>
+          <span className="interaction-floating-heart fh-1" aria-hidden="true">💕</span>
+          <span className="interaction-floating-heart fh-2" aria-hidden="true">💗</span>
+          <span className="interaction-floating-heart fh-3" aria-hidden="true">✨</span>
+        </>
+      )}
+      {interaction === 'kiss' && (
+        <>
+          <span className="interaction-floating-heart fh-1" aria-hidden="true">❤️</span>
+          <span className="interaction-floating-heart fh-2" aria-hidden="true">💋</span>
+          <span className="interaction-floating-heart fh-3" aria-hidden="true">💕</span>
+        </>
+      )}
     </span>
   );
 }

@@ -284,6 +284,12 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode, intera
               {winAnnouncement?.winnerSeat === seat ? <span className="mahjong-win-badge" aria-label="胡牌玩家">胡!</span> : null}
               {winAnnouncement?.payingSeat === seat ? <span className="mahjong-discarder-badge" aria-label="点炮玩家">点炮</span> : null}
               {interactionEffect?.targetSeat === seat ? <InteractionEffect interaction={interactionEffect.interaction} /> : null}
+              {(() => {
+                const latestPhrase = [...(snapshot.public.chat || [])].reverse().find(
+                  (msg) => msg.kind === 'phrase' && msg.senderSeat === seat && Date.now() - msg.createdAt < 3600
+                );
+                return latestPhrase ? <div className="player-speech-bubble" aria-label={`${player.nickname}说：${latestPhrase.text}`}>💬 {latestPhrase.text}</div> : null;
+              })()}
             </div>
             {player.melds.length ? <div className="mahjong-seat-melds">{player.melds.map((meld, index) => <MeldTiles meld={meld} key={`${seat}-${index}`} />)}</div> : null}
             {!isOwnSeat && visibleHand ? <div className="mahjong-revealed-hand" aria-label={`${player.nickname}的明牌`}>{visibleHand.map((tile) => <TileFace tile={tile} key={tile.id} />)}</div> : null}

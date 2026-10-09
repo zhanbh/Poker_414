@@ -730,6 +730,91 @@ main { min-height: 100svh; padding: clamp(16px, 4vw, 32px); }
 .room-chat-form input { min-height: 36px; }
 .room-chat-form button { min-height: 36px; }
 .room-chat-message.voice { color: #9ef4e2; }
+.room-chat-voice-btn {
+  background: rgba(22, 54, 38, 0.85);
+  border: 1px solid #5a7d65;
+  border-radius: 6px;
+  color: #b2f0c8;
+  padding: 4px 10px;
+  font-size: .82rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all .15s ease;
+}
+.room-chat-voice-btn:hover {
+  background: rgba(36, 84, 58, 0.95);
+  border-color: #79a888;
+  color: #ffffff;
+}
+.room-chat-phrases {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  background: rgba(14, 34, 24, 0.65);
+  border-radius: 6px;
+  border: 1px solid rgba(212, 163, 75, 0.25);
+  margin-top: 6px;
+}
+.room-chat-phrases-label {
+  font-size: .72rem;
+  color: #f5d68e;
+  font-weight: 600;
+}
+.room-chat-phrases-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.room-chat-phrase-btn {
+  background: rgba(18, 48, 32, 0.85);
+  color: #eef3e2;
+  border: 1px solid #55745e;
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: .72rem;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+.room-chat-phrase-btn:hover {
+  background: #a0743b;
+  border-color: #f3d78e;
+  color: #fff;
+}
+.player-speech-bubble {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fffdf2;
+  color: #2e1e12;
+  border: 1.5px solid #d4a34b;
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: .82rem;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .45);
+  z-index: 50;
+  pointer-events: none;
+  animation: speech-bubble-pop .2s cubic-bezier(.18, .89, .32, 1.28) both;
+}
+.player-speech-bubble::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 6px 6px 0 6px;
+  border-style: solid;
+  border-color: #d4a34b transparent transparent transparent;
+}
+@keyframes speech-bubble-pop {
+  0% { opacity: 0; transform: translate(-50%, 8px) scale(.85); }
+  100% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
 .mahjong-player-card { overflow: visible; }
 .mahjong-player-card .room-interaction-effect { top: 8%; left: 88%; font-size: clamp(1.7rem, 4vw, 3rem); }
 .mahjong-lobby-seat .room-interaction-effect { font-size: clamp(1.7rem, 4vw, 3rem); }
@@ -779,9 +864,110 @@ main { min-height: 100svh; padding: clamp(16px, 4vw, 32px); }
   z-index: 25;
   pointer-events: none;
   font-size: clamp(2rem, 5vw, 4rem);
-  filter: drop-shadow(0 4px 4px rgba(0, 0, 0, .35));
-  animation: room-interaction-delivery 1.15s cubic-bezier(.2, .75, .25, 1) both;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 90px;
+  height: 90px;
 }
+.room-interaction-symbol {
+  position: relative;
+  z-index: 5;
+  display: inline-block;
+  line-height: 1;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .45));
+}
+.room-interaction-tomato .room-interaction-symbol {
+  animation: tomato-flight-smash 1.4s cubic-bezier(.22, .9, .3, 1) both;
+}
+.room-interaction-water .room-interaction-symbol {
+  animation: water-flight-splash 1.4s cubic-bezier(.2, .85, .32, 1) both;
+}
+.room-interaction-heart .room-interaction-symbol {
+  animation: heart-flight-pulse 1.4s cubic-bezier(.18, .89, .32, 1.28) both;
+}
+.room-interaction-kiss .room-interaction-symbol {
+  animation: kiss-flight-stamp 1.4s cubic-bezier(.22, .9, .3, 1) both;
+}
+
+/* Splat background for tomato */
+.interaction-tomato-splat {
+  position: absolute;
+  width: 76px;
+  height: 76px;
+  border-radius: 46% 54% 50% 50% / 48% 46% 54% 52%;
+  background: radial-gradient(circle at 40% 38%, #ef4444 0%, #dc2626 55%, #991b1b 85%, transparent 100%);
+  box-shadow: 0 0 16px rgba(220, 38, 38, .6);
+  z-index: 3;
+  animation: tomato-splat-appear 1.4s ease-out both;
+}
+
+/* Water ripples */
+.interaction-water-ripple {
+  position: absolute;
+  border-radius: 50%;
+  border: 3px solid rgba(56, 189, 248, .85);
+  box-shadow: 0 0 14px rgba(56, 189, 248, .5);
+  z-index: 2;
+}
+.interaction-water-ripple.ripple-1 {
+  animation: water-ripple-expand 1.3s cubic-bezier(.1, .7, .2, 1) both;
+}
+.interaction-water-ripple.ripple-2 {
+  animation: water-ripple-expand 1.3s cubic-bezier(.1, .7, .2, 1) 0.15s both;
+}
+
+/* Floating sub-hearts/kiss icons */
+.interaction-floating-heart {
+  position: absolute;
+  font-size: 1.4rem;
+  z-index: 6;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .3));
+}
+.interaction-floating-heart.fh-1 { animation: float-away-1 1.35s ease-out both; }
+.interaction-floating-heart.fh-2 { animation: float-away-2 1.35s ease-out both; }
+.interaction-floating-heart.fh-3 { animation: float-away-3 1.35s ease-out both; }
+
+/* Dynamic Particle Spray */
+.room-interaction-particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+}
+.fx-particle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin: -4px 0 0 -4px;
+}
+.room-interaction-tomato .fx-particle {
+  background: #dc2626;
+  box-shadow: 0 0 6px #ef4444;
+}
+.room-interaction-water .fx-particle {
+  background: #38bdf8;
+  box-shadow: 0 0 8px #7dd3fc;
+}
+.room-interaction-heart .fx-particle {
+  background: #f472b6;
+  box-shadow: 0 0 8px #fb7185;
+}
+.room-interaction-kiss .fx-particle {
+  background: #f43f5e;
+  box-shadow: 0 0 8px #fda4af;
+}
+.fx-particle.p1 { animation: particle-spray-1 1.25s ease-out both; }
+.fx-particle.p2 { animation: particle-spray-2 1.25s ease-out both; }
+.fx-particle.p3 { animation: particle-spray-3 1.25s ease-out both; }
+.fx-particle.p4 { animation: particle-spray-4 1.25s ease-out both; }
+.fx-particle.p5 { animation: particle-spray-5 1.25s ease-out both; }
+.fx-particle.p6 { animation: particle-spray-6 1.25s ease-out both; }
+
 .texas-player .room-interaction { display: block; }
 .texas-player .room-interaction-options { bottom: calc(100% + 4px); }
 .texas-seat-position .room-interaction { margin-top: 4px; }
@@ -796,6 +982,93 @@ main { min-height: 100svh; padding: clamp(16px, 4vw, 32px); }
   35% { opacity: 1; transform: translate(-50%, -65%) scale(1.22) rotate(8deg); }
   72% { opacity: 1; transform: translate(-50%, -52%) scale(1) rotate(-4deg); }
   100% { opacity: 0; transform: translate(-50%, -45%) scale(.86) rotate(0); }
+}
+@keyframes tomato-flight-smash {
+  0% { opacity: 0; transform: translate(-30px, -60px) scale(.3) rotate(-35deg); }
+  28% { opacity: 1; transform: translate(0, 0) scale(1.25) rotate(12deg); }
+  36% { transform: scale(1.5, .6) translateY(4px); }
+  50% { transform: scale(1.05, .95) translateY(2px); }
+  80% { opacity: 1; transform: scale(.95) translateY(8px); }
+  100% { opacity: 0; transform: scale(.8) translateY(18px); }
+}
+@keyframes tomato-splat-appear {
+  0%, 26% { opacity: 0; transform: scale(0); }
+  36% { opacity: 1; transform: scale(1.2); }
+  55% { transform: scale(1); }
+  80% { opacity: .9; transform: scale(1) translateY(6px); }
+  100% { opacity: 0; transform: scale(1.05) translateY(14px); }
+}
+@keyframes water-flight-splash {
+  0% { opacity: 0; transform: translate(-25px, -50px) scale(.35) rotate(-20deg); }
+  30% { opacity: 1; transform: translate(0, 0) scale(1.3) rotate(10deg); filter: drop-shadow(0 0 10px #38bdf8); }
+  45% { transform: scale(1.15) rotate(-5deg); }
+  75% { opacity: 1; transform: scale(1) translateY(4px); }
+  100% { opacity: 0; transform: scale(.85) translateY(16px); }
+}
+@keyframes water-ripple-expand {
+  0%, 25% { opacity: 0; width: 10px; height: 10px; top: calc(50% - 5px); left: calc(50% - 5px); border-width: 3.5px; }
+  35% { opacity: 1; }
+  100% { opacity: 0; width: 90px; height: 90px; top: calc(50% - 45px); left: calc(50% - 45px); border-width: 1px; }
+}
+@keyframes heart-flight-pulse {
+  0% { opacity: 0; transform: translate(-20px, -40px) scale(.3); filter: drop-shadow(0 0 0 transparent); }
+  25% { opacity: 1; transform: translate(0, 0) scale(1.4); filter: drop-shadow(0 0 16px #f472b6); }
+  40% { transform: scale(1.05); }
+  58% { transform: scale(1.35); filter: drop-shadow(0 0 22px #fde047); }
+  78% { opacity: 1; transform: scale(1.15); }
+  100% { opacity: 0; transform: scale(.9) translateY(-16px); }
+}
+@keyframes kiss-flight-stamp {
+  0% { opacity: 0; transform: translate(-25px, -50px) scale(2.2) rotate(-30deg); }
+  25% { opacity: 1; transform: translate(0, 0) scale(1) rotate(-12deg); filter: drop-shadow(0 0 16px #e11d48); }
+  42% { transform: scale(1.18) rotate(-10deg); }
+  75% { opacity: 1; transform: scale(1) rotate(-12deg); }
+  100% { opacity: 0; transform: scale(.85) rotate(-12deg) translateY(-12px); }
+}
+@keyframes float-away-1 {
+  0%, 25% { opacity: 0; transform: translate(0, 0) scale(.5); }
+  40% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-32px, -45px) scale(1.1) rotate(-15deg); }
+}
+@keyframes float-away-2 {
+  0%, 28% { opacity: 0; transform: translate(0, 0) scale(.5); }
+  45% { opacity: 1; }
+  100% { opacity: 0; transform: translate(30px, -42px) scale(1.15) rotate(18deg); }
+}
+@keyframes float-away-3 {
+  0%, 32% { opacity: 0; transform: translate(0, 0) scale(.5); }
+  50% { opacity: 1; }
+  100% { opacity: 0; transform: translate(2px, -54px) scale(1.2) rotate(5deg); }
+}
+@keyframes particle-spray-1 {
+  0%, 28% { opacity: 0; transform: translate(0, 0) scale(0); }
+  40% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-38px, -28px) scale(1); }
+}
+@keyframes particle-spray-2 {
+  0%, 28% { opacity: 0; transform: translate(0, 0) scale(0); }
+  40% { opacity: 1; }
+  100% { opacity: 0; transform: translate(36px, -26px) scale(1); }
+}
+@keyframes particle-spray-3 {
+  0%, 28% { opacity: 0; transform: translate(0, 0) scale(0); }
+  40% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-30px, 32px) scale(1); }
+}
+@keyframes particle-spray-4 {
+  0%, 28% { opacity: 0; transform: translate(0, 0) scale(0); }
+  40% { opacity: 1; }
+  100% { opacity: 0; transform: translate(28px, 34px) scale(1); }
+}
+@keyframes particle-spray-5 {
+  0%, 28% { opacity: 0; transform: translate(0, 0) scale(0); }
+  40% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-4px, -44px) scale(1); }
+}
+@keyframes particle-spray-6 {
+  0%, 28% { opacity: 0; transform: translate(0, 0) scale(0); }
+  40% { opacity: 1; }
+  100% { opacity: 0; transform: translate(4px, 42px) scale(1); }
 }
 
 @media (min-width: 761px) {

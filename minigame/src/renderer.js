@@ -1,4 +1,4 @@
-const { relativeSeats, playerForSeat, tileLabel, actionLabel, chatText } = require('./model');
+const { relativeSeats, playerForSeat, tileLabel, actionLabel, chatText, CLASSIC_CHAT_PHRASES } = require('./model');
 
 const INTERACTIONS = [
   { id: 'tomato', label: '🍅' }, { id: 'water', label: '💦' },
@@ -638,12 +638,275 @@ class MahjongRenderer {
     }
 
     const latestInteraction = [...(state.snapshot.public.chat || [])].reverse().find((message) =>
-      message.kind === 'interaction' && message.targetSeat === seat && Date.now() - message.createdAt < 1700);
+      message.kind === 'interaction' &&
+      (message.targetSeat === seat || (player && message.targetNickname === player.nickname)) &&
+      Date.now() - message.createdAt < 2000);
     if (latestInteraction) {
-      const age = Date.now() - latestInteraction.createdAt;
-      const lift = Math.round((age / 1700) * 20);
-      this.circle(x + width - 10, y + 20 - lift, 20, 'rgba(38, 62, 35, 0.82)', COLORS.gold);
-      this.text(({ tomato: '🍅', water: '💦', heart: '💖', kiss: '💋' })[latestInteraction.interaction] || '✨', x + width - 10, y + 20 - lift, 25, COLORS.text, 'center');
+      this.drawInteractionEffect(state, latestInteraction, seat, x, y, width, height);
+    }
+
+    const latestPhrase = [...(state.snapshot.public.chat || [])].reverse().find((message) =>
+      message.kind === 'phrase' && message.senderSeat === seat && Date.now() - message.createdAt < 3600);
+    if (latestPhrase && latestPhrase.text) {
+      this.drawSpeechBubble(latestPhrase.text, x, y, width, height);
+    }
+  }
+
+  drawSpeechBubble(text, cardX, cardY, cardWidth, cardHeight) {
+    const ctx = this.ctx;
+    const paddingX = 14;
+    const textWidth = Math.min(220, text.length * 13 + paddingX * 2);
+    const bubbleWidth = Math.max(100, textWidth);
+    const bubbleHeight = 32;
+
+    let bx, by;
+    let tailPoints;
+
+    if (cardX < 200) {
+      bx = cardX + cardWidth + 12;
+      by = cardY + 12;
+      tailPoints = [
+        [bx, by + 10],
+        [cardX + cardWidth + 2, by + 16],
+        [bx, by + 22],
+      ];
+    } else if (cardX > 600) {
+      bx = cardX - bubbleWidth - 12;
+      by = cardY + 12;
+      tailPoints = [
+        [bx + bubbleWidth, by + 10],
+        [cardX - 2, by + 16],
+        [bx + bubbleWidth, by + 22],
+      ];
+    } else {
+      bx = cardX + cardWidth / 2 - bubbleWidth / 2;
+      by = cardY + cardHeight + 8;
+      tailPoints = [
+        [bx + bubbleWidth / 2 - 7, by],
+        [cardX + cardWidth / 2, cardY + cardHeight + 2],
+        [bx + bubbleWidth / 2 + 7, by],
+      ];
+    }
+
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+    ctx.shadowBlur = 10;
+    ctx.shadowOffsetY = 3;
+
+    this.roundRect(bx, by, bubbleWidth, bubbleHeight, 8, '#fffdf4', '#d09f3e');
+    this.polygon(tailPoints, '#fffdf4', '#d09f3e', 1.5);
+    ctx.restore();
+
+    this.polygon(tailPoints, '#fffdf4');
+    const displayText = this.fitText(text, bubbleWidth - 20, 12);
+    this.text(displayText, bx + bubbleWidth / 2, by + 20, 12, '#2d1d0f', 'center', '700');
+  }
+
+  drawInteractionEffect(state, message, targetSeat, cardX, cardY, cardWidth) {
+    const age = Math.max(0, Date.now() - message.createdAt);
+    const duration = 2000;
+    if (age >= duration) return;
+    const progress = Math.min(1, age / duration);
+    const flyRatio = 0.35;
+    const ctx = this.ctx;
+
+    const targetX = cardX + cardWidth / 2;
+    const targetY = cardY + 32;
+
+    let startX = targetX;
+    let startY = targetY;
+    if (message.senderSeat && state.snapshot) {
+      const order = relativeSeats(state.snapshot.private.seat || 'A');
+      const senderIdx = order.indexOf(message.senderSeat);
+      if (senderIdx >= 0 && this.roomLayout().cards[senderIdx]) {
+        const sCard = this.roomLayout().cards[senderIdx];
+        startX = sCard.x + sCard.width / 2;
+        startY = sCard.y + 32;
+      }
+    }
+    if (Math.abs(startX - targetX) < 10 && Math.abs(startY - targetY) < 10) {
+      startX = targetX > 480 ? targetX - 100 : targetX + 100;
+      startY = targetY + 60;
+    }
+
+    const type = message.interaction || 'tomato';
+    const icon = ({ tomato: '🍅', water: '💦', heart: '💖', kiss: '💋' })[type] || '✨';
+
+    if (progress < flyRatio) {
+      const p = progress / flyRatio;
+      const easeP = p * (2 - p);
+      const arc = -75 * Math.sin(p * Math.PI);
+      const curX = startX + (targetX - startX) * easeP;
+      const curY = startY + (targetY - startY) * easeP + arc;
+
+      ctx.save();
+      if (type === 'tomato') {
+        ctx.translate(curX, curY);
+        ctx.rotate(p * Math.PI * 4);
+        for (let i = 1; i <= 3; i += 1) {
+          this.circle(-i * 10, Math.sin(i) * 5, Math.max(1, 4 - i), `rgba(239, 68, 68, ${0.6 - i * 0.16})`);
+        }
+        this.text('🍅', 0, 9, 28, COLORS.text, 'center');
+      } else if (type === 'water') {
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.quadraticCurveTo((startX + curX) / 2, Math.min(startY, curY) - 35, curX, curY);
+        ctx.strokeStyle = `rgba(56, 189, 248, ${0.35 + p * 0.45})`;
+        ctx.lineWidth = Math.max(2, 6 * p);
+        ctx.lineCap = 'round';
+        ctx.stroke();
+        for (let i = 1; i <= 3; i += 1) {
+          const tp = Math.max(0, p - i * 0.08);
+          const tx = startX + (targetX - startX) * tp;
+          const ty = startY + (targetY - startY) * tp - 75 * Math.sin(tp * Math.PI);
+          this.circle(tx, ty, 3.5 - i * 0.8, 'rgba(186, 230, 253, 0.7)');
+        }
+        this.text('💦', curX, curY + 9, 28, COLORS.text, 'center');
+      } else if (type === 'heart') {
+        const pulse = 1 + 0.2 * Math.sin(p * Math.PI * 5);
+        ctx.translate(curX, curY);
+        ctx.scale(pulse, pulse);
+        this.circle(0, 0, 16, 'rgba(244, 114, 182, 0.35)');
+        for (let i = 1; i <= 3; i += 1) {
+          const tp = Math.max(0, p - i * 0.08);
+          const tx = startX + (targetX - startX) * tp;
+          const ty = startY + (targetY - startY) * tp - 75 * Math.sin(tp * Math.PI);
+          this.text('✨', tx, ty + 4, 11 - i * 2, '#fde047', 'center');
+        }
+        this.text('💖', 0, 9, 28, COLORS.text, 'center');
+      } else if (type === 'kiss') {
+        const wave = Math.sin(p * Math.PI * 4) * 8;
+        ctx.translate(curX, curY + wave);
+        ctx.rotate(-0.15 + Math.sin(p * Math.PI * 4) * 0.15);
+        for (let i = 1; i <= 3; i += 1) {
+          const tp = Math.max(0, p - i * 0.08);
+          const tx = startX + (targetX - startX) * tp;
+          const ty = startY + (targetY - startY) * tp - 75 * Math.sin(tp * Math.PI);
+          this.text('❤️', tx, ty + 3, 10 - i * 2, '#f43f5e', 'center');
+        }
+        this.text('💋', 0, 9, 28, COLORS.text, 'center');
+      } else {
+        this.text(icon, curX, curY + 8, 28, COLORS.text, 'center');
+      }
+      ctx.restore();
+    } else {
+      const p = (progress - flyRatio) / (1 - flyRatio);
+      const alpha = p > 0.65 ? Math.max(0, 1 - (p - 0.65) / 0.35) : 1;
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+
+      if (type === 'tomato') {
+        const dripY = targetY + p * 10;
+        if (p < 0.28) {
+          const ringR = 12 + p * 80;
+          this.circle(targetX, targetY, ringR, null, `rgba(255, 100, 100, ${1 - p * 3.5})`, 3);
+          for (let i = 0; i < 4; i += 1) {
+            const ang = i * Math.PI / 2 + 0.3;
+            const d = 22 + p * 45;
+            this.text('✦', targetX + Math.cos(ang) * d, targetY + Math.sin(ang) * d + 5, 13, '#ffd54f', 'center');
+          }
+        }
+        this.circle(targetX, dripY, 20 + Math.min(6, p * 8), '#d32f2f');
+        const lobes = [
+          [-16, -10, 11], [15, -12, 12], [-14, 12, 13], [16, 11, 10],
+          [-2, -18, 9], [4, 18, 12], [-19, 2, 8], [19, -2, 9],
+        ];
+        lobes.forEach(([ox, oy, rad]) => {
+          this.circle(targetX + ox, dripY + oy, rad, '#c62828');
+        });
+        this.circle(targetX - 7, dripY - 7, 5, 'rgba(255, 138, 128, 0.75)');
+        this.circle(targetX + 6, dripY + 4, 3, 'rgba(255, 235, 238, 0.85)');
+        this.roundRect(targetX - 9, dripY + 12, 5, 12 + p * 12, 2.5, '#b71c1c');
+        this.roundRect(targetX + 8, dripY + 10, 4, 9 + p * 10, 2, '#b71c1c');
+        for (let i = 0; i < 8; i += 1) {
+          const angle = i * (Math.PI / 4) + 0.25;
+          const speed = 28 + (i % 3) * 14;
+          const dist = speed * Math.sin(p * Math.PI * 0.5);
+          const grav = p * p * 32;
+          const px = targetX + Math.cos(angle) * dist;
+          const py = targetY + Math.sin(angle) * dist + grav;
+          const pr = Math.max(1, (4 - (i % 2)) * (1 - p * 0.7));
+          this.circle(px, py, pr, i % 2 === 0 ? '#ff5252' : '#d50000');
+        }
+        ctx.save();
+        ctx.translate(targetX, dripY);
+        ctx.scale(1.3, Math.max(0.3, 0.7 - p * 1.2));
+        this.text('🍅', 0, 8, 28, COLORS.text, 'center');
+        ctx.restore();
+      } else if (type === 'water') {
+        for (let i = 0; i < 3; i += 1) {
+          const ringP = Math.max(0, Math.min(1, p * 1.5 - i * 0.22));
+          if (ringP > 0 && ringP < 1) {
+            const r = 10 + ringP * 55;
+            const ringAlpha = (1 - ringP) * 0.85;
+            this.circle(targetX, targetY, r, null, `rgba(56, 189, 248, ${ringAlpha})`, 3.5 * (1 - ringP * 0.6));
+          }
+        }
+        this.circle(targetX, targetY, 28, 'rgba(56, 189, 248, 0.28)');
+        this.circle(targetX, targetY - 4, 20, 'rgba(224, 242, 254, 0.35)');
+        for (let i = 0; i < 12; i += 1) {
+          const angle = i * (Math.PI / 6) + 0.15;
+          const speed = 25 + (i % 4) * 12;
+          const dist = speed * Math.sin(p * Math.PI * 0.5);
+          const grav = p * p * 24;
+          const px = targetX + Math.cos(angle) * dist;
+          const py = targetY + Math.sin(angle) * dist + grav;
+          const pr = Math.max(1, (4.5 - (i % 3)) * (1 - p * 0.7));
+          this.circle(px, py, pr, i % 2 === 0 ? '#38bdf8' : '#e0f2fe');
+        }
+        const bounce = 1 + 0.28 * Math.sin(p * Math.PI * 3) * Math.exp(-p * 2);
+        ctx.save();
+        ctx.translate(targetX, targetY);
+        ctx.scale(bounce, bounce);
+        this.text('💦', 0, 10, 32, COLORS.text, 'center');
+        ctx.restore();
+      } else if (type === 'heart') {
+        const auraR = 15 + p * 45;
+        this.circle(targetX, targetY, auraR, `rgba(244, 114, 182, ${0.35 * (1 - p)})`, `rgba(253, 224, 71, ${0.5 * (1 - p)})`, 2);
+        const miniHearts = ['💕', '💗', '✨', '💖', '💕', '✨'];
+        for (let i = 0; i < 6; i += 1) {
+          const ang = i * (Math.PI / 3) + p * 1.2;
+          const dist = (20 + (i % 3) * 14) * Math.sqrt(p);
+          const lift = p * 38;
+          const hx = targetX + Math.cos(ang) * dist;
+          const hy = targetY + Math.sin(ang) * dist - lift;
+          this.text(miniHearts[i], hx, hy + 5, 16 - (i % 2) * 3, COLORS.text, 'center');
+        }
+        const beat = 1 + 0.36 * Math.sin(p * Math.PI * 4) * Math.exp(-p * 2);
+        ctx.save();
+        ctx.translate(targetX, targetY);
+        ctx.scale(beat, beat);
+        this.text('💖', 0, 10, 36, COLORS.text, 'center');
+        ctx.restore();
+      } else if (type === 'kiss') {
+        if (p < 0.3) {
+          const stampR = 12 + p * 80;
+          this.circle(targetX, targetY, stampR, null, `rgba(244, 63, 94, ${1 - p * 3.3})`, 3);
+        }
+        this.circle(targetX - 16, targetY + 6, 12, `rgba(251, 113, 133, ${0.35 * (1 - p)})`);
+        this.circle(targetX + 16, targetY + 6, 12, `rgba(251, 113, 133, ${0.35 * (1 - p)})`);
+        const kissHearts = ['❤️', '💕', '🥰', '❤️', '💋'];
+        for (let i = 0; i < 5; i += 1) {
+          const lift = p * 42;
+          const sway = Math.sin(p * 6 + i) * 14;
+          const hx = targetX + (i - 2) * 13 + sway;
+          const hy = targetY - 6 - lift;
+          this.text(kissHearts[i], hx, hy, 14, COLORS.text, 'center');
+        }
+        const stampScale = p < 0.15 ? 1.6 - (p / 0.15) * 0.6 : 1.0;
+        ctx.save();
+        ctx.translate(targetX, targetY);
+        ctx.rotate(-0.2);
+        ctx.scale(stampScale, stampScale);
+        this.text('💋', 0, 10, 36, COLORS.text, 'center');
+        ctx.restore();
+      } else {
+        this.text(icon, targetX, targetY + 8, 28, COLORS.text, 'center');
+      }
+
+      ctx.restore();
+      ctx.globalAlpha = 1;
     }
   }
 
@@ -956,39 +1219,107 @@ class MahjongRenderer {
     ctx.restore();
     this.roundRect(x + 4, y + 4, width - 8, height - 8, 9, null, 'rgba(234, 207, 149, 0.19)');
     this.targets.push({ x, y, width, height, type: 'chat-panel', data: {} });
-    this.text('房间聊天', x + 16, y + 23, 16, '#f7df9c', 'left', '700');
+
+    // Tabs in header
+    const currentTab = state.chatTab || 'messages';
+    this.text('聊天', x + 16, y + 23, 15, '#f7df9c', 'left', '700');
+
+    // Tab 1: 消息
+    const tab1Active = currentTab === 'messages';
+    this.roundRect(x + 58, y + 9, 54, 24, 4, tab1Active ? '#a0743b' : 'rgba(12, 32, 20, 0.6)', tab1Active ? '#f3d78e' : '#4f6855');
+    this.text('消息', x + 85, y + 21, 12, tab1Active ? '#fff5d6' : '#abb8a4', 'center', '600');
+    this.targets.push({ x: x + 58, y: y + 9, width: 54, height: 24, type: 'chat-tab', data: { tab: 'messages' } });
+
+    // Tab 2: ⚡ 快捷语
+    const tab2Active = currentTab === 'phrases';
+    this.roundRect(x + 118, y + 9, 74, 24, 4, tab2Active ? '#a0743b' : 'rgba(12, 32, 20, 0.6)', tab2Active ? '#f3d78e' : '#4f6855');
+    this.text('⚡ 快捷语', x + 155, y + 21, 12, tab2Active ? '#fff5d6' : '#abb8a4', 'center', '600');
+    this.targets.push({ x: x + 118, y: y + 9, width: 74, height: 24, type: 'chat-tab', data: { tab: 'phrases' } });
+
+    // Close button
     ctx.beginPath(); ctx.moveTo(x + width - 28, y + 17); ctx.lineTo(x + width - 18, y + 27);
     ctx.moveTo(x + width - 18, y + 17); ctx.lineTo(x + width - 28, y + 27);
     ctx.strokeStyle = '#d9cdb0'; ctx.lineWidth = 1.5; ctx.stroke();
     this.targets.push({ x: x + width - 40, y: y + 7, width: 32, height: 32, type: 'close-chat', data: {} });
-    const messages = state.snapshot?.public?.chat || [];
-    const inputY = y + height - 47;
-    const bodyHeight = height - 105;
+
+    if (currentTab === 'phrases') {
+      // Show Quick Phrases grid (2 columns x 4 rows)
+      this.text('点击短语将直接在头像上浮现对白气泡', x + 16, y + 48, 11, '#b0c4a4');
+      const phrases = CLASSIC_CHAT_PHRASES;
+      const colW = (width - 32) / 2;
+      const itemH = 34;
+      const startY = y + 58;
+      phrases.forEach((phrase, idx) => {
+        const col = idx % 2;
+        const row = Math.floor(idx / 2);
+        const px = x + 12 + col * (colW + 8);
+        const py = startY + row * (itemH + 6);
+        this.roundRect(px, py, colW, itemH, 6, 'rgba(14, 38, 26, 0.88)', '#55745e');
+        const short = this.fitText(phrase, colW - 14, 11);
+        this.text(short, px + colW / 2, py + 18, 11, '#eef3e2', 'center', '500');
+        this.targets.push({ x: px, y: py, width: colW, height: itemH, type: 'send-phrase', data: { phrase } });
+      });
+      return;
+    }
+
+    // Message list tab (filter out 'phrase' so they don't pollute chat history!)
+    const allMessages = state.snapshot?.public?.chat || [];
+    const messages = allMessages.filter((m) => m.kind !== 'phrase');
+    const inputY = y + height - 44;
+    const bodyHeight = height - 100;
     const visible = [];
     let usedHeight = 0;
     for (let index = messages.length - 1; index >= 0; index -= 1) {
       const message = messages[index];
-      const lines = this.wrapText(chatText(message), width - 32, 12);
-      const rowHeight = lines.length * 17 + 12;
+      const lines = this.wrapText(chatText(message), width - 36, 12);
+      const rowHeight = lines.length * 17 + 10;
       if (usedHeight + rowHeight > bodyHeight) break;
       visible.unshift({ message, lines, rowHeight });
       usedHeight += rowHeight;
     }
-    let messageY = y + 56;
+    let messageY = y + 54;
     visible.forEach(({ message, lines, rowHeight }) => {
-      lines.forEach((line, index) => this.text(line, x + 16, messageY + index * 17, 12,
-        message.kind === 'interaction' ? '#eacb85' : '#edf0db'));
+      if (message.kind === 'voice') {
+        const isPlaying = state.playingVoiceId === message.id;
+        this.roundRect(x + 14, messageY - 4, width - 28, rowHeight - 2, 5, isPlaying ? 'rgba(45, 90, 55, 0.92)' : 'rgba(18, 48, 30, 0.75)', isPlaying ? COLORS.gold : '#48684d');
+        const voiceLabel = `${message.senderNickname}: 🎙️ ${message.duration || 1}" ${isPlaying ? '🔊 播放中…' : '▶ 点击播放'}`;
+        this.text(voiceLabel, x + 24, messageY + 8, 12, isPlaying ? '#ffea9f' : '#b2f0c8', 'left', '600');
+        this.targets.push({ x: x + 14, y: messageY - 4, width: width - 28, height: rowHeight - 2, type: 'play-voice', data: { message } });
+      } else {
+        lines.forEach((line, index) => this.text(line, x + 16, messageY + index * 17, 12,
+          message.kind === 'interaction' ? '#eacb85' : '#edf0db'));
+      }
       messageY += rowHeight;
     });
     if (!messages.length) {
-      this.text('还没有消息，打个招呼吧', x + width / 2, y + 112, 12, '#aebda2', 'center');
-      this.text('点击玩家头像，还可以发送互动', x + width / 2, y + 137, 11, '#8da184', 'center');
+      this.text('还没有消息，打个招呼吧', x + width / 2, y + 106, 12, '#aebda2', 'center');
+      this.text('点击玩家头像送互动，或使用快捷语', x + width / 2, y + 130, 11, '#8da184', 'center');
     }
-    this.roundRect(x + 12, inputY, width - 90, 34, 6, 'rgba(7, 26, 18, 0.72)', '#6d805a');
-    const draft = state.chatDraft || '点此输入消息…';
-    this.text(this.fitText(draft, width - 110, 12), x + 22, inputY + 18, 12, state.chatDraft ? '#edf0db' : '#a3b69a');
-    this.targets.push({ x: x + 12, y: inputY, width: width - 90, height: 34, type: 'input', data: { field: 'chatDraft' } });
-    this.button('发送', x + width - 70, inputY, 58, 34, 'send-chat', {}, 'primary');
+
+    // Bottom Input Bar
+    const isVoiceMode = state.chatMode === 'voice';
+    // Mode toggle button on the left (🎙️ / ⌨️)
+    this.roundRect(x + 12, inputY, 34, 34, 6, isVoiceMode ? '#8a6230' : 'rgba(12, 35, 22, 0.8)', '#6d805a');
+    this.text(isVoiceMode ? '⌨️' : '🎙️', x + 29, inputY + 17, 16, '#f3e1b0', 'center');
+    this.targets.push({ x: x + 12, y: inputY, width: 34, height: 34, type: 'toggle-chat-mode', data: {} });
+
+    if (isVoiceMode) {
+      // Wide "Hold to speak" button
+      const voiceBarW = width - 58;
+      const isRecording = Boolean(state.recordingVoice);
+      this.roundRect(x + 52, inputY, voiceBarW, 34, 6, isRecording ? '#ba751f' : 'rgba(16, 44, 28, 0.9)', isRecording ? '#ffe08a' : '#5f7952');
+      const voiceBtnLabel = isRecording ? '松手 发送 · 正在录音…' : '按住 说话';
+      this.text(voiceBtnLabel, x + 52 + voiceBarW / 2, inputY + 17, 13, isRecording ? '#ffffff' : '#edf0db', 'center', '600');
+      this.targets.push({ x: x + 52, y: inputY, width: voiceBarW, height: 34, type: 'voice-bar', data: {} });
+    } else {
+      // Text mode: input box + send button
+      const inputW = width - 124;
+      this.roundRect(x + 52, inputY, inputW, 34, 6, 'rgba(7, 26, 18, 0.72)', '#6d805a');
+      const draft = state.chatDraft || '点此输入消息…';
+      this.text(this.fitText(draft, inputW - 14, 12), x + 60, inputY + 18, 12, state.chatDraft ? '#edf0db' : '#a3b69a');
+      this.targets.push({ x: x + 52, y: inputY, width: inputW, height: 34, type: 'input', data: { field: 'chatDraft' } });
+      this.button('发送', x + width - 66, inputY, 54, 34, 'send-chat', {}, 'primary');
+    }
   }
 
   drawInteractionPicker(state) {

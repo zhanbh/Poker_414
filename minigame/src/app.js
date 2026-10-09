@@ -41,8 +41,9 @@ class MahjongGameApp {
       inviteCode: '', nickname: '', avatarUrl: '', chatDraft: '', error: '',
       statusMessage: '邀请码进入 · 仅供测试、学习和交流', connectionStatus: 'disconnected',
       canRequestUserInfo: typeof this.wx.createUserInfoButton === 'function',
-      profileAuthorized: false, profileUpdating: false,
-      busy: false, chatOpen: false, chatReadId: '', selectedTileId: '', selectedTarget: null, focus: '', keyboardOpen: false, snapshot: null,
+      busy: false, chatOpen: false, chatReadId: '', chatMode: 'text', chatTab: 'messages',
+      recordingVoice: false, playingVoiceId: '', selectedTileId: '', selectedTarget: null,
+      focus: '', keyboardOpen: false, snapshot: null,
     };
     if (this.wx.getStorageSync) {
       const savedNickname = this.wx.getStorageSync(config.nicknameStorageKey) || '';
@@ -77,7 +78,9 @@ class MahjongGameApp {
     this.orientationFailedFor = null;
     this.orientationError = '';
     this.draw = this.draw.bind(this);
+    this.onTouchStart = this.onTouchStart.bind(this);
     this.onTouchEnd = this.onTouchEnd.bind(this);
+    this.onTouchCancel = this.onTouchCancel.bind(this);
     this.onKeyboardInput = this.onKeyboardInput.bind(this);
     this.onKeyboardConfirm = this.onKeyboardConfirm.bind(this);
     this.unsubscribe = this.transport.subscribe((snapshot) => this.updateSnapshot(snapshot));
@@ -95,7 +98,9 @@ class MahjongGameApp {
       if (status === 'disconnected' && this.visible && this.state.snapshot) this.scheduleRecovery();
       this.draw();
     });
+    if (typeof this.wx.onTouchStart === 'function') this.wx.onTouchStart(this.onTouchStart);
     this.wx.onTouchEnd(this.onTouchEnd);
+    if (typeof this.wx.onTouchCancel === 'function') this.wx.onTouchCancel(this.onTouchCancel);
     if (typeof this.wx.onKeyboardInput === 'function') this.wx.onKeyboardInput(this.onKeyboardInput);
     if (typeof this.wx.onKeyboardConfirm === 'function') this.wx.onKeyboardConfirm(this.onKeyboardConfirm);
     this.wx.onShow(() => {
@@ -492,17 +497,18 @@ class MahjongGameApp {
     this.stopAnimationLoop();
     this.destroyUserInfoButton();
     const latestMessage = (snapshot.public.chat || []).slice(-1)[0];
-    if (latestMessage?.kind === 'interaction' && latestMessage.id !== this.lastInteractionId) {
+    if ((latestMessage?.kind === 'interaction' || latestMessage?.kind === 'phrase') && latestMessage.id !== this.lastInteractionId) {
       this.lastInteractionId = latestMessage.id;
       if (this.interactionTimer) clearInterval(this.interactionTimer);
       if (this.interactionTimeout) clearTimeout(this.interactionTimeout);
-      this.interactionTimer = setInterval(() => this.draw(), 70);
+      const duration = latestMessage.kind === 'phrase' ? 3600 : 2000;
+      this.interactionTimer = setInterval(() => this.draw(), 33);
       this.interactionTimeout = setTimeout(() => {
         if (this.interactionTimer) clearInterval(this.interactionTimer);
         this.interactionTimer = null;
         this.interactionTimeout = null;
         this.draw();
-      }, 1750);
+      }, duration);
     }
     const enteringRoom = this.state.screen === 'entry';
     this.state.snapshot = snapshot;
@@ -585,14 +591,30 @@ class MahjongGameApp {
     this.draw();
   }
 
-  onTouchEnd(event) {
+  onTouchStart(event) {
     const touch = event.changedTouches && event.changedTouches[0] || event.touches && event.touches[0];
     if (!touch) return;
     const target = this.renderer.hit(
       (touch.clientX ?? touch.pageX ?? touch.x) * this.pixelRatio,
       (touch.clientY ?? touch.pageY ?? touch.y) * this.pixelRatio,
     );
-    const insideChat = target && (['chat-panel', 'toggle-chat', 'close-chat', 'send-chat'].includes(target.type)
+    if (target && target.type === 'voice-bar') {
+      this.startVoiceRecording();
+    }
+  }
+
+  onTouchEnd(event) {
+    if (this.state.recordingVoice) {
+      this.stopVoiceRecording(false);
+      return;
+    }
+    const touch = event.changedTouches && event.changedTouches[0] || event.touches && event.touches[0];
+    if (!touch) return;
+    const target = this.renderer.hit(
+      (touch.clientX ?? touch.pageX ?? touch.x) * this.pixelRatio,
+      (touch.clientY ?? touch.pageY ?? touch.y) * this.pixelRatio,
+    );
+    const insideChat = target && (['chat-panel', 'toggle-chat', 'close-chat', 'send-chat', 'chat-tab', 'toggle-chat-mode', 'voice-bar', 'send-phrase', 'play-voice'].includes(target.type)
       || target.type === 'input' && target.data?.field === 'chatDraft');
     if (this.state.chatOpen && !insideChat) {
       // Dismissal consumes the tap so a covered tile or game action cannot fire accidentally.
@@ -600,6 +622,12 @@ class MahjongGameApp {
       return;
     }
     if (target) void this.handleTarget(target);
+  }
+
+  onTouchCancel() {
+    if (this.state.recordingVoice) {
+      this.stopVoiceRecording(true);
+    }
   }
 
   closeChat() {
@@ -624,6 +652,28 @@ class MahjongGameApp {
       }
       return;
     }
+    if (type === 'chat-tab') {
+      this.state.chatTab = data.tab;
+      this.draw();
+      return;
+    }
+    if (type === 'toggle-chat-mode') {
+      this.state.chatMode = this.state.chatMode === 'voice' ? 'text' : 'voice';
+      if (this.state.keyboardOpen) this.hideKeyboard();
+      this.draw();
+      return;
+    }
+    if (type === 'send-phrase') {
+      await this.transport.chat({ kind: 'phrase', text: data.phrase });
+      this.state.chatTab = 'messages';
+      this.draw();
+      return;
+    }
+    if (type === 'play-voice') {
+      this.playVoice(data.message);
+      return;
+    }
+    if (type === 'voice-bar') return;
     if (type === 'profile') return;
     if (type === 'select-player') {
       this.state.selectedTarget = this.state.selectedTarget?.seat === data.seat ? null : data;
@@ -792,6 +842,114 @@ class MahjongGameApp {
       this.draw();
     } catch (error) {
       this.state.error = error.message || '互动发送失败';
+      this.draw();
+    }
+  }
+
+  initRecorder() {
+    if (this.recorderInitialized || !this.wx || typeof this.wx.getRecorderManager !== 'function') return;
+    this.recorderInitialized = true;
+    try {
+      this.recorder = this.wx.getRecorderManager();
+      this.recorder.onStart(() => {
+        this.state.recordingVoice = true;
+        this.recordingStartTime = Date.now();
+        this.draw();
+      });
+      this.recorder.onStop((res) => {
+        const wasCancelled = this.recordingCancelled;
+        const duration = Math.max(1, Math.round(((res && res.duration) || (Date.now() - this.recordingStartTime)) / 1000));
+        this.state.recordingVoice = false;
+        this.recordingCancelled = false;
+        this.draw();
+        if (wasCancelled) return;
+        if (res && res.duration && res.duration < 600) {
+          if (typeof this.wx.showToast === 'function') {
+            this.wx.showToast({ title: '说话时间太短', icon: 'none' });
+          }
+          return;
+        }
+        if (res && res.tempFilePath && this.wx.getFileSystemManager) {
+          try {
+            const fs = this.wx.getFileSystemManager();
+            const base64 = fs.readFileSync(res.tempFilePath, 'base64');
+            if (base64) {
+              void this.transport.chat({
+                kind: 'voice',
+                duration,
+                audioData: base64,
+              });
+            }
+          } catch { /* best effort */ }
+        }
+      });
+      this.recorder.onError((err) => {
+        this.state.recordingVoice = false;
+        this.recordingCancelled = false;
+        this.draw();
+        if (err && /auth deny|authorize/i.test(err.errMsg || '')) {
+          if (typeof this.wx.showModal === 'function') {
+            this.wx.showModal({ title: '录音权限未开启', content: '请在小游戏设置中允许使用麦克风以发送语音。', showCancel: false });
+          }
+        }
+      });
+    } catch { /* ignore */ }
+  }
+
+  startVoiceRecording() {
+    this.initRecorder();
+    if (!this.recorder) return;
+    this.recordingCancelled = false;
+    try {
+      this.recorder.start({
+        duration: 15000,
+        sampleRate: 16000,
+        numberOfChannels: 1,
+        encodeBitRate: 32000,
+        format: 'mp3',
+      });
+    } catch { /* best effort */ }
+  }
+
+  stopVoiceRecording(cancel = false) {
+    if (!this.recorder || !this.state.recordingVoice) return;
+    this.recordingCancelled = cancel;
+    try {
+      this.recorder.stop();
+    } catch { /* best effort */ }
+  }
+
+  playVoice(message) {
+    if (!message || !message.audioData || !this.wx) return;
+    try {
+      if (this.innerAudioContext) {
+        try { this.innerAudioContext.stop(); } catch { /* ignore */ }
+      }
+      if (typeof this.wx.createInnerAudioContext !== 'function') return;
+      this.innerAudioContext = this.wx.createInnerAudioContext();
+      this.state.playingVoiceId = message.id;
+      this.draw();
+
+      const fs = this.wx.getFileSystemManager && this.wx.getFileSystemManager();
+      const basePath = this.wx.env?.USER_DATA_PATH || '';
+      const filePath = basePath ? `${basePath}/temp_voice_${message.id.slice(0, 8)}.mp3` : '';
+      if (fs && filePath) {
+        try { fs.writeFileSync(filePath, message.audioData, 'base64'); } catch { /* ignore */ }
+        this.innerAudioContext.src = filePath;
+      } else {
+        this.innerAudioContext.src = `data:audio/mp3;base64,${message.audioData}`;
+      }
+      this.innerAudioContext.onEnded(() => {
+        this.state.playingVoiceId = '';
+        this.draw();
+      });
+      this.innerAudioContext.onError(() => {
+        this.state.playingVoiceId = '';
+        this.draw();
+      });
+      this.innerAudioContext.play();
+    } catch {
+      this.state.playingVoiceId = '';
       this.draw();
     }
   }

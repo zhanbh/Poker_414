@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
-import { RoomChatInteraction, RoomChatMessage, RoomChatPayload } from '../../../shared/src/protocol';
+import { CLASSIC_CHAT_PHRASES, RoomChatInteraction, RoomChatMessage, RoomChatPayload } from '../../../shared/src/protocol';
 import { InteractionMenu, RoomInteractionTarget, interactionLabel } from './InteractionMenu';
 
 export interface RoomChatMember {
@@ -24,10 +24,12 @@ export function RoomChat({ messages, members, ownSeat, onSend }: {
   const [collapsed, setCollapsed] = useState(() => typeof window !== 'undefined' && window.matchMedia?.('(max-width: 980px) and (orientation: landscape), (max-width: 760px) and (orientation: portrait)').matches || false);
   const messagesRef = useRef<HTMLDivElement>(null);
 
+  const visibleMessages = messages.filter((message) => message.kind !== 'phrase');
+
   useEffect(() => {
     const container = messagesRef.current;
     if (container) container.scrollTop = container.scrollHeight;
-  }, [messages.length]);
+  }, [visibleMessages.length]);
 
   const send = async (payload: RoomChatPayload) => {
     if (sending) return;
@@ -66,10 +68,27 @@ export function RoomChat({ messages, members, ownSeat, onSend }: {
         <section className="room-chat" aria-label="房间聊天">
           <div className="room-chat-heading"><h2>房间聊天</h2><span>仅在本房间保留</span></div>
           <div ref={messagesRef} className="room-chat-messages" aria-live="polite">
-            {messages.length === 0 ? <p className="room-chat-empty">还没有消息，打个招呼吧</p> : messages.map((message) => (
+            {visibleMessages.length === 0 ? <p className="room-chat-empty">还没有消息，打个招呼吧</p> : visibleMessages.map((message) => (
               <div className={`room-chat-message ${message.kind}`} key={message.id}>
                 {message.kind === 'text' ? <><strong>{message.senderNickname}</strong><span>：{message.text}</span></>
-                  : message.kind === 'voice' ? <><strong>{message.senderNickname}</strong><span> 🎙️ {message.text}</span></>
+                  : message.kind === 'voice' ? (
+                    message.audioData ? (
+                      <button
+                        type="button"
+                        className="room-chat-voice-btn"
+                        onClick={() => {
+                          const audio = new Audio(`data:audio/mp3;base64,${message.audioData}`);
+                          audio.play().catch(() => {});
+                        }}
+                        title="点击播放语音"
+                      >
+                        <strong>{message.senderNickname}</strong>
+                        <span> 🎙️ {message.duration || 1}&quot; ▶ 点击播放</span>
+                      </button>
+                    ) : (
+                      <><strong>{message.senderNickname}</strong><span> 🎙️ {message.text}</span></>
+                    )
+                  )
                     : <span>{interactionText(message)}</span>}
               </div>
             ))}
@@ -84,6 +103,22 @@ export function RoomChat({ messages, members, ownSeat, onSend }: {
               </div>
             ))}
             {targets.length === 0 ? <span className="room-chat-target-hint">暂无可互动的玩家</span> : null}
+          </div>
+          <div className="room-chat-phrases" aria-label="快捷短语">
+            <span className="room-chat-phrases-label">⚡ 快捷对白（头像气泡）</span>
+            <div className="room-chat-phrases-list">
+              {CLASSIC_CHAT_PHRASES.map((phrase) => (
+                <button
+                  key={phrase}
+                  type="button"
+                  className="room-chat-phrase-btn"
+                  onClick={() => void send({ kind: 'phrase', text: phrase })}
+                  title={phrase}
+                >
+                  {phrase}
+                </button>
+              ))}
+            </div>
           </div>
           <form className="room-chat-form" onSubmit={(event) => void submit(event)}>
             <input value={draft} maxLength={200} placeholder="输入消息…" onChange={(event) => setDraft(event.target.value)} disabled={sending} />

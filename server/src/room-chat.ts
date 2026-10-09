@@ -23,6 +23,32 @@ export function createRoomChatMessage(session: Session, payload: unknown): RoomC
       createdAt: Date.now(),
     };
   }
+  if (payload.kind === 'voice') {
+    const duration = Math.min(15, Math.max(1, Math.round(payload.duration)));
+    const audioData = payload.audioData.slice(0, 250_000);
+    return {
+      id: randomUUID(),
+      kind: 'voice',
+      senderNickname,
+      ...(senderSeat ? { senderSeat } : {}),
+      duration,
+      audioData,
+      text: `[语音 ${duration}"]`,
+      createdAt: Date.now(),
+    };
+  }
+  if (payload.kind === 'phrase') {
+    const text = payload.text.trim().slice(0, MAX_TEXT_LENGTH);
+    if (!text) throw new Error('短语内容不能为空');
+    return {
+      id: randomUUID(),
+      kind: 'phrase',
+      senderNickname,
+      ...(senderSeat ? { senderSeat } : {}),
+      text,
+      createdAt: Date.now(),
+    };
+  }
   const targetNickname = payload.target.nickname.trim().slice(0, MAX_NICKNAME_LENGTH);
   const targetSeat = payload.target.seat?.trim().slice(0, 12) || undefined;
   return {

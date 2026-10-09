@@ -26,7 +26,17 @@ export function MahjongLobbyView({ snapshot, ownSeat, spectator = false, onStart
           const player = players.get(seat);
           const canRemove = Boolean(player && ownPlayer?.isHost && player.seat !== ownSeat);
           return <article className={'mahjong-lobby-seat mahjong-lobby-seat-' + seat + (player ? ' occupied' : '')} key={seat}>
-            {player ? <><b>{player.nickname}</b><small>{player.score} 积分</small>{interactionEffect?.targetSeat === seat ? <InteractionEffect interaction={interactionEffect.interaction} /> : null}</> : <span>空位</span>}
+            {player ? <>
+              <b>{player.nickname}</b>
+              <small>{player.score} 积分</small>
+              {interactionEffect?.targetSeat === seat ? <InteractionEffect interaction={interactionEffect.interaction} /> : null}
+              {(() => {
+                const latestPhrase = [...(snapshot.chat || [])].reverse().find(
+                  (msg) => msg.kind === 'phrase' && msg.senderSeat === seat && Date.now() - msg.createdAt < 3600
+                );
+                return latestPhrase ? <div className="player-speech-bubble" aria-label={`${player.nickname}说：${latestPhrase.text}`}>💬 {latestPhrase.text}</div> : null;
+              })()}
+            </> : <span>空位</span>}
             {canRemove ? <button type="button" onClick={() => onRemove(seat)}>移除</button> : null}
           </article>;
         })}

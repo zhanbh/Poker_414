@@ -541,5 +541,73 @@ describe('native mini-game Canvas renderer', () => {
     expect(app.animationRunning).toBe(false);
     expect(app.animationId).toBeNull();
   });
+
+  it('draws speech bubbles for quick phrases on player cards and excludes them from chat history log', () => {
+    const labels = [];
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels.push(String(value)) }));
+    const now = Date.now();
+    const snapshot = {
+      public: {
+        gameId: 'mahjong', phase: 'lobby', handNumber: 0,
+        players: [{ seat: 'B', nickname: '小明', handCount: 0, score: 1000, connected: true }],
+        spectators: [],
+        chat: [
+          { id: 'm1', kind: 'text', senderNickname: '小红', text: '大家好', createdAt: now - 5000 },
+          { id: 'm2', kind: 'phrase', senderNickname: '小明', senderSeat: 'B', text: '快点啊，等得我花儿都谢了！', createdAt: now - 100 },
+        ],
+        hostSeat: null,
+      },
+      private: { seat: 'A', spectator: false, hand: [] },
+    };
+
+    renderer.draw({ screen: 'lobby', snapshot, connectionStatus: 'connected', chatOpen: true, chatTab: 'messages', chatMode: 'text' });
+    // 头像上方出现漫画对白气泡
+    expect(labels).toContain('快点啊，等得我花儿都谢了！');
+    // 聊天消息列表中不展示短语，只展示普通文本
+    expect(labels).toContain('小红: 大家好');
+  });
+
+  it('supports switching to voice mode and exposes voice-bar target in chat panel', () => {
+    const labels = [];
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels.push(String(value)) }));
+    const snapshot = {
+      public: { gameId: 'mahjong', phase: 'lobby', handNumber: 0, players: [], spectators: [], chat: [], hostSeat: null },
+      private: { seat: null, spectator: true },
+    };
+
+    renderer.draw({ screen: 'lobby', snapshot, connectionStatus: 'connected', chatOpen: true, chatMode: 'voice', recordingVoice: false });
+    expect(labels).toContain('按住 说话');
+    expect(renderer.targets.some((t) => t.type === 'voice-bar')).toBe(true);
+    expect(renderer.targets.some((t) => t.type === 'toggle-chat-mode')).toBe(true);
+  });
+
+  it('supports quick phrase tab and exposes send-phrase targets', () => {
+    const labels = [];
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels.push(String(value)) }));
+    const snapshot = {
+      public: { gameId: 'mahjong', phase: 'lobby', handNumber: 0, players: [], spectators: [], chat: [], hostSeat: null },
+      private: { seat: null, spectator: true },
+    };
+
+    renderer.draw({ screen: 'lobby', snapshot, connectionStatus: 'connected', chatOpen: true, chatTab: 'phrases' });
+    expect(labels).toContain('⚡ 快捷语');
+    expect(renderer.targets.some((t) => t.type === 'send-phrase' && t.data.phrase === '你是GG还是MM？')).toBe(true);
+  });
+
+  it('exposes play-voice target for voice chat messages in history', () => {
+    const labels = [];
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels.push(String(value)) }));
+    const snapshot = {
+      public: {
+        gameId: 'mahjong', phase: 'lobby', handNumber: 0, players: [], spectators: [],
+        chat: [{ id: 'v1', kind: 'voice', senderNickname: '小华', duration: 3, audioData: 'bXAz', createdAt: Date.now() }],
+        hostSeat: null,
+      },
+      private: { seat: null, spectator: true },
+    };
+
+    renderer.draw({ screen: 'lobby', snapshot, connectionStatus: 'connected', chatOpen: true, chatTab: 'messages' });
+    expect(renderer.targets.some((t) => t.type === 'play-voice' && t.data.message.id === 'v1')).toBe(true);
+  });
 });
 

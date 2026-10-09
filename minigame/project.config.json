@@ -1,5 +1,5 @@
 {
-  "description": "414 麻将微信小游戏内测",
+  "description": "308 麻将微信小游戏内测",
   "packOptions": {
     "ignore": [],
     "include": []
@@ -31,7 +31,7 @@
   "compileType": "game",
   "libVersion": "3.8.8",
   "appid": "wx2dcc59ed40743e72",
-  "projectname": "414-mahjong-game",
+  "projectname": "308-mahjong-game",
   "simulatorPluginLibVersion": {},
   "isGameTourist": false,
   "editorSetting": {}

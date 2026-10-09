@@ -566,7 +566,7 @@ class MahjongRenderer {
     this.roundRect(240, 215, 60, 60, 12, null, 'rgba(255, 215, 120, 0.45)');
     this.text('雀', 270, 245, 36, '#fffdf6', 'center', '700');
 
-    this.text('414 麻将', 270, 320, 38, COLORS.gold, 'center', '700');
+    this.text('308 麻将', 270, 320, 38, COLORS.gold, 'center', '700');
     this.text('四人经典 · 私房约战 · 雅致雀台', 270, 365, 15, COLORS.muted, 'center', '500');
     this.text('───  ◆  ───', 270, 400, 12, 'rgba(255, 199, 94, 0.45)', 'center');
 
@@ -611,7 +611,7 @@ class MahjongRenderer {
     // Brand header
     this.roundRect(238, 80, 64, 24, 6, '#861c24', '#d49b29');
     this.text('私房雀局', 270, 92, 12, '#ffdb88', 'center', '600');
-    this.text('414 麻将 · 微信小游戏', 270, 140, 30, COLORS.gold, 'center', '700');
+    this.text('308 麻将 · 微信小游戏', 270, 140, 30, COLORS.gold, 'center', '700');
     this.text('与网页版、小程序实时同步同一房间', 270, 180, 14, COLORS.muted, 'center');
 
     // Compact translucent frosted glass card
@@ -653,7 +653,7 @@ class MahjongRenderer {
     this.ctx.beginPath(); this.ctx.moveTo(offset + 36, 22); this.ctx.lineTo(offset + 27, 31); this.ctx.lineTo(offset + 36, 40);
     this.ctx.strokeStyle = '#f9dfa4'; this.ctx.lineWidth = 2.5; this.ctx.stroke();
     this.targets.push({ x: offset + 8, y: 7, width: 48, height: 48, type: 'leave', data: {} });
-    this.text('414 麻将', offset + 65, 24, 18, '#ffe5a4', 'left', '700');
+    this.text('308 麻将', offset + 65, 24, 18, '#ffe5a4', 'left', '700');
     this.text(`${phaseLabel} · 第 ${state.snapshot.public.handNumber || 0} 局`, offset + 66, 44, 10, '#e0d6b7');
     this.circle(offset + 174, 23, 3, state.connectionStatus === 'connected' ? '#8eddaa' : '#edbe59');
   }

@@ -17,6 +17,8 @@ describe('native mini-game Canvas renderer', () => {
     expect(renderer.hit(270, 654)).toMatchObject({ type: 'enter' });
     expect(renderer.targets.some((target) => target.type === 'input' && target.data.field === 'nickname')).toBe(false);
     expect(labels).toContain('进入房间');
+    expect(labels).toContain('308 麻将 · 微信小游戏');
+    expect(labels).not.toContain('414 麻将');
     expect(labels).not.toContain('授权昵称头像并进入');
     expect(labels).not.toContain('点击填写昵称（可授权微信资料）');
     expect(labels).not.toContain('输入 6 位房间邀请码即可入局对战');

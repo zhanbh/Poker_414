@@ -75,7 +75,7 @@ class FourOneFourRenderer {
     ctx.fillStyle = COLORS.background;
     ctx.fillRect(0, 0, logicalWidth, logicalHeight);
     if (portrait) this.drawEntry(state);
-    else this.drawRoom(state, logicalWidth, logicalHeight);
+    else this.drawRoom(state, logicalWidth);
     if (state.error) {
       const errorY = portrait ? 850 : 520;
       this.roundRect(24, errorY - 18, logicalWidth - 48, 34, 7, '#622f3c', '#b75e6c');
@@ -83,9 +83,9 @@ class FourOneFourRenderer {
     }
   }
 
-  fit(value, width, size) {
+  fit(value, width, size = 13) {
     const ctx = this.ctx;
-    ctx.font = `13px sans-serif`;
+    ctx.font = `${size}px sans-serif`;
     let text = String(value ?? '');
     while (text.length > 1 && ctx.measureText(text).width > width) text = `${text.slice(0, -2)}…`;
     return text;
@@ -102,7 +102,7 @@ class FourOneFourRenderer {
     this.text('虚拟筹码不具有现金或财产价值', 270, 790, 13, '#7995a0', 'center');
   }
 
-  drawRoom(state, width, height) {
+  drawRoom(state, width) {
     const snapshot = state.snapshot;
     if (!snapshot) return;
     const pub = snapshot.public;

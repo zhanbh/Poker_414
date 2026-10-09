@@ -251,7 +251,7 @@ class MahjongGameApp {
 
       this.userInfoBtn = this.wx.createUserInfoButton({
         type: 'text',
-        text: '进入麻将房间',
+        text: '进入房间',
         withCredentials: false,
         lang: 'zh_CN',
         style: {
@@ -279,7 +279,7 @@ class MahjongGameApp {
         this.draw();
         void this.handleUserInfoButtonResult(res);
       });
-      this.state.statusMessage = '点击“进入麻将房间”，并在微信弹窗中确认昵称头像授权';
+      this.state.statusMessage = '点击“进入房间”，并在微信弹窗中确认昵称头像授权';
       this.draw();
     } catch (error) {
       this.userInfoBtn = null;
@@ -568,7 +568,7 @@ class MahjongGameApp {
           : '正在准备微信授权，请稍后再点';
         this.draw();
       } else {
-        this.state.statusMessage = '邀请码已就绪，请点击“进入麻将房间”确认授权';
+        this.state.statusMessage = '邀请码已就绪，请点击“进入房间”确认授权';
         this.draw();
       }
       return;

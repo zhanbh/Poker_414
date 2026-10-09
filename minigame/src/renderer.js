@@ -637,7 +637,7 @@ class MahjongRenderer {
     this.text(authAvailable ? '首次进入需确认微信昵称头像授权' : '输入 6 位房间邀请码即可入局对战', 270, 542, 11.5, '#76949f', 'center');
 
     // Enter Button
-    const btnLabel = state.busy ? '正在连接…' : '进入麻将房间';
+    const btnLabel = state.busy ? '正在连接…' : '进入房间';
     this.button(btnLabel, 110, 625, 320, 58, 'enter', {}, 'primary', state.busy);
 
     // Compliance & status footer

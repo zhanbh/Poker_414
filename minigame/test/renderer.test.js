@@ -16,7 +16,7 @@ describe('native mini-game Canvas renderer', () => {
     expect(renderer.hit(270, 409)).toMatchObject({ type: 'input', data: { field: 'inviteCode' } });
     expect(renderer.hit(270, 654)).toMatchObject({ type: 'enter' });
     expect(renderer.targets.some((target) => target.type === 'input' && target.data.field === 'nickname')).toBe(false);
-    expect(labels).toContain('进入麻将房间');
+    expect(labels).toContain('进入房间');
     expect(labels).not.toContain('授权昵称头像并进入');
     expect(labels).not.toContain('点击填写昵称（可授权微信资料）');
     expect(labels).not.toContain('输入 6 位房间邀请码即可入局对战');
@@ -92,7 +92,7 @@ describe('native mini-game Canvas renderer', () => {
       draw: () => {},
     };
     MahjongGameApp.prototype.updateUserInfoButton.call(app);
-    expect(buttonOptions.text).toBe('进入麻将房间');
+    expect(buttonOptions.text).toBe('进入房间');
     expect(buttonOptions.style).toMatchObject({ left: 110, top: 675, width: 320, height: 58 });
     const result = { userInfo: { nickName: '测试用户', avatarUrl: 'avatar' } };
     onTap(result);

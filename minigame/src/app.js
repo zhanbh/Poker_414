@@ -656,6 +656,12 @@ class MahjongGameApp {
       this.closeChat();
       return;
     }
+    const insideInteraction = target && (['interaction', 'close-interaction', 'select-player'].includes(target.type));
+    if (this.state.selectedTarget && !insideInteraction) {
+      this.state.selectedTarget = null;
+      this.draw();
+      if (!target) return;
+    }
     if (target) void this.handleTarget(target);
   }
 
@@ -667,6 +673,7 @@ class MahjongGameApp {
 
   closeChat() {
     this.state.chatOpen = false;
+    this.state.chatTab = 'messages';
     if (this.state.focus === 'chatDraft' || this.state.keyboardOpen) this.hideKeyboard();
     else this.draw();
   }

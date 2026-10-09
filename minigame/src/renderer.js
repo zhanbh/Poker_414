@@ -253,6 +253,77 @@ class MahjongRenderer {
     if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lineWidth; ctx.stroke(); }
   }
 
+  drawOval(cx, cy, rx, ry, fill, stroke, lineWidth = 1) {
+    if (rx <= 0 || ry <= 0) return;
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.beginPath();
+    ctx.translate(cx, cy);
+    ctx.scale(1, ry / rx);
+    ctx.arc(0, 0, rx, 0, Math.PI * 2);
+    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+    if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lineWidth; ctx.stroke(); }
+    ctx.restore();
+  }
+
+  drawWaterBucket(x, y, tiltAngle = 0, scale = 1, isPouring = false) {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(tiltAngle);
+    ctx.scale(scale, scale);
+
+    // Wooden Bucket Body (trapezoid)
+    ctx.beginPath();
+    ctx.moveTo(-20, -14);
+    ctx.lineTo(20, -14);
+    ctx.lineTo(14, 16);
+    ctx.lineTo(-14, 16);
+    ctx.closePath();
+    ctx.fillStyle = this.linearFill(-20, -14, 20, 16,
+      [[0, '#bf7b38'], [0.35, '#8f4f1d'], [0.75, '#6c3610'], [1, '#4e2308']], '#8f4f1d');
+    ctx.fill();
+
+    // Wood vertical plank seams
+    ctx.strokeStyle = 'rgba(40, 15, 5, 0.45)';
+    ctx.lineWidth = 1;
+    for (const px of [-7, 0, 7]) {
+      ctx.beginPath();
+      ctx.moveTo(px * 0.95, -14);
+      ctx.lineTo(px * 0.68, 16);
+      ctx.stroke();
+    }
+
+    // Metal hoops (steel bands)
+    ctx.fillStyle = '#64748b';
+    ctx.fillRect(-18, -4, 36, 4);
+    ctx.fillRect(-15.5, 7, 31, 4);
+    ctx.fillStyle = '#cbd5e1';
+    ctx.fillRect(-18, -4, 36, 1.2);
+    ctx.fillRect(-15.5, 7, 31, 1.2);
+
+    // Bottom base oval
+    this.drawOval(0, 16, 14, 4.5, '#4e2308', 'rgba(40, 15, 5, 0.6)', 1);
+
+    // Rim opening oval
+    this.drawOval(0, -14, 20, 6.5, isPouring ? '#1e293b' : '#0284c7', '#94a3b8', 2);
+
+    // Water level inside rim when not completely poured out
+    if (!isPouring) {
+      this.drawOval(0, -14, 17.5, 5.2, '#38bdf8', null);
+      this.drawOval(-4, -15, 7, 2.2, 'rgba(255, 255, 255, 0.7)', null);
+    }
+
+    // Metal handle arch
+    ctx.beginPath();
+    ctx.arc(0, -14, 22, Math.PI * 1.05, Math.PI * 1.95);
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 2.4;
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
   roomLayout() {
     const width = this.viewport.width || 960;
     const scale = this.viewport.scale || 1;
@@ -595,7 +666,7 @@ class MahjongRenderer {
     this.roundRect(x - 14, y - 11, 28, 20, 9, '#ffe8ad');
     this.polygon([[x - 8, y + 6], [x - 10, y + 15], [x + 1, y + 8]], '#ffe8ad');
     for (const dx of [-7, 0, 7]) this.circle(x + dx, y - 1, 1.7, '#8b6336');
-    const messages = state.snapshot.public.chat || [];
+    const messages = (state.snapshot.public.chat || []).filter((m) => m.kind !== 'phrase' && m.kind !== 'interaction');
     const lastReadIndex = messages.findIndex((message) => message.id === state.chatReadId);
     const unread = messages.length - lastReadIndex - 1;
     if (unread && !state.chatOpen) {
@@ -621,12 +692,15 @@ class MahjongRenderer {
           [[0, '#fff0b3'], [0.28, '#d5a04b'], [0.65, '#8b5b2c'], [1, '#edc879']], '#c29452'), '#f8dfa0');
       ctx.restore();
       this.drawAvatar(player.avatarUrl, avatarX, y, avatarSize, true);
+      if (selected) {
+        this.roundRect(avatarX - 5, y - 5, avatarSize + 10, avatarSize + 10, 11, null, '#ffd700', 2.5);
+      }
       this.roundRect(x, y + 72, width, 19, 3, 'rgba(24, 34, 23, 0.68)');
       this.text(this.fitText(player.nickname, width - 8, 12, '600'), x + width / 2, y + 82, 12, '#fff2d4', 'center', '600');
       this.roundRect(x, y + 93, width, 20, 3, 'rgba(24, 34, 23, 0.78)');
       this.text(`${player.score} 分`, x + width / 2, y + 104, 14, '#ffdf79', 'center', '700');
-      this.circle(avatarX + 54, y + 10, 9, 'rgba(32, 54, 30, 0.9)', 'rgba(255, 215, 120, 0.7)');
-      this.text('🎁', avatarX + 54, y + 13, 8.5, '#ffd875', 'center');
+      this.circle(avatarX + 54, y + 10, 9, selected ? '#eab308' : 'rgba(32, 54, 30, 0.9)', selected ? '#ffffff' : 'rgba(255, 215, 120, 0.7)');
+      this.text('🎁', avatarX + 54, y + 13, 8.5, selected ? '#1f2937' : '#ffd875', 'center');
       this.targets.push({ x, y, width, height, type: 'select-player', data: { seat, nickname: player.nickname } });
       if (state.snapshot.public.dealer === seat || state.snapshot.public.dealerSeat === seat) {
         this.roundRect(avatarX + 44, y + 46, 25, 24, 4, '#c38c2e', '#f3d78e');
@@ -750,20 +824,26 @@ class MahjongRenderer {
         }
         this.text('🍅', 0, 9, 28, COLORS.text, 'center');
       } else if (type === 'water') {
-        ctx.beginPath();
-        ctx.moveTo(startX, startY);
-        ctx.quadraticCurveTo((startX + curX) / 2, Math.min(startY, curY) - 35, curX, curY);
-        ctx.strokeStyle = `rgba(56, 189, 248, ${0.35 + p * 0.45})`;
-        ctx.lineWidth = Math.max(2, 6 * p);
-        ctx.lineCap = 'round';
-        ctx.stroke();
-        for (let i = 1; i <= 3; i += 1) {
+        const p = progress / flyRatio;
+        const easeP = p * (2 - p);
+        const arc = -75 * Math.sin(p * Math.PI);
+        const curX = startX + (targetX - startX) * easeP;
+        const curY = startY + (targetY - 60 - startY) * easeP + arc;
+
+        // Rocking tilt as it flies, tipping over at the end
+        const flyTilt = (targetX >= startX ? 0.2 : -0.2) + Math.sin(p * Math.PI * 3) * 0.15;
+        const tipAtEnd = p > 0.65 ? ((p - 0.65) / 0.35) * Math.PI * 0.55 : 0;
+        const totalTilt = flyTilt + tipAtEnd;
+
+        // Droplet trail behind flying bucket
+        for (let i = 1; i <= 4; i += 1) {
           const tp = Math.max(0, p - i * 0.08);
           const tx = startX + (targetX - startX) * tp;
-          const ty = startY + (targetY - startY) * tp - 75 * Math.sin(tp * Math.PI);
-          this.circle(tx, ty, 3.5 - i * 0.8, 'rgba(186, 230, 253, 0.7)');
+          const ty = startY + (targetY - 60 - startY) * tp - 75 * Math.sin(tp * Math.PI);
+          this.circle(tx, ty, Math.max(1.5, 4 - i * 0.7), 'rgba(186, 230, 253, 0.75)');
         }
-        this.text('💦', curX, curY + 9, 28, COLORS.text, 'center');
+
+        this.drawWaterBucket(curX, curY, totalTilt, 1.2, p > 0.75);
       } else if (type === 'heart') {
         const pulse = 1 + 0.2 * Math.sin(p * Math.PI * 5);
         ctx.translate(curX, curY);
@@ -837,32 +917,119 @@ class MahjongRenderer {
         this.text('🍅', 0, 8, 28, COLORS.text, 'center');
         ctx.restore();
       } else if (type === 'water') {
-        for (let i = 0; i < 3; i += 1) {
-          const ringP = Math.max(0, Math.min(1, p * 1.5 - i * 0.22));
-          if (ringP > 0 && ringP < 1) {
-            const r = 10 + ringP * 55;
-            const ringAlpha = (1 - ringP) * 0.85;
-            this.circle(targetX, targetY, r, null, `rgba(56, 189, 248, ${ringAlpha})`, 3.5 * (1 - ringP * 0.6));
+        const bucketX = targetX - 16;
+        const bucketY = targetY - 60;
+        const isPouring = p < 0.75;
+        // Bucket shakes while dumping water
+        const shake = isPouring ? Math.sin(p * 45) * Math.max(0, 1 - p * 1.3) * 3 : 0;
+        const bucketTilt = Math.PI * 0.62 + (isPouring ? Math.sin(p * 28) * 0.08 : 0);
+        const bucketAlpha = p > 0.65 ? Math.max(0, 1 - (p - 0.65) / 0.35) : 1;
+
+        // Draw Bucket overhead
+        ctx.save();
+        ctx.globalAlpha = alpha * bucketAlpha;
+        this.drawWaterBucket(bucketX + shake, bucketY, bucketTilt, 1.25, true);
+        ctx.restore();
+
+        // THE WATER DELUGE POURING STRAIGHT DOWN!
+        if (p < 0.85) {
+          const pourAlpha = p < 0.1 ? p / 0.1 : p > 0.65 ? Math.max(0, 1 - (p - 0.65) / 0.2) : 1;
+          ctx.save();
+          ctx.globalAlpha = alpha * pourAlpha;
+
+          const topW = 30;
+          const botW = 66;
+          const topX = bucketX + 16;
+          const topY = bucketY + 12;
+          const botY = targetY + 38;
+
+          // Main waterfall body (trapezoid curved cascade)
+          ctx.beginPath();
+          ctx.moveTo(topX - topW / 2, topY);
+          ctx.quadraticCurveTo(targetX - botW / 2 - 8, (topY + botY) / 2, targetX - botW / 2, botY);
+          ctx.lineTo(targetX + botW / 2, botY);
+          ctx.quadraticCurveTo(targetX + botW / 2 + 8, (topY + botY) / 2, topX + topW / 2, topY);
+          ctx.closePath();
+
+          ctx.fillStyle = this.linearFill(targetX - botW / 2, topY, targetX + botW / 2, botY,
+            [[0, 'rgba(186, 230, 253, 0.85)'], [0.25, 'rgba(56, 189, 248, 0.95)'], [0.7, 'rgba(14, 165, 233, 0.92)'], [1, 'rgba(2, 132, 199, 0.88)']],
+            'rgba(56, 189, 248, 0.9)');
+          ctx.fill();
+
+          // Inner rushing stream (bright core)
+          ctx.beginPath();
+          ctx.moveTo(topX - 8, topY + 4);
+          ctx.quadraticCurveTo(targetX - 16, (topY + botY) / 2, targetX - 18, botY - 4);
+          ctx.lineTo(targetX + 18, botY - 4);
+          ctx.quadraticCurveTo(targetX + 16, (topY + botY) / 2, topX + 8, topY + 4);
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(224, 242, 254, 0.8)';
+          ctx.fill();
+
+          // Rushing vertical water flow lines
+          ctx.lineWidth = 2.2;
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+          for (let i = -2; i <= 2; i += 1) {
+            const flowOffset = (age * 0.5 + i * 17) % 35;
+            ctx.beginPath();
+            ctx.moveTo(topX + i * 5, topY + flowOffset);
+            ctx.lineTo(targetX + i * 12, botY - 6);
+            ctx.stroke();
+          }
+
+          // Foaming splash cloud at point of impact on avatar
+          const foamCount = 6;
+          for (let i = 0; i < foamCount; i += 1) {
+            const fx = targetX - 25 + i * 10;
+            const fy = targetY - 4 + Math.sin(i * 1.8) * 6;
+            const fr = 9 + (i % 3) * 3;
+            this.circle(fx, fy, fr, 'rgba(255, 255, 255, 0.9)');
+            this.circle(fx, fy, fr - 2, 'rgba(224, 242, 254, 0.75)');
+          }
+
+          // Giant splash drops shooting outwards in a fan
+          for (let i = 0; i < 20; i += 1) {
+            const side = i % 2 === 0 ? 1 : -1;
+            const spread = 24 + (i % 6) * 9;
+            const ang = side * (0.35 + (i % 5) * 0.22);
+            const dist = spread * Math.sin(Math.min(1, p * 1.8) * Math.PI * 0.5);
+            const grav = p * p * 55;
+            const px = targetX + Math.sin(ang) * dist * 1.5;
+            const py = targetY + 6 - Math.cos(ang) * dist + grav;
+            const pr = Math.max(1.5, (5 - (i % 3)) * (1 - p * 0.5));
+            this.circle(px, py, pr, i % 2 === 0 ? '#ffffff' : '#38bdf8');
+          }
+
+          // Splash emojis on both sides
+          const splashScale = 1 + 0.3 * Math.sin(p * Math.PI * 3);
+          ctx.save();
+          ctx.translate(targetX - 35, targetY + 8);
+          ctx.scale(splashScale, splashScale);
+          this.text('💦', 0, 0, 24, COLORS.text, 'center');
+          ctx.restore();
+
+          ctx.save();
+          ctx.translate(targetX + 35, targetY + 8);
+          ctx.scale(-splashScale, splashScale);
+          this.text('💦', 0, 0, 24, COLORS.text, 'center');
+          ctx.restore();
+
+          // Water pool ripple on ground/card
+          const rippleW = 35 + p * 35;
+          this.circle(targetX, targetY + 38, rippleW * 0.45, 'rgba(56, 189, 248, 0.3)', 'rgba(224, 242, 254, 0.75)', 2);
+
+          ctx.restore();
+        }
+
+        // Dripping water droplets in late phase
+        if (p > 0.4) {
+          const dripP = (p - 0.4) / 0.6;
+          for (let i = 0; i < 3; i += 1) {
+            const dy = targetY + 10 + ((dripP * 1.8 + i * 0.3) % 1) * 36;
+            const dx = targetX - 16 + i * 16;
+            this.circle(dx, dy, 3, 'rgba(56, 189, 248, 0.85)');
           }
         }
-        this.circle(targetX, targetY, 28, 'rgba(56, 189, 248, 0.28)');
-        this.circle(targetX, targetY - 4, 20, 'rgba(224, 242, 254, 0.35)');
-        for (let i = 0; i < 12; i += 1) {
-          const angle = i * (Math.PI / 6) + 0.15;
-          const speed = 25 + (i % 4) * 12;
-          const dist = speed * Math.sin(p * Math.PI * 0.5);
-          const grav = p * p * 24;
-          const px = targetX + Math.cos(angle) * dist;
-          const py = targetY + Math.sin(angle) * dist + grav;
-          const pr = Math.max(1, (4.5 - (i % 3)) * (1 - p * 0.7));
-          this.circle(px, py, pr, i % 2 === 0 ? '#38bdf8' : '#e0f2fe');
-        }
-        const bounce = 1 + 0.28 * Math.sin(p * Math.PI * 3) * Math.exp(-p * 2);
-        ctx.save();
-        ctx.translate(targetX, targetY);
-        ctx.scale(bounce, bounce);
-        this.text('💦', 0, 10, 32, COLORS.text, 'center');
-        ctx.restore();
       } else if (type === 'heart') {
         const auraR = 15 + p * 45;
         this.circle(targetX, targetY, auraR, `rgba(244, 114, 182, ${0.35 * (1 - p)})`, `rgba(253, 224, 71, ${0.5 * (1 - p)})`, 2);
@@ -1238,62 +1405,11 @@ class MahjongRenderer {
     this.text('⚡ 快捷语', x + 128, y + 21, 11, tab2Active ? '#fff5d6' : '#abb8a4', 'center', '600');
     this.targets.push({ x: x + 92, y: y + 9, width: 72, height: 24, type: 'chat-tab', data: { tab: 'phrases' } });
 
-    // Tab 3: 🎁 互动
-    const tab3Active = currentTab === 'interactions';
-    this.roundRect(x + 168, y + 9, 58, 24, 4, tab3Active ? '#a0743b' : 'rgba(12, 32, 20, 0.6)', tab3Active ? '#f3d78e' : '#4f6855');
-    this.text('🎁 互动', x + 197, y + 21, 11, tab3Active ? '#fff5d6' : '#abb8a4', 'center', '600');
-    this.targets.push({ x: x + 168, y: y + 9, width: 58, height: 24, type: 'chat-tab', data: { tab: 'interactions' } });
-
     // Close button
     ctx.beginPath(); ctx.moveTo(x + width - 28, y + 17); ctx.lineTo(x + width - 18, y + 27);
     ctx.moveTo(x + width - 18, y + 17); ctx.lineTo(x + width - 28, y + 27);
     ctx.strokeStyle = '#d9cdb0'; ctx.lineWidth = 1.5; ctx.stroke();
     this.targets.push({ x: x + width - 40, y: y + 7, width: 32, height: 32, type: 'close-chat', data: {} });
-
-    if (currentTab === 'interactions') {
-      const players = state.snapshot?.public?.players || [];
-      const ownSeat = state.snapshot?.private?.seat;
-      const otherPlayers = players.filter((p) => p.seat !== ownSeat);
-      const defaultTarget = otherPlayers[0] || players[0];
-      const activeTarget = state.selectedTarget || defaultTarget;
-
-      this.text('互动目标:', x + 16, y + 46, 11, '#f3dfb0', 'left', '600');
-      const chipY = y + 54;
-      let cx = x + 16;
-      players.forEach((p) => {
-        const isCurrent = activeTarget && activeTarget.seat === p.seat;
-        const name = p.seat === ownSeat ? `${p.nickname}(我)` : p.nickname;
-        const chipW = Math.max(50, Math.min(84, name.length * 11 + 14));
-        this.roundRect(cx, chipY, chipW, 22, 4, isCurrent ? '#a0743b' : 'rgba(12, 32, 20, 0.65)', isCurrent ? '#f3d78e' : '#4f6855');
-        this.text(this.fitText(name, chipW - 6, 10.5), cx + chipW / 2, chipY + 11, 10.5, isCurrent ? '#fff5d6' : '#abb8a4', 'center', '600');
-        this.targets.push({ x: cx, y: chipY, width: chipW, height: 22, type: 'select-interaction-target', data: { seat: p.seat, nickname: p.nickname } });
-        cx += chipW + 6;
-      });
-
-      const items = [
-        { id: 'tomato', icon: '🍅', name: '扔番茄', desc: '爆汁飞溅' },
-        { id: 'water', icon: '💦', name: '泼冷水', desc: '激荡水波' },
-        { id: 'heart', icon: '💖', name: '赠比心', desc: '心跳光晕' },
-        { id: 'kiss', icon: '💋', name: '飞个吻', desc: '热吻盖章' },
-      ];
-      const colW = (width - 32) / 2;
-      const itemH = 44;
-      const gridStartY = y + 84;
-      items.forEach((item, idx) => {
-        const col = idx % 2;
-        const row = Math.floor(idx / 2);
-        const px = x + 12 + col * (colW + 8);
-        const py = gridStartY + row * (itemH + 8);
-        this.roundRect(px, py, colW, itemH, 7, 'rgba(18, 44, 30, 0.92)', '#7a9668', 1.5);
-        this.text(item.icon, px + 22, py + 22, 20, COLORS.text, 'center');
-        this.text(item.name, px + 68, py + 14, 12, '#fbeecc', 'center', '700');
-        this.text(item.desc, px + 68, py + 29, 9.5, '#a4bfa0', 'center');
-        this.targets.push({ x: px, y: py, width: colW, height: itemH, type: 'interaction', data: { interaction: item.id, target: activeTarget } });
-      });
-
-      this.text(activeTarget ? `点击发送给 [${activeTarget.nickname}]` : '也可直接点击牌桌上的玩家头像互动', x + width / 2, y + 196, 10.5, '#ffd275', 'center');
-      return;
-    }
 
     if (currentTab === 'phrases') {
       // Show Quick Phrases grid (2 columns x 4 rows)
@@ -1315,9 +1431,9 @@ class MahjongRenderer {
       return;
     }
 
-    // Message list tab (filter out 'phrase' so they don't pollute chat history!)
+    // Message list tab (filter out 'phrase' and 'interaction' so they don't pollute chat history!)
     const allMessages = state.snapshot?.public?.chat || [];
-    const messages = allMessages.filter((m) => m.kind !== 'phrase');
+    const messages = allMessages.filter((m) => m.kind !== 'phrase' && m.kind !== 'interaction');
     const inputY = y + height - 44;
     const bodyHeight = height - 100;
     const visible = [];
@@ -1339,14 +1455,13 @@ class MahjongRenderer {
         this.text(voiceLabel, x + 24, messageY + 8, 12, isPlaying ? '#ffea9f' : '#b2f0c8', 'left', '600');
         this.targets.push({ x: x + 14, y: messageY - 4, width: width - 28, height: rowHeight - 2, type: 'play-voice', data: { message } });
       } else {
-        lines.forEach((line, index) => this.text(line, x + 16, messageY + index * 17, 12,
-          message.kind === 'interaction' ? '#eacb85' : '#edf0db'));
+        lines.forEach((line, index) => this.text(line, x + 16, messageY + index * 17, 12, '#edf0db'));
       }
       messageY += rowHeight;
     });
     if (!messages.length) {
       this.text('还没有消息，打个招呼吧', x + width / 2, y + 106, 12, '#aebda2', 'center');
-      this.text('点击玩家头像送互动，或使用快捷语', x + width / 2, y + 130, 11, '#8da184', 'center');
+      this.text('点击牌桌头像送互动，或使用快捷语', x + width / 2, y + 130, 11, '#8da184', 'center');
     }
 
     // Bottom Input Bar
@@ -1376,19 +1491,20 @@ class MahjongRenderer {
   }
 
   drawInteractionPicker(state) {
+    if (!state.selectedTarget) return;
     const width = 316;
     const height = 82;
     const x = this.roomLayout().width / 2 - width / 2;
     const y = 308;
     this.roundRect(x, y, width, height, 12, 'rgba(18, 38, 25, 0.96)', '#be9c5d');
-    this.text(this.fitText(`送给 ${state.selectedTarget.nickname}`, 240, 13), x + 16, y + 20, 13, '#f3dfb0', 'left', '600');
+    this.text(this.fitText(`🎁 送给 ${state.selectedTarget.nickname}`, 240, 13), x + 16, y + 20, 13, '#f3dfb0', 'left', '600');
     // Close button
     this.text('✕', x + width - 18, y + 20, 13, '#d0c4a8', 'center');
     this.targets.push({ x: x + width - 34, y: y + 6, width: 28, height: 28, type: 'close-interaction', data: {} });
 
     INTERACTIONS.forEach((item, index) => {
       const bx = x + 12 + index * 74;
-      this.button(item.label, bx, y + 36, 68, 34, 'interaction', { interaction: item.id }, 'secondary');
+      this.button(item.label, bx, y + 36, 68, 34, 'interaction', { interaction: item.id, target: state.selectedTarget }, 'secondary');
     });
   }
 

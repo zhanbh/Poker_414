@@ -612,5 +612,71 @@ describe('native mini-game Canvas renderer', () => {
     renderer.draw({ screen: 'lobby', snapshot, connectionStatus: 'connected', chatOpen: true, chatTab: 'messages' });
     expect(renderer.targets.some((t) => t.type === 'play-voice' && t.data.message.id === 'v1')).toBe(true);
   });
+
+  it('does not display interaction or phrase records in chat message list', () => {
+    const labels = [];
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels.push(String(value)) }));
+    const snapshot = {
+      public: {
+        gameId: 'mahjong', phase: 'lobby', handNumber: 0, players: [], spectators: [],
+        chat: [
+          { id: 't1', kind: 'text', text: '你好呀', senderNickname: '小明', createdAt: Date.now() },
+          { id: 'i1', kind: 'interaction', interaction: 'water', senderNickname: '小红', targetNickname: '小明', targetSeat: 'A', createdAt: Date.now() },
+          { id: 'p1', kind: 'phrase', text: '你是GG还是MM？', senderNickname: '小华', senderSeat: 'B', createdAt: Date.now() },
+        ],
+        hostSeat: null,
+      },
+      private: { seat: 'A', spectator: false },
+    };
+
+    renderer.draw({ screen: 'lobby', snapshot, connectionStatus: 'connected', chatOpen: true, chatTab: 'messages' });
+    expect(labels).toContain('小明: 你好呀');
+    expect(labels.some((l) => l.includes('发送了 💦'))).toBe(false);
+    expect(labels.some((l) => l.includes('小华: 你是GG还是MM？'))).toBe(false);
+    // Ensure chat header only contains '消息' and '⚡ 快捷语' tabs, no 'interactions' tab
+    expect(renderer.targets.some((t) => t.type === 'chat-tab' && t.data.tab === 'interactions')).toBe(false);
+    expect(renderer.targets.some((t) => t.type === 'chat-tab' && t.data.tab === 'messages')).toBe(true);
+    expect(renderer.targets.some((t) => t.type === 'chat-tab' && t.data.tab === 'phrases')).toBe(true);
+  });
+
+  it('renders water bucket pouring animation for water interaction', () => {
+    const labels = [];
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels.push(String(value)) }));
+    const snapshot = {
+      public: {
+        gameId: 'mahjong', phase: 'lobby', handNumber: 0,
+        players: [{ seat: 'A', nickname: '小明', score: 1000, handCount: 0 }], spectators: [],
+        chat: [
+          { id: 'i1', kind: 'interaction', interaction: 'water', senderNickname: '小红', targetNickname: '小明', targetSeat: 'A', createdAt: Date.now() - 1000 },
+        ],
+        hostSeat: null,
+      },
+      private: { seat: 'A', spectator: false },
+    };
+
+    renderer.draw({ screen: 'lobby', snapshot, connectionStatus: 'connected', chatOpen: false });
+    expect(labels).toContain('💦');
+  });
+
+  it('shows interaction picker when a player avatar is selected and includes target data', () => {
+    const labels = [];
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels.push(String(value)) }));
+    const snapshot = {
+      public: {
+        gameId: 'mahjong', phase: 'lobby', handNumber: 0,
+        players: [{ seat: 'A', nickname: '小明', score: 1000, handCount: 0 }], spectators: [],
+        chat: [], hostSeat: null,
+      },
+      private: { seat: 'A', spectator: false },
+    };
+
+    renderer.draw({
+      screen: 'lobby', snapshot, connectionStatus: 'connected', chatOpen: false,
+      selectedTarget: { seat: 'A', nickname: '小明' },
+    });
+    expect(labels.some((l) => l.includes('送给 小明'))).toBe(true);
+    expect(renderer.targets.some((t) => t.type === 'interaction' && t.data.interaction === 'water')).toBe(true);
+    expect(renderer.targets.some((t) => t.type === 'close-interaction')).toBe(true);
+  });
 });
 

@@ -1,0 +1,10 @@
+module.exports = {
+  cloudBaseEnvId: 'prod-d0gncxity070cbe6f',
+  cloudRunService: 'express-xgjy',
+  socketPath: '/414-ws',
+  socketUrl: 'wss://308.company/414-ws',
+  gameId: '414',
+  roomId: '414',
+  sessionStorageKey: '414-game.sessionToken',
+  nicknameStorageKey: '414-game.nickname',
+};

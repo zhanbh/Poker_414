@@ -50,6 +50,7 @@ module.exports = tseslint.config(
     languageOptions: {
       globals: {
         wx: 'readonly',
+        GameGlobal: 'readonly',
         describe: 'readonly',
         expect: 'readonly',
         it: 'readonly',

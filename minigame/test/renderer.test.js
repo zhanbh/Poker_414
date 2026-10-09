@@ -482,4 +482,64 @@ describe('native mini-game Canvas renderer', () => {
     const updatedPositions = renderer.particles.map((p) => ({ x: p.x, y: p.y }));
     expect(updatedPositions[0]).not.toEqual(initialPositions[0]);
   });
+
+  it('keeps animation loop running across loading completion to entry screen', () => {
+    const frames = [];
+    const updateParticleCalls = [];
+    let frameId = 0;
+    const customRAF = (cb) => {
+      frameId += 1;
+      frames.push(cb);
+      return frameId;
+    };
+    const app = {
+      animationRunning: false,
+      animationId: null,
+      state: { screen: 'loading', loadingProgress: 0, loadingTip: '' },
+      loadingStartTime: Date.now() - 3000,
+      loadingDuration: 2000,
+      renderer: {
+        updateParticles: () => { updateParticleCalls.push(app.state.screen); },
+      },
+      draw: () => {},
+      restoreSession: () => {},
+      scheduleNextFrame: (cb) => {
+        app.animationId = customRAF(cb);
+      },
+      finishLoading: function() {
+        this.state.loadingProgress = 100;
+        this.state.screen = 'entry';
+        this.draw();
+        this.restoreSession();
+      },
+      startAnimationLoop: MahjongGameApp.prototype.startAnimationLoop,
+      stopAnimationLoop: MahjongGameApp.prototype.stopAnimationLoop,
+    };
+
+    app.startAnimationLoop();
+    expect(frames.length).toBe(1);
+
+    // Run first frame which triggers finishLoading()
+    const firstFrame = frames.shift();
+    firstFrame();
+
+    expect(app.state.screen).toBe('entry');
+    expect(app.state.loadingProgress).toBe(100);
+    // Crucial check: next frame MUST be scheduled for entry screen!
+    expect(frames.length).toBe(1);
+
+    // Run second frame on entry screen
+    const secondFrame = frames.shift();
+    secondFrame();
+
+    // Crucial check: animation loop continues on entry screen!
+    expect(frames.length).toBe(1);
+    expect(updateParticleCalls).toEqual(['loading', 'entry']);
+
+    // Stop animation loop cleanly
+    app.stopAnimationLoop();
+    expect(app.animationRunning).toBe(false);
+    expect(app.animationId).toBeNull();
+  });
 });
+

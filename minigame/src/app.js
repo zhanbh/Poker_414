@@ -167,15 +167,15 @@ class MahjongGameApp {
 
         if (raw >= 1) {
           this.finishLoading();
-        } else {
-          this.scheduleNextFrame(tick);
         }
+        this.scheduleNextFrame(tick);
       } else if (this.state.screen === 'entry') {
         this.renderer.updateParticles();
         this.draw();
         this.scheduleNextFrame(tick);
       } else {
         this.animationRunning = false;
+        this.animationId = null;
       }
     };
     this.scheduleNextFrame(tick);
@@ -184,10 +184,14 @@ class MahjongGameApp {
   scheduleNextFrame(cb) {
     if (typeof requestAnimationFrame === 'function') {
       this.animationId = requestAnimationFrame(cb);
+    } else if (typeof GameGlobal !== 'undefined' && typeof GameGlobal.requestAnimationFrame === 'function') {
+      this.animationId = GameGlobal.requestAnimationFrame(cb);
+    } else if (this.canvas && typeof this.canvas.requestAnimationFrame === 'function') {
+      this.animationId = this.canvas.requestAnimationFrame(cb);
     } else if (this.wx && typeof this.wx.requestAnimationFrame === 'function') {
       this.animationId = this.wx.requestAnimationFrame(cb);
     } else {
-      this.animationId = setTimeout(cb, 30);
+      this.animationId = setTimeout(cb, 16);
     }
   }
 
@@ -196,6 +200,10 @@ class MahjongGameApp {
     if (this.animationId !== null) {
       if (typeof cancelAnimationFrame === 'function') {
         cancelAnimationFrame(this.animationId);
+      } else if (typeof GameGlobal !== 'undefined' && typeof GameGlobal.cancelAnimationFrame === 'function') {
+        GameGlobal.cancelAnimationFrame(this.animationId);
+      } else if (this.canvas && typeof this.canvas.cancelAnimationFrame === 'function') {
+        this.canvas.cancelAnimationFrame(this.animationId);
       } else if (this.wx && typeof this.wx.cancelAnimationFrame === 'function') {
         this.wx.cancelAnimationFrame(this.animationId);
       } else {
@@ -473,6 +481,7 @@ class MahjongGameApp {
       this.state.screen = 'entry';
       this.state.statusMessage = '无法恢复会话；确认网络后可重新登录';
       this.state.error = '房间连接失败，请重新输入邀请码';
+      this.startAnimationLoop();
       this.updateUserInfoButton();
       this.draw();
     }
@@ -701,6 +710,7 @@ class MahjongGameApp {
       this.state.error = error.message || '无法进入房间';
       this.state.statusMessage = '请检查邀请码或网络连接';
       if (generatedNickname) this.state.nickname = '';
+      this.startAnimationLoop();
       this.updateUserInfoButton();
       this.draw();
     }

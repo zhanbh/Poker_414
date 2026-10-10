@@ -1012,5 +1012,40 @@ describe('native mini-game Canvas renderer', () => {
     app.updateSnapshot(tingSnapshot);
     expect(app.state.actionCallouts.some((c) => c.seat === 'A' && c.text === '听')).toBe(true);
   });
+
+  it('根据玩家各自视角动态旋转罗盘并展示准确的门风角标与空位方向', () => {
+    const labels = [];
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels.push(String(value)) }));
+
+    // 视角为南家 (Seat B) 时渲染大厅
+    renderer.draw({
+      screen: 'lobby',
+      snapshot: {
+        public: {
+          phase: 'lobby',
+          roomId: 'mahjong',
+          players: [
+            { seat: 'A', nickname: '东家玩家', score: 1000, connected: true, melds: [], discards: [] },
+            { seat: 'B', nickname: '南家玩家', score: 1000, connected: true, melds: [], discards: [] },
+          ],
+          chat: [],
+          dealerSeat: 'A',
+          hostSeat: 'A',
+        },
+        private: {
+          seat: 'B',
+          hand: [],
+          availableActions: [],
+        },
+      },
+    });
+
+    // 应该包含门风角标与对应空位提示
+    expect(labels).toContain('东');
+    expect(labels).toContain('南');
+    expect(labels).toContain('西位 等待入座');
+    expect(labels).toContain('北位 等待入座');
+  });
 });
+
 

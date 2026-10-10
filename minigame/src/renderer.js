@@ -777,6 +777,8 @@ class MahjongRenderer {
     const active = state.snapshot.public.phase === 'playing' && state.snapshot.public.currentTurn === seat;
     const avatarSize = 64;
     const avatarX = x + (width - avatarSize) / 2;
+    const directions = { A: '东', B: '南', C: '西', D: '北' };
+    const seatDirection = directions[seat] || '东';
     if (player) {
       const ctx = this.ctx;
       ctx.save(); ctx.shadowColor = active || selected ? '#f4c75e' : 'rgba(20, 14, 6, 0.65)';
@@ -798,6 +800,8 @@ class MahjongRenderer {
         this.text('🎁', avatarX + 54, y + 13, 8.5, selected ? '#1f2937' : '#ffd875', 'center');
         this.targets.push({ x, y, width, height, type: 'select-player', data: { seat, nickname: player.nickname } });
       }
+      this.roundRect(avatarX - 2, y - 2, 20, 18, 4, '#1b3b27', '#86a877');
+      this.text(seatDirection, avatarX + 8, y + 7, 11, '#e3f2d2', 'center', '700');
       if (state.snapshot.public.dealer === seat || state.snapshot.public.dealerSeat === seat) {
         this.roundRect(avatarX + 44, y + 46, 25, 24, 4, '#c38c2e', '#f3d78e');
         this.text('庄', avatarX + 56, y + 58, 17, '#fff2bc', 'center', '700');
@@ -808,8 +812,10 @@ class MahjongRenderer {
       }
     } else {
       this.roundRect(avatarX, y, avatarSize, avatarSize, 9, 'rgba(15, 42, 30, 0.35)', 'rgba(238, 214, 158, 0.4)');
+      this.roundRect(avatarX - 2, y - 2, 20, 18, 4, 'rgba(22, 53, 34, 0.7)', 'rgba(180, 212, 160, 0.35)');
+      this.text(seatDirection, avatarX + 8, y + 7, 11, '#c9d9be', 'center', '700');
       this.text('+', x + width / 2, y + 29, 29, 'rgba(245, 229, 183, 0.58)', 'center');
-      this.text('等待入座', x + width / 2, y + 81, 12, '#e2d8b8', 'center');
+      this.text(`${seatDirection}位 等待入座`, x + width / 2, y + 81, 11, '#e2d8b8', 'center');
     }
 
     const latestInteraction = [...(state.snapshot.public.chat || [])].reverse().find((message) =>

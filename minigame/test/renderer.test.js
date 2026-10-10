@@ -786,4 +786,227 @@ describe('native mini-game Canvas renderer', () => {
     expect(labels.some((l) => l.includes('送给 小明'))).toBe(false);
     expect(renderer.targets.some((t) => t.type === 'interaction')).toBe(false);
   });
+
+  it('renders listen preview when selecting a tile that can enter ting', () => {
+    const labels = [];
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels.push(String(value)) }));
+    const snapshot = {
+      public: {
+        gameId: 'mahjong', phase: 'playing', handNumber: 1, currentTurn: 'A', awaitingDiscard: true,
+        players: [{ seat: 'A', nickname: '我', score: 1000, handCount: 14, isListening: false }],
+        spectators: [], chat: [],
+      },
+      private: {
+        seat: 'A', spectator: false,
+        hand: [
+          { id: 't-1', suit: 'characters', rank: 1, label: '一万' },
+          { id: 't-2', suit: 'characters', rank: 2, label: '二万' },
+        ],
+        listenTileIds: ['t-1'],
+        listenOptions: [
+          {
+            discardTileId: 't-1',
+            waits: [{ id: 'w-1', suit: 'characters', rank: 3, label: '三万' }],
+          },
+        ],
+        availableActions: ['discard'],
+      },
+    };
+
+    renderer.draw({
+      screen: 'room', snapshot, connectionStatus: 'connected', chatOpen: false,
+      selectedTileId: 't-1',
+    });
+
+    expect(labels).toContain('打出此牌可听');
+    expect(labels).toContain('胡：');
+    expect(labels).toContain('听');
+  });
+
+  it('renders listen preview with postDiscardListenWaits when waiting to declare listen after discarding', () => {
+    const labels = [];
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels.push(String(value)) }));
+    const snapshot = {
+      public: {
+        gameId: 'mahjong', phase: 'playing', handNumber: 1, currentTurn: 'A', awaitingDiscard: false,
+        players: [{ seat: 'A', nickname: '我', score: 1000, handCount: 13, isListening: false }],
+        spectators: [], chat: [],
+      },
+      private: {
+        seat: 'A', spectator: false,
+        hand: [{ id: 't-2', suit: 'characters', rank: 2, label: '二万' }],
+        postDiscardListenWaits: [
+          { id: 'w-1', suit: 'characters', rank: 3, label: '三万' },
+          { id: 'w-2', suit: 'characters', rank: 6, label: '六万' },
+        ],
+        availableActions: ['listen', 'pass'],
+      },
+    };
+
+    renderer.draw({
+      screen: 'room', snapshot, connectionStatus: 'connected', chatOpen: false,
+      selectedTileId: '',
+    });
+
+    expect(labels).toContain('已出牌 · 可选择听牌');
+    expect(labels).toContain('胡：');
+  });
+
+  it('renders listen preview with waits and bao tile when player is listening', () => {
+    const labels = [];
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels.push(String(value)) }));
+    const snapshot = {
+      public: {
+        gameId: 'mahjong', phase: 'playing', handNumber: 1, currentTurn: 'A', awaitingDiscard: false,
+        players: [{ seat: 'A', nickname: '我', score: 1000, handCount: 13, isListening: true }],
+        spectators: [], chat: [],
+      },
+      private: {
+        seat: 'A', spectator: false,
+        isListening: true,
+        hand: [{ id: 't-2', suit: 'characters', rank: 2, label: '二万' }],
+        listenWaits: [{ id: 'w-1', suit: 'characters', rank: 3, label: '三万' }],
+        baoTile: { id: 'bao-1', suit: 'bamboo', rank: 8, label: '八条' },
+        availableActions: [],
+      },
+    };
+
+    renderer.draw({
+      screen: 'room', snapshot, connectionStatus: 'connected', chatOpen: false,
+    });
+
+    expect(labels).toContain('已听牌');
+    expect(labels).toContain('胡：');
+    expect(labels).toContain('宝：');
+  });
+
+  it('does not render ting button, badge, or preview when no tile or an unqualifying tile is selected, but renders them when a qualifying tile is selected', () => {
+    const snapshot = {
+      public: {
+        gameId: 'mahjong', phase: 'playing', handNumber: 1, currentTurn: 'A', awaitingDiscard: true,
+        players: [{ seat: 'A', nickname: '我', score: 1000, handCount: 14, isListening: false }],
+        spectators: [], chat: [],
+      },
+      private: {
+        seat: 'A', spectator: false,
+        hand: [
+          { id: 't-1', suit: 'characters', rank: 1, label: '一万' },
+          { id: 't-2', suit: 'characters', rank: 2, label: '二万' },
+        ],
+        listenTileIds: ['t-1'],
+        listenOptions: [{ discardTileId: 't-1', waits: [{ id: 'w-1', suit: 'characters', rank: 3, label: '三万' }] }],
+        availableActions: ['discard', 'listen'],
+      },
+    };
+
+    // Case 1: No tile selected
+    const labels1 = [];
+    const renderer1 = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels1.push(String(value)) }));
+    renderer1.draw({ screen: 'room', snapshot, connectionStatus: 'connected', chatOpen: false, selectedTileId: '' });
+    expect(labels1).not.toContain('打出此牌可听');
+    expect(labels1).not.toContain('听');
+    expect(renderer1.targets.some((t) => t.type === 'action' && t.data.action === 'listen')).toBe(false);
+
+    // Case 2: Unqualifying tile 't-2' selected
+    const labels2 = [];
+    const renderer2 = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels2.push(String(value)) }));
+    renderer2.draw({ screen: 'room', snapshot, connectionStatus: 'connected', chatOpen: false, selectedTileId: 't-2' });
+    expect(labels2).not.toContain('打出此牌可听');
+    expect(labels2).not.toContain('听');
+    expect(renderer2.targets.some((t) => t.type === 'action' && t.data.action === 'listen')).toBe(false);
+
+    // Case 3: Qualifying tile 't-1' selected
+    const labels3 = [];
+    const renderer3 = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels3.push(String(value)) }));
+    renderer3.draw({ screen: 'room', snapshot, connectionStatus: 'connected', chatOpen: false, selectedTileId: 't-1' });
+    expect(labels3).toContain('打出此牌可听');
+    expect(labels3).toContain('听');
+    expect(renderer3.targets.some((t) => t.type === 'action' && t.data.action === 'listen')).toBe(true);
+  });
+
+  it('renders animated action callouts (peng, chi, gang, listen, hu) in front of players', () => {
+    const labels = [];
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels.push(String(value)) }));
+    const now = Date.now();
+    const snapshot = {
+      public: {
+        gameId: 'mahjong', phase: 'playing', handNumber: 1, currentTurn: 'B',
+        players: [
+          { seat: 'A', nickname: '我', score: 1000, handCount: 13, isListening: false, melds: [], discards: [] },
+          { seat: 'B', nickname: '下家', score: 1000, handCount: 10, isListening: false, melds: [], discards: [] },
+        ],
+        spectators: [], chat: [],
+      },
+      private: { seat: 'A', spectator: false, hand: [], availableActions: [] },
+    };
+
+    renderer.draw({
+      screen: 'room', snapshot, connectionStatus: 'connected', chatOpen: false,
+      actionCallouts: [
+        { seat: 'B', kind: 'peng', text: '碰', startTime: now - 100, duration: 1500 },
+      ],
+    });
+
+    expect(labels).toContain('碰');
+  });
+
+  it('MahjongGameApp diffs snapshots to create action callouts on meld and ting transitions', () => {
+    const app = {
+      state: { screen: 'room', actionCallouts: [], snapshot: null },
+      stopAnimationLoop: () => {},
+      startAnimationLoop: () => {},
+      destroyUserInfoButton: () => {},
+      updateUserInfoButton: () => {},
+      draw: () => {},
+      setOrientation: () => {},
+      hasActiveRoomAnimation: MahjongGameApp.prototype.hasActiveRoomAnimation,
+      updateSnapshot: MahjongGameApp.prototype.updateSnapshot,
+    };
+    const baseSnapshot = {
+      public: {
+        gameId: 'mahjong', phase: 'playing', handNumber: 1, currentTurn: 'A',
+        players: [
+          { seat: 'A', nickname: '玩家A', score: 1000, handCount: 13, isListening: false, melds: [], discards: [] },
+          { seat: 'B', nickname: '玩家B', score: 1000, handCount: 13, isListening: false, melds: [], discards: [] },
+        ],
+      },
+      private: { seat: 'A', spectator: false, hand: [], availableActions: [] },
+    };
+    app.updateSnapshot(baseSnapshot);
+    expect(app.state.actionCallouts).toHaveLength(0);
+
+    // Player B does 'peng'
+    const pengSnapshot = {
+      public: {
+        ...baseSnapshot.public,
+        players: [
+          baseSnapshot.public.players[0],
+          {
+            ...baseSnapshot.public.players[1],
+            melds: [{ kind: 'peng', tiles: [{ id: '1', suit: 'characters', rank: 1 }] }],
+          },
+        ],
+      },
+      private: baseSnapshot.private,
+    };
+    app.updateSnapshot(pengSnapshot);
+    expect(app.state.actionCallouts).toHaveLength(1);
+    expect(app.state.actionCallouts[0]).toMatchObject({ seat: 'B', kind: 'peng', text: '碰' });
+    expect(app.hasActiveRoomAnimation()).toBe(true);
+
+    // Player A declares ting
+    const tingSnapshot = {
+      public: {
+        ...pengSnapshot.public,
+        players: [
+          { ...pengSnapshot.public.players[0], isListening: true },
+          pengSnapshot.public.players[1],
+        ],
+      },
+      private: { ...baseSnapshot.private, isListening: true },
+    };
+    app.updateSnapshot(tingSnapshot);
+    expect(app.state.actionCallouts.some((c) => c.seat === 'A' && c.text === '听')).toBe(true);
+  });
 });
+

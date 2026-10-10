@@ -53,7 +53,7 @@ class MahjongGameApp {
       canRequestUserInfo: typeof this.wx.createUserInfoButton === 'function',
       busy: false, chatOpen: false, chatReadId: '', chatMode: 'text', chatTab: 'messages',
       recordingVoice: false, playingVoiceId: '', selectedTileId: '', selectedTarget: null,
-      focus: '', keyboardOpen: false, snapshot: null,
+      focus: '', keyboardOpen: false, snapshot: null, actionCallouts: [],
     };
     if (this.wx.getStorageSync) {
       const savedNickname = this.wx.getStorageSync(config.nicknameStorageKey) || '';
@@ -189,6 +189,9 @@ class MahjongGameApp {
         this.renderer.updateParticles();
         this.draw();
         this.scheduleNextFrame(tick);
+      } else if (this.state.screen === 'room' && this.hasActiveRoomAnimation()) {
+        this.draw();
+        this.scheduleNextFrame(tick);
       } else {
         this.animationRunning = false;
         this.animationId = null;
@@ -227,6 +230,14 @@ class MahjongGameApp {
       }
       this.animationId = null;
     }
+  }
+
+  hasActiveRoomAnimation() {
+    const pub = this.state.snapshot?.public;
+    if (!pub || pub.phase !== 'playing') return false;
+    const now = Date.now();
+    const hasCallouts = (this.state.actionCallouts || []).some((c) => now - c.startTime < (c.duration || 1500));
+    return hasCallouts || (pub.players || []).some((p) => p.isListening);
   }
 
   finishLoading() {
@@ -522,6 +533,87 @@ class MahjongGameApp {
       }, duration);
     }
     const enteringRoom = this.state.screen === 'entry';
+    const prevSnapshot = this.state.snapshot;
+    const now = Date.now();
+    if (!this.state.actionCallouts) this.state.actionCallouts = [];
+    this.state.actionCallouts = this.state.actionCallouts.filter((c) => now - c.startTime < (c.duration || 1500));
+
+    if (
+      !enteringRoom &&
+      prevSnapshot &&
+      prevSnapshot.public &&
+      snapshot.public.phase === 'playing' &&
+      prevSnapshot.public.phase === 'playing' &&
+      prevSnapshot.public.handNumber === snapshot.public.handNumber
+    ) {
+      const prevPlayers = prevSnapshot.public.players || [];
+      const nextPlayers = snapshot.public.players || [];
+
+      nextPlayers.forEach((np) => {
+        const pp = prevPlayers.find((p) => p.seat === np.seat);
+        if (!pp) return;
+        const prevMelds = pp.melds || [];
+        const nextMelds = np.melds || [];
+
+        // 1. Meld added (chi, peng, exposed-kong, concealed-kong)
+        if (nextMelds.length > prevMelds.length) {
+          const newMeld = nextMelds[nextMelds.length - 1];
+          const kind = newMeld?.kind || 'peng';
+          let text = '碰';
+          if (kind === 'chi') text = '吃';
+          else if (kind === 'peng') text = '碰';
+          else if (kind.includes('kong')) text = '杠';
+          this.state.actionCallouts.push({
+            seat: np.seat,
+            kind,
+            text,
+            startTime: now,
+            duration: 1500,
+          });
+        } else if (nextMelds.length === prevMelds.length && nextMelds.length > 0) {
+          // Check for added-kong
+          const prevAdded = prevMelds.filter((m) => m.kind === 'added-kong').length;
+          const nextAdded = nextMelds.filter((m) => m.kind === 'added-kong').length;
+          if (nextAdded > prevAdded) {
+            this.state.actionCallouts.push({
+              seat: np.seat,
+              kind: 'added-kong',
+              text: '杠',
+              startTime: now,
+              duration: 1500,
+            });
+          }
+        }
+
+        // 2. Newly declared ting
+        if (np.isListening && !pp.isListening) {
+          this.state.actionCallouts.push({
+            seat: np.seat,
+            kind: 'listen',
+            text: '听',
+            startTime: now,
+            duration: 1500,
+          });
+        }
+      });
+
+      // 3. Win announcement
+      if (snapshot.public.winAnnouncement && !prevSnapshot.public.winAnnouncement) {
+        const winnerSeat = snapshot.public.winAnnouncement.winnerSeat;
+        if (winnerSeat) {
+          this.state.actionCallouts.push({
+            seat: winnerSeat,
+            kind: 'hu',
+            text: '胡',
+            startTime: now,
+            duration: 1800,
+          });
+        }
+      }
+    } else if (enteringRoom || snapshot.public.phase !== 'playing') {
+      this.state.actionCallouts = [];
+    }
+
     this.state.snapshot = snapshot;
     this.state.screen = gameScreen(snapshot);
     if (enteringRoom) { this.state.chatOpen = false; this.state.chatReadId = ''; }
@@ -533,6 +625,9 @@ class MahjongGameApp {
     const ids = (snapshot.private.hand || []).map((tile) => tile.id);
     if (!ids.includes(this.state.selectedTileId)) this.state.selectedTileId = '';
     this.draw();
+    if (this.state.screen === 'room' && this.hasActiveRoomAnimation() && !this.animationRunning) {
+      this.startAnimationLoop();
+    }
     this.updateUserInfoButton(true);
   }
 
@@ -1087,6 +1182,7 @@ class MahjongGameApp {
         this.setOrientation('portrait');
         this.state.selectedTarget = null;
         this.state.selectedTileId = '';
+        this.state.actionCallouts = [];
         this.state.statusMessage = '已退出房间，可重新进入';
         this.startAnimationLoop();
         this.updateUserInfoButton();

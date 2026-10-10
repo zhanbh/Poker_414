@@ -801,8 +801,7 @@ class MahjongRenderer {
       }
       if (state.snapshot.public.winAnnouncement?.winnerSeat === seat) this.text('胡', avatarX + 61, y - 8, 26, '#ffe08c', 'center', '700');
       if (player.isListening) {
-        this.roundRect(avatarX + 3, y + 4, 25, 19, 5, '#a94432', '#ffe29a');
-        this.text('听', avatarX + 15.5, y + 13.5, 12, '#fff6d7', 'center', '700');
+        this.drawListeningFlameBadge(avatarX, y, avatarSize);
       }
     } else {
       this.roundRect(avatarX, y, avatarSize, avatarSize, 9, 'rgba(15, 42, 30, 0.35)', 'rgba(238, 214, 158, 0.4)');
@@ -823,6 +822,88 @@ class MahjongRenderer {
     if (latestPhrase && latestPhrase.text) {
       this.drawSpeechBubble(latestPhrase.text, x, y, width, height, latestPhrase);
     }
+  }
+
+  drawListeningFlameBadge(avatarX, y, avatarSize) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const time = Date.now();
+    const phase = time / 160;
+
+    // 1. Avatar crisis warning aura (全头像危机红光呼吸光环)
+    const dangerPulse = (Math.sin(time / 200) + 1) / 2;
+    ctx.save();
+    ctx.shadowColor = '#ff2200';
+    ctx.shadowBlur = 8 + dangerPulse * 12;
+    this.roundRect(avatarX - 2, y - 2, avatarSize + 4, avatarSize + 4, 10, null, `rgba(255, 68, 0, ${0.4 + dangerPulse * 0.45})`, 2);
+    ctx.restore();
+
+    // 2. Fiery flames leaping up from badge (徽章顶部跳动的烈焰火舌与飞火)
+    const bx = avatarX + 1;
+    const by = y + 1;
+    const badgeW = 32;
+    const badgeH = 22;
+
+    const tip1X = bx + 7 + Math.sin(phase) * 2;
+    const tip1Y = by - 6 - Math.abs(Math.sin(phase * 1.3)) * 6;
+    const tip2X = bx + 16 + Math.cos(phase * 1.1) * 2.5;
+    const tip2Y = by - 12 - Math.abs(Math.sin(phase * 1.5)) * 9;
+    const tip3X = bx + 25 + Math.sin(phase * 1.4) * 2;
+    const tip3Y = by - 6 - Math.abs(Math.cos(phase * 1.2)) * 6;
+
+    // Outer crimson flame
+    this.polygon([
+      [bx + 3, by + 4],
+      [tip1X, tip1Y],
+      [bx + 11, by + 2],
+      [tip2X, tip2Y],
+      [bx + 21, by + 2],
+      [tip3X, tip3Y],
+      [bx + 29, by + 4],
+    ], '#dc2626');
+
+    // Inner bright orange-gold flame
+    this.polygon([
+      [bx + 5, by + 4],
+      [tip1X, tip1Y + 3],
+      [bx + 12, by + 3],
+      [tip2X, tip2Y + 4],
+      [bx + 20, by + 3],
+      [tip3X, tip3Y + 3],
+      [bx + 27, by + 4],
+    ], '#f59e0b');
+
+    // Core yellow flame
+    this.polygon([
+      [bx + 8, by + 4],
+      [tip2X, tip2Y + 7],
+      [bx + 24, by + 4],
+    ], '#fef08a');
+
+    // Rising spark embers
+    const spark1X = bx + 10 + Math.sin(time / 110) * 4;
+    const spark1Y = by - 13 - ((time / 12) % 10);
+    const spark2X = bx + 22 + Math.cos(time / 130) * 4;
+    const spark2Y = by - 11 - (((time + 80) / 12) % 10);
+    this.circle(spark1X, spark1Y, 1.6, '#fef08a');
+    this.circle(spark2X, spark2Y, 1.4, '#ffedd5');
+
+    // Peak flash sparkle (闪光星芒)
+    const flashScale = 0.5 + Math.abs(Math.sin(time / 150)) * 0.6;
+    this.drawSparkle(tip2X, tip2Y, 5 * flashScale, '#ffffff');
+
+    // 3. The "听" badge body (烈焰战意徽章)
+    ctx.save();
+    ctx.shadowColor = '#ff3300';
+    ctx.shadowBlur = 10;
+    ctx.shadowOffsetY = 1;
+    const badgeBg = this.linearFill(bx, by, bx, by + badgeH,
+      [[0, '#ff4d00'], [0.45, '#dc2626'], [1, '#7f1d1d']], '#dc2626');
+    this.roundRect(bx, by, badgeW, badgeH, 6, badgeBg, '#ffe58f', 1.8);
+    ctx.restore();
+
+    this.roundRect(bx + 1.5, by + 1.5, badgeW - 3, badgeH - 3, 4.5, null, 'rgba(255, 235, 130, 0.4)', 1);
+    this.text('听', bx + badgeW / 2, by + badgeH / 2 + 0.5, 13.5, '#ffffff', 'center', '900');
   }
 
   drawSpeechBubble(text, cardX, cardY, cardWidth, cardHeight, phraseMessage = null) {
@@ -1562,11 +1643,16 @@ class MahjongRenderer {
       this.drawPlayerCard(state, seat, card.x, card.y, card.width, card.height);
     });
     const ownSeat = snapshot.private.seat;
-    if (!snapshot.private.spectator && ownSeat) this.drawHand(state);
-    else this.text('观战中 · 点击玩家头像可发送互动', width / 2, 492, 14, '#e2ddb9', 'center');
+    if (!snapshot.private.spectator && ownSeat) {
+      this.drawHand(state);
+      this.drawListenPreview(state);
+    } else {
+      this.text('观战中 · 点击玩家头像可发送互动', width / 2, 492, 14, '#e2ddb9', 'center');
+    }
     this.drawActions(state);
     this.drawHeader(state, phase);
     this.drawChatIcon(state);
+    this.drawActionCallouts(state);
     if (state.selectedTarget) this.drawInteractionPicker(state);
     this.drawChat(state);
     if (snapshot.public.phase === 'settled' && snapshot.public.settlement) this.drawSettlement(state);
@@ -1740,21 +1826,145 @@ class MahjongRenderer {
     const tileHeight = Math.min(104, tileWidth * 1.58);
     const y = contentBottom - 6 - tileHeight;
     const totalWidth = hand.length * tileWidth + drawnGap;
-    if (state.snapshot.private.isListening) this.text('已听牌', x + width, y - 16, 12, '#fbe5a3', 'right', '700');
+    const listenTileIds = new Set(state.snapshot.private.listenTileIds || []);
     hand.forEach((tile, index) => {
       const selected = state.selectedTileId === tile.id;
+      const canListen = listenTileIds.has(tile.id);
       const tx = x + (width - totalWidth) / 2 + index * tileWidth + (tile === drawnTile ? drawnGap : 0);
       const ty = y + (selected ? -12 : 0);
       this.drawTile(tile, tx, ty, tileWidth - 0.5, tileHeight, selected);
+      if (canListen && selected) {
+        const badgeW = Math.max(18, tileWidth * 0.4);
+        const badgeH = 14;
+        const bx = tx + (tileWidth - badgeW) / 2;
+        const by = ty - 7;
+        this.roundRect(bx, by, badgeW, badgeH, 4, '#0f766e', '#5eead4', 1.2);
+        this.text('听', bx + badgeW / 2, by + badgeH / 2 + 0.5, 9.5, '#f0fdfa', 'center', '700');
+      }
       this.targets.push({ x: tx, y: ty, width: tileWidth, height: tileHeight + 4, type: 'select-tile', data: { tileId: tile.id } });
     });
+  }
+
+  drawListenPreview(state) {
+    const snapshot = state.snapshot;
+    if (!snapshot || !snapshot.private) return;
+    const priv = snapshot.private;
+    const effectiveSelectedTileId = priv.isListening
+      ? priv.discardableTileId ?? null
+      : state.selectedTileId;
+    const postDiscardListenWaits = priv.postDiscardListenWaits || [];
+
+    let preview = null;
+    if (priv.isListening) {
+      preview = {
+        mode: 'listening',
+        title: '已听牌',
+        badgeBg: '#b91c1c',
+        badgeBorder: '#fca5a5',
+        waits: priv.listenWaits || [],
+        baoTile: priv.baoTile || null,
+      };
+    } else if (postDiscardListenWaits.length > 0) {
+      preview = {
+        mode: 'pending-listen',
+        title: '已出牌 · 可选择听牌',
+        badgeBg: '#c2410c',
+        badgeBorder: '#fdba74',
+        waits: postDiscardListenWaits,
+        baoTile: null,
+      };
+    } else if (effectiveSelectedTileId && new Set(priv.listenTileIds || []).has(effectiveSelectedTileId) && priv.listenOptions && priv.listenOptions.length > 0) {
+      const option = priv.listenOptions.find((opt) => opt.discardTileId === effectiveSelectedTileId);
+      if (option && option.waits && option.waits.length > 0) {
+        preview = {
+          mode: 'discard-to-listen',
+          title: '打出此牌可听',
+          badgeBg: '#0f766e',
+          badgeBorder: '#5eead4',
+          waits: option.waits,
+          baoTile: null,
+        };
+      }
+    }
+
+    if (!preview || preview.waits.length === 0) return;
+
+    const { width: roomWidth, leftInset, rightInset, contentBottom } = this.roomLayout();
+    const handX = Math.max(leftInset + 102, roomWidth * 0.13);
+    const handW = roomWidth - handX - rightInset - 66;
+    const originalHand = priv.hand || [];
+    const drawnTile = originalHand.find((tile) => tile.id === priv.drawnTileId);
+    const handCount = (drawnTile ? [...originalHand.filter((t) => t.id !== drawnTile.id), drawnTile] : originalHand).length;
+    const drawnGap = drawnTile && handCount > 1 ? 10 : 0;
+    const tileWidth = Math.min(64, (handW - drawnGap) / Math.max(1, handCount));
+    const tileHeight = Math.min(104, tileWidth * 1.58);
+    const handY = contentBottom - 6 - tileHeight;
+
+    const barH = 36;
+    const barY = handY - barH - 8;
+    const miniTileW = 22;
+    const miniTileH = 28;
+    const miniTileGap = 4;
+
+    const ctx = this.ctx;
+    const metrics = typeof ctx.measureText === 'function' ? ctx.measureText(preview.title) : null;
+    const titleTextW = (metrics && Number.isFinite(metrics.width) ? metrics.width : Array.from(String(preview.title)).length * 11) + 16;
+    const badgeW = Math.max(50, titleTextW);
+    const labelW = 28;
+    const waitsW = preview.waits.length * (miniTileW + miniTileGap);
+    const baoW = preview.baoTile ? (28 + miniTileW + miniTileGap) : 0;
+    const paddingX = 12;
+    const barW = Math.max(160, badgeW + 8 + labelW + waitsW + baoW + paddingX * 2);
+    const barX = Math.max(handX, Math.min(roomWidth - rightInset - barW, (roomWidth - barW) / 2));
+
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
+    ctx.shadowBlur = 12;
+    ctx.shadowOffsetY = 3;
+    this.roundRect(barX, barY, barW, barH, 8, 'rgba(6, 26, 28, 0.94)', preview.badgeBorder, 1.5);
+    ctx.restore();
+
+    this.roundRect(barX + 1.5, barY + 1.5, barW - 3, barH - 3, 6.5, null, 'rgba(255, 255, 255, 0.18)', 1);
+
+    // Title badge
+    let curX = barX + paddingX;
+    const badgeY = barY + (barH - 22) / 2;
+    this.roundRect(curX, badgeY, badgeW, 22, 4, preview.badgeBg, preview.badgeBorder, 1);
+    this.text(preview.title, curX + badgeW / 2, badgeY + 11.5, 11, '#ffffff', 'center', '700');
+    curX += badgeW + 8;
+
+    // '胡：' label
+    this.text('胡：', curX, barY + barH / 2 + 0.5, 12, '#ffd878', 'left', '700');
+    curX += labelW;
+
+    // Mini wait tiles
+    const tileY = barY + (barH - miniTileH) / 2;
+    preview.waits.forEach((waitTile) => {
+      this.drawTile(waitTile, curX, tileY, miniTileW, miniTileH, false, 0, 1.5);
+      curX += miniTileW + miniTileGap;
+    });
+
+    // Bao tile if present
+    if (preview.baoTile) {
+      curX += 4;
+      this.text('宝：', curX, barY + barH / 2 + 0.5, 12, '#ff9f7f', 'left', '700');
+      curX += 24;
+      this.drawTile(preview.baoTile, curX, tileY, miniTileW, miniTileH, false, 0, 1.5);
+    }
   }
 
   drawActions(state) {
     const snapshot = state.snapshot;
     const actions = snapshot.private.availableActions || [];
     const waitingListen = (snapshot.private.postDiscardListenWaits || []).length > 0;
-    const visibleActions = waitingListen ? ['listen', 'pass'] : actions.filter((action) => action !== 'discard');
+    const listenTileIds = new Set(snapshot.private.listenTileIds || []);
+    const canListenSelected = Boolean(state.selectedTileId && listenTileIds.has(state.selectedTileId));
+    const visibleActions = waitingListen
+      ? ['listen', 'pass']
+      : actions.filter((action) => {
+          if (action === 'discard') return false;
+          if (action === 'listen') return canListenSelected;
+          return true;
+        });
     if (!waitingListen && actions.includes('discard') && state.selectedTileId) visibleActions.unshift('discard');
     if (snapshot.public.phase === 'settled' && snapshot.public.hostSeat === snapshot.private.seat) visibleActions.push('start-hand');
     const labels = { 'start-hand': '下一局', discard: '出', listen: '听', 'exposed-kong': '杠', 'added-kong': '杠', 'concealed-kong': '杠', pass: '过' };
@@ -1773,6 +1983,156 @@ class MahjongRenderer {
       this.circle(x, y, 23, null, 'rgba(255, 247, 203, 0.45)');
       this.text(label, x, y, label.length > 1 ? 14 : 27, action === 'pass' ? '#e4e6d6' : '#fff6ce', 'center', '700');
       this.targets.push({ x: x - 28, y: y - 28, width: 56, height: 56, type: action === 'start-hand' ? 'command' : 'action', data });
+    });
+  }
+
+  drawActionCallouts(state) {
+    const callouts = state.actionCallouts;
+    if (!callouts || !callouts.length) return;
+    const now = Date.now();
+    const activeCallouts = callouts.filter((c) => now - c.startTime >= 0 && now - c.startTime < (c.duration || 1500));
+    if (!activeCallouts.length) return;
+
+    const ctx = this.ctx;
+    const { cards, center } = this.roomLayout();
+    const order = relativeSeats(state.snapshot?.private?.seat || 'A');
+
+    activeCallouts.forEach((callout) => {
+      const seatIndex = order.indexOf(callout.seat);
+      if (seatIndex === -1) return;
+      const card = cards[seatIndex];
+      if (!card) return;
+
+      const avatarCenterX = card.x + card.width / 2;
+      const avatarCenterY = card.y + 32;
+
+      // Position in front of the player (offset towards table center by 44px)
+      const dx = center.x - avatarCenterX;
+      const dy = center.y - avatarCenterY;
+      const dist = Math.hypot(dx, dy) || 1;
+      const posX = avatarCenterX + (dx / dist) * 44;
+      const posY = avatarCenterY + (dy / dist) * 44;
+
+      const elapsed = now - callout.startTime;
+      const duration = callout.duration || 1500;
+
+      // Animation stages:
+      // 1. 0ms - 280ms: Slam down from big to normal (从大到小) with elastic bounce & shockwave
+      // 2. 280ms - 1100ms: Short hold & breathing shimmer (短暂停留)
+      // 3. 1100ms - 1500ms: Gentle float up & fade out (平滑消失)
+      let scale = 1.0;
+      let alpha = 1.0;
+      let floatY = 0;
+      let ringScale = 0;
+      let ringAlpha = 0;
+
+      if (elapsed < 280) {
+        const p1 = elapsed / 280;
+        scale = 1.0 + 1.5 * Math.pow(1 - p1, 2.2);
+        alpha = Math.min(1, p1 * 3.5);
+        ringScale = 1.0 + p1 * 1.6;
+        ringAlpha = (1 - p1) * 0.75;
+      } else if (elapsed < 1100) {
+        const holdT = (elapsed - 280) / 820;
+        scale = 1.0 + 0.035 * Math.sin(holdT * Math.PI * 4);
+        alpha = 1.0;
+      } else {
+        const p3 = (elapsed - 1100) / 400;
+        scale = 1.0 + 0.12 * p3;
+        alpha = Math.max(0, 1.0 - p3);
+        floatY = -18 * p3;
+      }
+
+      const themes = {
+        peng: {
+          bgGradient: [[0, '#fffbeb'], [0.22, '#f59e0b'], [0.72, '#b45309'], [1, '#78350f']],
+          borderColor: '#fef08a',
+          glowColor: '#f59e0b',
+          textColor: '#ffffff',
+          textShadow: '#d97706',
+          label: '碰',
+        },
+        chi: {
+          bgGradient: [[0, '#ecfdf5'], [0.22, '#10b981'], [0.72, '#047857'], [1, '#064e3b']],
+          borderColor: '#a7f3d0',
+          glowColor: '#10b981',
+          textColor: '#ffffff',
+          textShadow: '#059669',
+          label: '吃',
+        },
+        gang: {
+          bgGradient: [[0, '#faf5ff'], [0.22, '#a855f7'], [0.72, '#6b21a8'], [1, '#3b0764']],
+          borderColor: '#e9d5ff',
+          glowColor: '#a855f7',
+          textColor: '#ffffff',
+          textShadow: '#7c3aed',
+          label: '杠',
+        },
+        listen: {
+          bgGradient: [[0, '#fff1f2'], [0.22, '#ef4444'], [0.72, '#991b1b'], [1, '#450a0a']],
+          borderColor: '#fecdd3',
+          glowColor: '#ef4444',
+          textColor: '#ffffff',
+          textShadow: '#b91c1c',
+          label: '听',
+        },
+        hu: {
+          bgGradient: [[0, '#fefce8'], [0.25, '#eab308'], [0.65, '#dc2626'], [1, '#7f1d1d']],
+          borderColor: '#fde047',
+          glowColor: '#eab308',
+          textColor: '#ffffff',
+          textShadow: '#b91c1c',
+          label: '胡',
+        },
+      };
+
+      const kindKey = (callout.kind || '').includes('kong') ? 'gang' : (callout.kind || 'peng');
+      const theme = themes[kindKey] || themes.peng;
+      const character = callout.text || theme.label;
+      const badgeR = 34;
+
+      // Expanding shockwave ring on initial slam
+      if (ringScale > 0 && ringAlpha > 0) {
+        ctx.save();
+        ctx.globalAlpha = alpha * ringAlpha;
+        this.circle(posX, posY, badgeR * ringScale, null, theme.glowColor, 2.5);
+        ctx.restore();
+      }
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(posX, posY + floatY);
+      ctx.scale(scale, scale);
+
+      // Outer glow and shadow
+      ctx.shadowColor = theme.glowColor;
+      ctx.shadowBlur = 20;
+      this.circle(0, 0, badgeR, 'rgba(0, 0, 0, 0.55)');
+
+      // Multi-layer Callout Seal Badge
+      const grad = this.linearFill(0, -badgeR, 0, badgeR, theme.bgGradient, theme.glowColor);
+      this.circle(0, 0, badgeR, grad, theme.borderColor, 2.5);
+
+      // Inner ornate golden ring
+      this.circle(0, 0, badgeR - 4.5, null, 'rgba(255, 255, 255, 0.4)', 1);
+      this.circle(0, 0, badgeR - 6.5, null, 'rgba(254, 240, 138, 0.65)', 1.2);
+
+      // Shimmer sparkles around perimeter
+      const sparkAng = (now / 280) % (Math.PI * 2);
+      for (let i = 0; i < 4; i++) {
+        const a = sparkAng + (i * Math.PI) / 2;
+        const sx = Math.cos(a) * (badgeR + 4);
+        const sy = Math.sin(a) * (badgeR + 4);
+        this.drawSparkle(sx, sy, 3.5, theme.borderColor);
+      }
+
+      // Stylized Bold Chinese Character
+      ctx.shadowColor = theme.textShadow;
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetY = 2;
+      this.text(character, 0, 1, 38, theme.textColor, 'center', '900');
+
+      ctx.restore();
     });
   }
 

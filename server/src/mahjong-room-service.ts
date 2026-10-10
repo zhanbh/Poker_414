@@ -305,6 +305,7 @@ export class MahjongRoomService {
           ...(state.pendingWin.settlement.payingSeat ? { payingSeat: state.pendingWin.settlement.payingSeat } : {}),
           isCardang: state.pendingWin.settlement.isCardang,
           isBaoZhongBao: state.pendingWin.settlement.isBaoZhongBao,
+          isDuiBao: state.pendingWin.settlement.isDuiBao,
         }
         : null,
       ...(state.phase === 'settled' ? {
@@ -720,6 +721,7 @@ export class MahjongRoomService {
       && isMahjongCardangWait(waitingHand, structuralWaits[0]!, player.melds.length)
       && (baoWin || tileKey(structuralWaits[0]!) === tileKey(tile!));
     const isBaoZhongBao = baoWin && isCardang && tileKey(structuralWaits[0]!) === tileKey(tile!);
+    const isDuiBao = baoWin && !isCardang && matchingReadyWait;
     if (onDiscard && state.pending) this.removeClaimedDiscard(state.pending);
     const settlement: MahjongSettlement = {
       winnerSeat: seat,
@@ -728,6 +730,7 @@ export class MahjongRoomService {
       winPattern,
       isCardang,
       isBaoZhongBao,
+      isDuiBao,
       ...(onDiscard ? { discarderWasListening: state.pending!.discarderWasListening } : {}),
       ...(winningTile ? { payingSeat: state.pending!.seat, winningTile } : {}),
     };
@@ -1083,6 +1086,7 @@ export class MahjongRoomService {
     const specialWin = settlement.winPattern === 'bao' || settlement.winPattern === 'big-wind';
     const fanFor = (seat: MahjongSeat, onDiscard: boolean): number => {
       if (settlement.isBaoZhongBao) return 12;
+      if (settlement.isDuiBao) return 6;
       const player = this.state!.players[seat];
       const closed = player ? player.melds.every((meld) => meld.kind === 'concealed-kong') : false;
       let fan = specialWin ? 3 : closed ? 3 : onDiscard ? 1 : 2;

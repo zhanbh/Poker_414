@@ -75,6 +75,7 @@ describe('MahjongRoomService', () => {
       { settlement: { winnerSeat: 'B', type: 'self-draw', winPattern: 'bao' }, closed: ['A', 'C', 'D'], expected: { A: -15, B: 45, C: -15, D: -15 }, fans: [3, 3, 3] },
       { settlement: { winnerSeat: 'B', type: 'self-draw', winPattern: 'big-wind' }, closed: ['A', 'C', 'D'], expected: { A: -15, B: 45, C: -15, D: -15 }, fans: [3, 3, 3] },
       { settlement: { winnerSeat: 'B', type: 'self-draw', winPattern: 'bao', isCardang: true, isBaoZhongBao: true }, closed: [], expected: { A: -60, B: 180, C: -60, D: -60 }, fans: [12, 12, 12] },
+      { settlement: { winnerSeat: 'B', type: 'self-draw', winPattern: 'bao', isDuiBao: true }, closed: [], expected: { A: -30, B: 90, C: -30, D: -30 }, fans: [6, 6, 6] },
     ];
     for (const scenario of scenarios) {
       const room = new MahjongRoomService({ inviteCode: 'inner-414' });
@@ -198,6 +199,42 @@ describe('MahjongRoomService', () => {
       expect(result.isBaoZhongBao).toBe(baoZhongBao);
       expect(result.payments?.B).toBe(baoZhongBao ? 180 : 90);
     }
+  });
+
+  it('实际胡牌时识别非卡当的兑宝（如边张），并按6番结算', () => {
+    const { room, players, tile, internals } = readyBaoScenario('red');
+    const listener = internals.state.players.B!;
+    // 手牌为 1万 2万 2筒 2筒，听边张 3万（非卡当）
+    listener.hand = [tile('characters', 1), tile('characters', 2), tile('dots', 2), tile('dots', 2, 1)];
+    listener.melds = [
+      { kind: 'chi', tiles: [4, 5, 6].map((rank) => tile('characters', rank)) },
+      { kind: 'peng', tiles: [0, 1, 2].map((copy) => tile('dots', 5, copy)) },
+      { kind: 'chi', tiles: [1, 2, 3].map((rank) => tile('bamboo', rank)) },
+    ];
+    listener.listenWaits = [tile('characters', 3)];
+    // 宝牌正是 3万
+    listener.listenBao = tile('characters', 3, 3);
+    const winningTile = tile('characters', 3, 1);
+    listener.hand.push(winningTile);
+    listener.lastDrawnTileId = winningTile.id;
+    internals.state.currentTurn = 'B';
+
+    const before = room.getSnapshot(players[1]!.sessionToken);
+    room.dispatch(players[1]!.sessionToken, command('hu', before.public.handNumber, before.public.version));
+
+    expect(room.tick(Number.POSITIVE_INFINITY)).toBe(true);
+    expect(room.getSnapshot(players[1]!.sessionToken).public.winAnnouncement).toMatchObject({
+      isCardang: false, isBaoZhongBao: false, isDuiBao: true,
+    });
+    expect(room.tick(Number.POSITIVE_INFINITY)).toBe(true);
+    const result = room.getSnapshot(players[1]!.sessionToken).public.settlement!;
+    expect(result.isCardang).toBe(false);
+    expect(result.isBaoZhongBao).toBe(false);
+    expect(result.isDuiBao).toBe(true);
+    expect(result.payments?.B).toBe(90);
+    expect(result.payments?.A).toBe(-30);
+    expect(result.payments?.C).toBe(-30);
+    expect(result.payments?.D).toBe(-30);
   });
 
   it('胡牌后先暂停一秒，再向所有人广播赢家特效，最后才结算积分', () => {

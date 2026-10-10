@@ -308,6 +308,7 @@ export interface MahjongSettlement {
   readonly winPattern?: 'standard' | 'bao' | 'big-wind';
   readonly isCardang?: boolean;
   readonly isBaoZhongBao?: boolean;
+  readonly isDuiBao?: boolean;
   readonly baseScore?: number;
   readonly discarderWasListening?: boolean;
   readonly payingSeat?: MahjongSeat;
@@ -356,6 +357,7 @@ export interface MahjongPublicSnapshot {
     readonly payingSeat?: MahjongSeat;
     readonly isCardang?: boolean;
     readonly isBaoZhongBao?: boolean;
+    readonly isDuiBao?: boolean;
   } | null;
   readonly revealedHands?: ReadonlyArray<{ readonly seat: MahjongSeat; readonly nickname: string; readonly hand: MahjongTile[] }>;
   readonly settlement: MahjongSettlement | null;

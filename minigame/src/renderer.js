@@ -1680,6 +1680,7 @@ class MahjongRenderer {
       resultLabel = '流局 · 本局不计分 · 原庄家不变';
     } else {
       const pattern = settlement.isBaoZhongBao ? '宝中宝'
+        : settlement.isDuiBao ? '兑宝'
         : settlement.winPattern === 'big-wind' ? '大风'
           : settlement.winPattern === 'bao' ? '搂宝'
             : settlement.type === 'self-draw' ? '自摸' : '平和';

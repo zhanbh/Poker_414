@@ -160,11 +160,12 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode, intera
   const settlementDescription = settlement?.type === 'draw'
     ? '流局 · 本局不计分 · 原庄家不变'
     : settlement
-      ? `${settlement.winnerNickname ?? settlement.winnerSeat ?? ''} 获胜 · ${settlement.isBaoZhongBao ? '宝中宝' : settlement.winPattern === 'big-wind' ? '大风' : settlement.winPattern === 'bao' ? '搂宝' : settlement.type === 'self-draw' ? '自摸' : '平和'}${settlement.isCardang && !settlement.isBaoZhongBao ? ' · 卡当' : ''}`
+      ? `${settlement.winnerNickname ?? settlement.winnerSeat ?? ''} 获胜 · ${settlement.isBaoZhongBao ? '宝中宝' : settlement.isDuiBao ? '兑宝' : settlement.winPattern === 'big-wind' ? '大风' : settlement.winPattern === 'bao' ? '搂宝' : settlement.type === 'self-draw' ? '自摸' : '平和'}${settlement.isCardang && !settlement.isBaoZhongBao ? ' · 卡当' : ''}`
       : '';
   const players = new Map(snapshot.public.players.map((player) => [player.seat, player]));
   const winAnnouncement = snapshot.public.winAnnouncement;
   const winType = winAnnouncement?.isBaoZhongBao ? '宝中宝'
+    : winAnnouncement?.isDuiBao ? '兑宝'
     : winAnnouncement?.winPattern === 'big-wind' ? '大风'
       : winAnnouncement?.winPattern === 'bao' ? winAnnouncement.isCardang ? '搂宝 · 卡当' : '搂宝'
         : winAnnouncement?.isCardang ? '卡当'

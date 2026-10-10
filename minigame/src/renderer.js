@@ -266,6 +266,80 @@ class MahjongRenderer {
     ctx.restore();
   }
 
+  drawMicIcon(cx, cy, size = 18, color = '#f3e1b0') {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    if (typeof ctx.save === 'function') ctx.save();
+
+    // 1. WeChat capsule mic body (话筒圆角主体)
+    const bodyW = size * 0.40;
+    const bodyH = size * 0.58;
+    const bodyY = cy - size * 0.12;
+    this.roundRect(cx - bodyW / 2, bodyY - bodyH / 2, bodyW, bodyH, bodyW / 2, color);
+
+    // 2. WeChat U-cradle bracket (U型承托环)
+    if (typeof ctx.beginPath === 'function' && typeof ctx.arc === 'function') {
+      const cradleR = size * 0.34;
+      ctx.beginPath();
+      ctx.arc(cx, bodyY, cradleR, 0, Math.PI, false);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(1.5, size * 0.10);
+      ctx.lineCap = 'round';
+      if (typeof ctx.stroke === 'function') ctx.stroke();
+
+      // 3. Stem (中心支撑竖线)
+      const stemTop = bodyY + cradleR;
+      const stemBottom = cy + size * 0.42;
+      ctx.beginPath();
+      ctx.moveTo(cx, stemTop);
+      ctx.lineTo(cx, stemBottom);
+      if (typeof ctx.stroke === 'function') ctx.stroke();
+
+      // 4. Base foot bar (底部水平底座)
+      const baseW = size * 0.44;
+      ctx.beginPath();
+      ctx.moveTo(cx - baseW / 2, stemBottom);
+      ctx.lineTo(cx + baseW / 2, stemBottom);
+      if (typeof ctx.stroke === 'function') ctx.stroke();
+    }
+
+    if (typeof ctx.restore === 'function') ctx.restore();
+  }
+
+  drawKeyboardIcon(cx, cy, size = 18, color = '#f3e1b0') {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    if (typeof ctx.save === 'function') ctx.save();
+
+    const kbW = size * 0.82;
+    const kbH = size * 0.56;
+    const kbX = cx - kbW / 2;
+    const kbY = cy - kbH / 2;
+    this.roundRect(kbX, kbY, kbW, kbH, 3.5, null, color, Math.max(1.3, size * 0.08));
+
+    // Keyboard key dots
+    const dotR = Math.max(1, size * 0.05);
+    const colSpacing = kbW / 4;
+    for (let r = 0; r < 2; r += 1) {
+      const rowY = kbY + kbH * (0.28 + r * 0.26);
+      for (let c = 1; c <= 3; c += 1) {
+        this.circle(kbX + c * colSpacing, rowY, dotR, color);
+      }
+    }
+    // Spacebar
+    if (typeof ctx.beginPath === 'function' && typeof ctx.moveTo === 'function') {
+      ctx.beginPath();
+      ctx.moveTo(cx - kbW * 0.28, kbY + kbH * 0.80);
+      ctx.lineTo(cx + kbW * 0.28, kbY + kbH * 0.80);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(1.2, size * 0.08);
+      ctx.lineCap = 'round';
+      if (typeof ctx.stroke === 'function') ctx.stroke();
+    }
+
+    if (typeof ctx.restore === 'function') ctx.restore();
+  }
+
   drawWaterBucket(x, y, tiltAngle = 0, scale = 1, isPouring = false) {
     const ctx = this.ctx;
     ctx.save();
@@ -1571,9 +1645,10 @@ class MahjongRenderer {
     visible.forEach(({ message, lines, rowHeight }) => {
       if (message.kind === 'voice') {
         const isPlaying = state.playingVoiceId === message.id;
-        this.roundRect(x + 14, messageY - 4, width - 28, rowHeight - 2, 5, isPlaying ? 'rgba(45, 90, 55, 0.92)' : 'rgba(18, 48, 30, 0.75)', isPlaying ? COLORS.gold : '#48684d');
-        const voiceLabel = `${message.senderNickname}: 🎙️ ${message.duration || 1}" ${isPlaying ? '🔊 播放中…' : '▶ 点击播放'}`;
-        this.text(voiceLabel, x + 24, messageY + 8, 12, isPlaying ? '#ffea9f' : '#b2f0c8', 'left', '600');
+        this.roundRect(x + 14, messageY - 4, width - 28, rowHeight - 2, 6, isPlaying ? 'rgba(45, 90, 55, 0.92)' : 'rgba(18, 48, 30, 0.75)', isPlaying ? COLORS.gold : '#48684d');
+        this.drawMicIcon(x + 28, messageY + 7, 13, isPlaying ? '#ffea9f' : '#b2f0c8');
+        const voiceLabel = `${message.senderNickname}: ${message.duration || 1}" ${isPlaying ? '🔊 播放中…' : '▶ 点击播放'}`;
+        this.text(voiceLabel, x + 40, messageY + 8, 12, isPlaying ? '#ffea9f' : '#b2f0c8', 'left', '600');
         this.targets.push({ x: x + 14, y: messageY - 4, width: width - 28, height: rowHeight - 2, type: 'play-voice', data: { message } });
       } else {
         lines.forEach((line, index) => this.text(line, x + 16, messageY + index * 17, 12, '#edf0db'));
@@ -1587,19 +1662,50 @@ class MahjongRenderer {
 
     // Bottom Input Bar
     const isVoiceMode = state.chatMode === 'voice';
-    // Mode toggle button on the left (🎙️ / ⌨️)
-    this.roundRect(x + 12, inputY, 34, 34, 6, isVoiceMode ? '#8a6230' : 'rgba(12, 35, 22, 0.8)', '#6d805a');
-    this.text(isVoiceMode ? '⌨️' : '🎙️', x + 29, inputY + 17, 16, '#f3e1b0', 'center');
+    // Mode toggle button on the left (WeChat style mic / keyboard vector icon)
+    this.roundRect(x + 12, inputY, 34, 34, 8, isVoiceMode ? '#8a6230' : 'rgba(14, 38, 26, 0.9)', isVoiceMode ? '#ffd87a' : '#6d805a', 1.2);
+    if (isVoiceMode) {
+      this.drawKeyboardIcon(x + 29, inputY + 17, 18, '#fff3d1');
+    } else {
+      this.drawMicIcon(x + 29, inputY + 17, 18, '#f3e1b0');
+    }
     this.targets.push({ x: x + 12, y: inputY, width: 34, height: 34, type: 'toggle-chat-mode', data: {} });
 
     if (isVoiceMode) {
-      // Wide "Hold to speak" button
+      // Wide "Hold to speak" button (WeChat style)
       const voiceBarW = width - 58;
       const isRecording = Boolean(state.recordingVoice);
-      this.roundRect(x + 52, inputY, voiceBarW, 34, 6, isRecording ? '#ba751f' : 'rgba(16, 44, 28, 0.9)', isRecording ? '#ffe08a' : '#5f7952');
+      this.roundRect(
+        x + 52, inputY, voiceBarW, 34, 8,
+        isRecording ? '#ba751f' : 'rgba(18, 48, 32, 0.94)',
+        isRecording ? '#ffe08a' : '#5f7952',
+        isRecording ? 2 : 1.2,
+      );
+      // WeChat style mic mini icon on the voice bar
+      this.drawMicIcon(x + 52 + voiceBarW / 2 - 46, inputY + 17, 16, isRecording ? '#ffffff' : '#c2d4be');
       const voiceBtnLabel = isRecording ? '松手 发送 · 正在录音…' : '按住 说话';
-      this.text(voiceBtnLabel, x + 52 + voiceBarW / 2, inputY + 17, 13, isRecording ? '#ffffff' : '#edf0db', 'center', '600');
+      this.text(voiceBtnLabel, x + 52 + voiceBarW / 2 + 10, inputY + 17, 13, isRecording ? '#ffffff' : '#edf0db', 'center', '600');
       this.targets.push({ x: x + 52, y: inputY, width: voiceBarW, height: 34, type: 'voice-bar', data: {} });
+
+      if (isRecording) {
+        // Floating WeChat-style voice recording HUD
+        const hudW = 140;
+        const hudH = 140;
+        const hudX = x + width / 2 - hudW / 2;
+        const hudY = y + (bodyHeight - hudH) / 2;
+        this.roundRect(hudX, hudY, hudW, hudH, 16, 'rgba(0, 0, 0, 0.82)', 'rgba(255, 255, 255, 0.2)', 1.5);
+        this.drawMicIcon(hudX + 50, hudY + 54, 38, '#ffffff');
+        const t = Date.now() * 0.008;
+        const bars = [0.45, 0.75, 0.95, 0.60];
+        bars.forEach((base, idx) => {
+          const barH = 10 + Math.sin(t + idx * 1.2) * 10 * base + 10 * base;
+          const bx = hudX + 85 + idx * 7;
+          const by = hudY + 54 - barH / 2;
+          this.roundRect(bx, by, 3.5, barH, 1.7, '#86efac');
+        });
+        this.text('正在录音…', hudX + hudW / 2, hudY + 104, 12, '#ffffff', 'center', '600');
+        this.text('松开 发送', hudX + hudW / 2, hudY + 121, 10, '#cbd5e1', 'center');
+      }
     } else {
       // Text mode: input box + send button
       const inputW = width - 124;

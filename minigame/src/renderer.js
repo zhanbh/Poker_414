@@ -638,6 +638,9 @@ class MahjongRenderer {
       } else {
         this.roundRect(logicalWidth / 2 - 220, 68, 440, 34, 8, '#682f3a', '#c96a73');
         this.text(this.fitText(state.error, 420, 13), logicalWidth / 2, 85, 13, '#ffe8e8', 'center');
+        if (state.connectionStatus === 'disconnected') {
+          this.targets.push({ x: logicalWidth / 2 - 220, y: 68, width: 440, height: 34, type: 'reconnect', data: {} });
+        }
       }
     }
   }

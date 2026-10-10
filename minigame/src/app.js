@@ -450,7 +450,23 @@ class MahjongGameApp {
     } finally {
       this.recovering = false;
     }
-    if (failed) this.scheduleRecovery();
+    if (failed) {
+      if (this.recoveryAttempt >= 4) {
+        if (this.wx.removeStorageSync) {
+          this.wx.removeStorageSync(config.sessionStorageKey);
+        }
+        this.state.screen = 'entry';
+        this.state.snapshot = null;
+        this.state.error = '房间会话已失效，请重新输入邀请码进入';
+        this.state.statusMessage = '房间会话已失效，请重新进入';
+        this.setOrientation('portrait');
+        this.startAnimationLoop();
+        this.updateUserInfoButton();
+        this.draw();
+        return;
+      }
+      this.scheduleRecovery();
+    }
   }
 
   async restoreSession() {
@@ -859,6 +875,12 @@ class MahjongGameApp {
       if (this.state.keyboardOpen) this.hideKeyboard();
       const fn = this.handleEntryAction || MahjongGameApp.prototype.handleEntryAction;
       if (typeof fn === 'function') await fn.call(this);
+      return;
+    }
+    if (type === 'reconnect') {
+      this.state.error = '正在重新连接…';
+      this.draw();
+      void this.recoverRoom();
       return;
     }
     if (type === 'leave') { this.leaveRoom(); return; }

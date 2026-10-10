@@ -218,31 +218,44 @@ export class MahjongRoomService {
     if (roomId !== 'mahjong') throw new MahjongRoomServiceError('ROOM_NOT_FOUND', '麻将房间不存在');
     if (!isValidNickname(nickname)) throw new MahjongRoomServiceError('INVALID_NICKNAME', '昵称仅支持1–12位中文、字母、数字或下划线');
     const cleanNickname = nickname.trim();
-    if (!this.state && !session.mahjongSeat && session.role !== 'spectator') this.state = this.emptyState(roomId, session.playerId);
-    const duplicate = this.state && Object.values(this.state.players).some((player) =>
-      player?.nickname === cleanNickname && player.id !== session.playerId);
-    if (duplicate) throw new MahjongRoomServiceError('NICKNAME_EXISTS', '昵称已经被使用，请稍后重试授权');
 
-    if (session.mahjongSeat || session.role === 'spectator') {
+    const seatedPlayer = session.mahjongSeat && this.state ? this.state.players[session.mahjongSeat] : null;
+    const isActuallySeated = Boolean(seatedPlayer && seatedPlayer.id === session.playerId);
+    if (session.mahjongSeat && !isActuallySeated) {
+      this.sessions.setMahjongSeat(sessionToken, null);
+    }
+
+    if (isActuallySeated) {
       let changed = false;
-      if (session.mahjongSeat && this.state) {
-        const player = this.state.players[session.mahjongSeat];
-        if (player && player.id === session.playerId) {
-          changed = player.nickname !== cleanNickname || player.avatarUrl !== avatarUrl;
-          player.nickname = cleanNickname;
-          player.avatarUrl = avatarUrl;
-        }
+      if (seatedPlayer!.nickname !== cleanNickname || seatedPlayer!.avatarUrl !== avatarUrl) {
+        changed = true;
+        seatedPlayer!.nickname = cleanNickname;
+        seatedPlayer!.avatarUrl = avatarUrl;
       }
-      if (session.role === 'spectator') changed = session.nickname !== cleanNickname;
-      this.sessions.setIdentity(sessionToken, session.role === 'spectator' ? 'spectator' : 'player', cleanNickname);
+      this.sessions.setIdentity(sessionToken, 'player', cleanNickname);
       this.sessions.touch(sessionToken, this.now());
       if (changed && this.state) this.state.version += 1;
       return this.getSnapshot(sessionToken);
     }
+
+    if (session.role === 'spectator' && this.state && this.state.phase !== 'lobby') {
+      let changed = false;
+      if (session.nickname !== cleanNickname) changed = true;
+      this.sessions.setIdentity(sessionToken, 'spectator', cleanNickname);
+      this.sessions.touch(sessionToken, this.now());
+      if (changed && this.state) this.state.version += 1;
+      return this.getSnapshot(sessionToken);
+    }
+
     if (!this.state) this.state = this.emptyState(roomId, session.playerId);
-    if (this.state.phase !== 'lobby') return this.joinSpectator(sessionToken, nickname.trim());
+
+    const duplicate = Object.values(this.state.players).find((player) =>
+      player?.nickname === cleanNickname && player.id !== session.playerId);
+    if (duplicate) throw new MahjongRoomServiceError('NICKNAME_EXISTS', '昵称已经被使用，请稍后重试授权');
+
+    if (this.state.phase !== 'lobby') return this.joinSpectator(sessionToken, cleanNickname);
     const seat = MAHJONG_SEATS.find((candidate) => this.state?.players[candidate] === null);
-    if (!seat) return this.joinSpectator(sessionToken, nickname.trim());
+    if (!seat) return this.joinSpectator(sessionToken, cleanNickname);
     this.addPlayer(seat, session, cleanNickname, avatarUrl);
     this.sessions.setIdentity(sessionToken, 'player', cleanNickname);
     this.sessions.touch(sessionToken, this.now());
@@ -254,26 +267,33 @@ export class MahjongRoomService {
     const session = this.sessions.get(sessionToken);
     if (!this.state) return { public: this.emptyPublicSnapshot(), private: this.emptyPrivateSnapshot(session) };
     const state = this.state;
+    const seatedPlayers = Object.values(state.players).filter((player): player is MahjongPlayer => player !== null);
+    const hostPlayer = seatedPlayers.find((player) => player.id === state.hostId && player.connected)
+      ?? (state.phase === 'lobby' ? seatedPlayers.find((player) => player.connected) : undefined)
+      ?? seatedPlayers.find((player) => player.id === state.hostId)
+      ?? seatedPlayers.find((player) => player.connected)
+      ?? seatedPlayers[0];
+    if (hostPlayer && state.hostId !== hostPlayer.id) {
+      state.hostId = hostPlayer.id;
+    }
     const visiblePending = state.pending ?? state.pendingListen;
-    const players = Object.values(state.players)
-      .filter((player): player is MahjongPlayer => player !== null)
-      .map((player) => ({
-        seat: player.seat,
-        seatLabel: MAHJONG_SEAT_LABELS[player.seat],
-        nickname: player.nickname,
-        avatarUrl: player.avatarUrl,
-        connected: player.connected,
-        handCount: player.hand.length,
-        score: player.score,
-        isListening: player.isListening,
-        melds: player.melds.map((meld) => ({
-          kind: meld.kind,
-          tiles: meld.kind === 'concealed-kong' && player.seat !== session.mahjongSeat ? [] : [...meld.tiles],
-        })),
-        discards: [...player.discards],
-        isDealer: player.seat === state.dealerSeat,
-        isHost: player.id === state.hostId,
-      }));
+    const players = seatedPlayers.map((player) => ({
+      seat: player.seat,
+      seatLabel: MAHJONG_SEAT_LABELS[player.seat],
+      nickname: player.nickname,
+      avatarUrl: player.avatarUrl,
+      connected: player.connected,
+      handCount: player.hand.length,
+      score: player.score,
+      isListening: player.isListening,
+      melds: player.melds.map((meld) => ({
+        kind: meld.kind,
+        tiles: meld.kind === 'concealed-kong' && player.seat !== session.mahjongSeat ? [] : [...meld.tiles],
+      })),
+      discards: [...player.discards],
+      isDealer: player.seat === state.dealerSeat,
+      isHost: Boolean(hostPlayer && player.id === hostPlayer.id),
+    }));
     const publicSnapshot: MahjongPublicSnapshot = {
       gameId: 'mahjong',
       roomId: state.roomId,
@@ -283,7 +303,7 @@ export class MahjongRoomService {
       players,
       spectators: this.sessions.listSpectators().map((viewer) => ({ nickname: viewer.nickname ?? '观战者', connected: viewer.connectionId !== null })),
       chat: [...this.chatMessages],
-      hostSeat: Object.values(state.players).find((player) => player?.id === state.hostId)?.seat ?? null,
+      hostSeat: hostPlayer?.seat ?? null,
       dealerSeat: state.dealerSeat,
       currentTurn: state.currentTurn,
       awaitingDiscard: state.awaitingDiscard,

@@ -86,11 +86,15 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
 
   const sendMiniMessage = (socket: WebSocket, event: string, payload: unknown, requestId?: string) => {
     if (socket.readyState !== WebSocket.OPEN) return;
-    socket.send(JSON.stringify({
-      event,
-      ...(requestId ? { requestId } : {}),
-      payload,
-    }));
+    try {
+      socket.send(JSON.stringify({
+        event,
+        ...(requestId ? { requestId } : {}),
+        payload,
+      }));
+    } catch {
+      /* ignore socket send error */
+    }
   };
 
   const removeMiniSocket = (state: MiniProgramSocketState) => {
@@ -125,7 +129,6 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
         const snapshot = serviceFor(gameIdForToken(sessionToken)).getSnapshot(sessionToken) as GameSnapshot;
         for (const state of sockets) sendMiniMessage(state.socket, EVENTS.snapshot, snapshot);
       } catch {
-        for (const state of sockets) state.socket.close();
         miniSocketsByToken.delete(sessionToken);
       }
     }

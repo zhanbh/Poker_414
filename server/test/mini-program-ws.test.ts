@@ -164,4 +164,60 @@ describe('微信小程序原生 WebSocket 通道', () => {
     const payload = disconnected.payload;
     expect(payload && 'public' in payload ? payload.public.players.find((player) => player.seat === 'A')?.connected : null).toBe(false);
   });
+
+  it('支持麻将两名玩家通过小程序通道入房并同步快照', async () => {
+    const { url } = await startServer();
+    const socket1 = await connect(url);
+    const auth1 = await request(socket1, EVENTS.login, { inviteCode: 'inner-414', gameId: 'mahjong' });
+    expect(auth1.ok).toBe(true);
+    const joined1 = await request(socket1, EVENTS.join, { nickname: '鳕熊', roomId: 'mahjong', gameId: 'mahjong' });
+    expect(joined1.ok).toBe(true);
+    expect(joined1.snapshot?.public?.players).toHaveLength(1);
+
+    const broadcastTo1 = waitForMessage(socket1, (message) => {
+      const payload = message.payload as any;
+      return message.event === EVENTS.snapshot && payload?.public?.players?.length === 2;
+    });
+
+    const socket2 = await connect(url);
+    const auth2 = await request(socket2, EVENTS.login, { inviteCode: 'inner-414', gameId: 'mahjong' });
+    expect(auth2.ok).toBe(true);
+    const joined2 = await request(socket2, EVENTS.join, { nickname: '玩家二', roomId: 'mahjong', gameId: 'mahjong' });
+    expect(joined2.ok).toBe(true);
+    expect(joined2.snapshot?.public?.players).toHaveLength(2);
+
+    const receivedBy1 = await broadcastTo1;
+    expect((receivedBy1.payload as any).public.players).toHaveLength(2);
+  });
+
+  it('复现并修复：玩家一异常断开后，玩家二入座庄位并成为房主，玩家一重连后自动入座空余座位并正确同步', async () => {
+    const { url } = await startServer();
+    // 1. 玩家一（旧玩家）登录并入房（获得东/A位）
+    const socketOld = await connect(url);
+    const authOld = await request(socketOld, EVENTS.login, { inviteCode: 'inner-414', gameId: 'mahjong' });
+    const joinedOld = await request(socketOld, EVENTS.join, { nickname: '玩家旧', roomId: 'mahjong', gameId: 'mahjong' });
+    expect(joinedOld.snapshot?.public?.players).toHaveLength(1);
+    expect(joinedOld.snapshot?.private?.seat).toBe('A');
+
+    // 2. 玩家一异常断开（比如杀掉小程序，关闭连接）
+    await closeSocket(socketOld);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // 3. 此时玩家二（鳕熊）登录并入房
+    const socketBear = await connect(url);
+    const authBear = await request(socketBear, EVENTS.login, { inviteCode: 'inner-414', gameId: 'mahjong' });
+    const joinedBear = await request(socketBear, EVENTS.join, { nickname: '鳕熊', roomId: 'mahjong', gameId: 'mahjong' });
+    expect(joinedBear.ok).toBe(true);
+    expect(joinedBear.snapshot?.public?.hostSeat).toBe('B');
+
+    // 4. 旧玩家重新打开小程序，恢复会话入房
+    const socketResume = await connect(url);
+    const authResume = await request(socketResume, EVENTS.login, { sessionToken: authOld.sessionToken, gameId: 'mahjong' });
+    expect(authResume.ok).toBe(true);
+    const joinResume = await request(socketResume, EVENTS.join, { nickname: '玩家旧', roomId: 'mahjong', gameId: 'mahjong' });
+    expect(joinResume.ok).toBe(true);
+    expect(joinResume.snapshot?.public?.players).toHaveLength(2);
+    expect(joinResume.snapshot?.public?.hostSeat).toBe('B');
+    expect(joinResume.snapshot?.private?.seat).toBe('A');
+  });
 });

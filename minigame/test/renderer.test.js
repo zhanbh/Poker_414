@@ -733,13 +733,42 @@ describe('native mini-game Canvas renderer', () => {
     expect(labels).toContain('💦');
   });
 
-  it('shows interaction picker when a player avatar is selected and includes target data', () => {
+  it('shows interaction picker when another player is selected and includes target data', () => {
     const labels = [];
     const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels.push(String(value)) }));
     const snapshot = {
       public: {
         gameId: 'mahjong', phase: 'lobby', handNumber: 0,
-        players: [{ seat: 'A', nickname: '小明', score: 1000, handCount: 0 }], spectators: [],
+        players: [
+          { seat: 'A', nickname: '小明', score: 1000, handCount: 0 },
+          { seat: 'B', nickname: '小华', score: 1000, handCount: 0 },
+        ],
+        spectators: [],
+        chat: [], hostSeat: null,
+      },
+      private: { seat: 'A', spectator: false },
+    };
+
+    renderer.draw({
+      screen: 'lobby', snapshot, connectionStatus: 'connected', chatOpen: false,
+      selectedTarget: { seat: 'B', nickname: '小华' },
+    });
+    expect(labels.some((l) => l.includes('送给 小华'))).toBe(true);
+    expect(renderer.targets.some((t) => t.type === 'interaction' && t.data.interaction === 'water')).toBe(true);
+    expect(renderer.targets.some((t) => t.type === 'close-interaction')).toBe(true);
+  });
+
+  it('does not allow self-interaction target on own player card or show picker for oneself', () => {
+    const labels = [];
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels.push(String(value)) }));
+    const snapshot = {
+      public: {
+        gameId: 'mahjong', phase: 'lobby', handNumber: 0,
+        players: [
+          { seat: 'A', nickname: '小明', score: 1000, handCount: 0 },
+          { seat: 'B', nickname: '小华', score: 1000, handCount: 0 },
+        ],
+        spectators: [],
         chat: [], hostSeat: null,
       },
       private: { seat: 'A', spectator: false },
@@ -749,8 +778,12 @@ describe('native mini-game Canvas renderer', () => {
       screen: 'lobby', snapshot, connectionStatus: 'connected', chatOpen: false,
       selectedTarget: { seat: 'A', nickname: '小明' },
     });
-    expect(labels.some((l) => l.includes('送给 小明'))).toBe(true);
-    expect(renderer.targets.some((t) => t.type === 'interaction' && t.data.interaction === 'water')).toBe(true);
-    expect(renderer.targets.some((t) => t.type === 'close-interaction')).toBe(true);
+    // Own card must not have select-player target
+    const selectPlayerTargets = renderer.targets.filter((t) => t.type === 'select-player');
+    expect(selectPlayerTargets.some((t) => t.data.seat === 'A')).toBe(false);
+    expect(selectPlayerTargets.some((t) => t.data.seat === 'B')).toBe(true);
+    // Picker must not open for self
+    expect(labels.some((l) => l.includes('送给 小明'))).toBe(false);
+    expect(renderer.targets.some((t) => t.type === 'interaction')).toBe(false);
   });
 });

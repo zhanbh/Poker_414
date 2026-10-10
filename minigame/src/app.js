@@ -740,6 +740,8 @@ class MahjongGameApp {
     }
     if (type === 'voice-bar') return;
     if (type === 'select-player' || type === 'select-interaction-target') {
+      const ownSeat = this.state.snapshot?.private?.seat;
+      if (ownSeat && data.seat === ownSeat) return;
       this.state.selectedTarget = this.state.selectedTarget?.seat === data.seat ? null : data;
       this.draw();
       return;
@@ -890,13 +892,18 @@ class MahjongGameApp {
 
   async sendInteraction(interaction, explicitTarget = null) {
     let target = explicitTarget || this.state.selectedTarget;
+    const ownSeat = this.state.snapshot?.private?.seat;
+    if (target && ownSeat && target.seat === ownSeat) {
+      this.state.selectedTarget = null;
+      this.draw();
+      return;
+    }
     if (!target) {
       const players = this.state.snapshot?.public?.players || [];
-      const ownSeat = this.state.snapshot?.private?.seat;
-      const other = players.find((p) => p.seat !== ownSeat) || players[0];
+      const other = players.find((p) => p.seat !== ownSeat);
       if (other) target = { seat: other.seat, nickname: other.nickname };
     }
-    if (!target) return;
+    if (!target || (ownSeat && target.seat === ownSeat)) return;
     try {
       await this.transport.chat({ kind: 'interaction', interaction, target: { nickname: target.nickname, seat: target.seat } });
       this.state.statusMessage = `已向 ${target.nickname} 发送 ${INTERACTION_LABELS[interaction] || '互动'}`;

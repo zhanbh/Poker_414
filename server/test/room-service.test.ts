@@ -310,6 +310,8 @@ describe('单房间会话与命令服务', () => {
 
     room.recordChat(spectator.sessionToken, { kind: 'text', text: '大家好' });
     room.recordChat(players[0].sessionToken, { kind: 'interaction', interaction: 'tomato', target: { seat: 'B', nickname: '乙' } });
+    expect(() => room.recordChat(players[0].sessionToken, { kind: 'interaction', interaction: 'tomato', target: { seat: 'A', nickname: '甲' } }))
+      .toThrow('不能对自己发送互动');
     const view = room.getSnapshot(players[1].sessionToken);
     expect(view.public.chat).toHaveLength(2);
     expect(view.public.chat?.[0].senderNickname).toBe('观众');

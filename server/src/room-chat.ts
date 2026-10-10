@@ -51,6 +51,9 @@ export function createRoomChatMessage(session: Session, payload: unknown): RoomC
   }
   const targetNickname = payload.target.nickname.trim().slice(0, MAX_NICKNAME_LENGTH);
   const targetSeat = payload.target.seat?.trim().slice(0, 12) || undefined;
+  if (senderSeat && targetSeat && senderSeat === targetSeat) {
+    throw new Error('不能对自己发送互动');
+  }
   return {
     id: randomUUID(),
     kind: 'interaction',

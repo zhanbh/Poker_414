@@ -151,6 +151,20 @@ describe('414 mini-game project split', () => {
     expect(renderer.targets.some((t) => t.type === 'close-interaction')).toBe(true);
   });
 
+  it('does not allow self-interaction target on own card in 414', () => {
+    const renderer = mockRenderer(960, 540);
+    renderer.draw({
+      screen: 'room', chatOpen: false, selectedIds: [], busy: false, selectedTarget: null,
+      snapshot: {
+        public: { roomId: '414', phase: 'playing', currentTurn: 'A', handNumber: 1, players: ['A', 'B', 'C', 'D'].map((seat) => ({ seat, nickname: `玩家${seat}`, isHost: seat === 'A', handCount: 13, connected: true })), chat: [] },
+        private: { seat: 'A', hand: [], spectator: false },
+      },
+    });
+    const playerTargets = renderer.targets.filter((t) => t.type === 'select-player');
+    expect(playerTargets.some((t) => t.data.seat === 'A')).toBe(false);
+    expect(playerTargets.some((t) => t.data.seat === 'B')).toBe(true);
+  });
+
   it('renders speech bubbles and water pouring animations without errors', () => {
     const renderer = mockRenderer(960, 540);
     const now = Date.now();

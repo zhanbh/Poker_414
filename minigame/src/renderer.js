@@ -266,6 +266,22 @@ class MahjongRenderer {
     ctx.restore();
   }
 
+  drawSparkle(cx, cy, size, color = '#ffd447') {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - size);
+    ctx.quadraticCurveTo(cx, cy, cx + size, cy);
+    ctx.quadraticCurveTo(cx, cy, cx, cy + size);
+    ctx.quadraticCurveTo(cx, cy, cx - size, cy);
+    ctx.quadraticCurveTo(cx, cy, cx, cy - size);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
   drawMicIcon(cx, cy, size = 18, color = '#f3e1b0') {
     const ctx = this.ctx;
     if (!ctx) return;
@@ -753,6 +769,7 @@ class MahjongRenderer {
 
   drawPlayerCard(state, seat, x, y, width, height) {
     const player = playerForSeat(state.snapshot, seat);
+    const isMe = seat && seat === state.snapshot?.private?.seat;
     const selected = state.selectedTarget && state.selectedTarget.seat === seat;
     const active = state.snapshot.public.phase === 'playing' && state.snapshot.public.currentTurn === seat;
     const avatarSize = 64;
@@ -773,9 +790,11 @@ class MahjongRenderer {
       this.text(this.fitText(player.nickname, width - 8, 12, '600'), x + width / 2, y + 82, 12, '#fff2d4', 'center', '600');
       this.roundRect(x, y + 93, width, 20, 3, 'rgba(24, 34, 23, 0.78)');
       this.text(`${player.score} 分`, x + width / 2, y + 104, 14, '#ffdf79', 'center', '700');
-      this.circle(avatarX + 54, y + 10, 9, selected ? '#eab308' : 'rgba(32, 54, 30, 0.9)', selected ? '#ffffff' : 'rgba(255, 215, 120, 0.7)');
-      this.text('🎁', avatarX + 54, y + 13, 8.5, selected ? '#1f2937' : '#ffd875', 'center');
-      this.targets.push({ x, y, width, height, type: 'select-player', data: { seat, nickname: player.nickname } });
+      if (!isMe) {
+        this.circle(avatarX + 54, y + 10, 9, selected ? '#eab308' : 'rgba(32, 54, 30, 0.9)', selected ? '#ffffff' : 'rgba(255, 215, 120, 0.7)');
+        this.text('🎁', avatarX + 54, y + 13, 8.5, selected ? '#1f2937' : '#ffd875', 'center');
+        this.targets.push({ x, y, width, height, type: 'select-player', data: { seat, nickname: player.nickname } });
+      }
       if (state.snapshot.public.dealer === seat || state.snapshot.public.dealerSeat === seat) {
         this.roundRect(avatarX + 44, y + 46, 25, 24, 4, '#c38c2e', '#f3d78e');
         this.text('庄', avatarX + 56, y + 58, 17, '#fff2bc', 'center', '700');
@@ -802,58 +821,128 @@ class MahjongRenderer {
     const latestPhrase = [...(state.snapshot.public.chat || [])].reverse().find((message) =>
       message.kind === 'phrase' && message.senderSeat === seat && Date.now() - message.createdAt < 3600);
     if (latestPhrase && latestPhrase.text) {
-      this.drawSpeechBubble(latestPhrase.text, x, y, width, height);
+      this.drawSpeechBubble(latestPhrase.text, x, y, width, height, latestPhrase);
     }
   }
 
-  drawSpeechBubble(text, cardX, cardY, cardWidth, cardHeight) {
+  drawSpeechBubble(text, cardX, cardY, cardWidth, cardHeight, phraseMessage = null) {
     const ctx = this.ctx;
-    const paddingX = 14;
-    const textWidth = Math.min(220, text.length * 13 + paddingX * 2);
-    const bubbleWidth = Math.max(100, textWidth);
-    const bubbleHeight = 32;
+    if (!ctx) return;
+    const age = phraseMessage && phraseMessage.createdAt ? Math.max(0, Date.now() - phraseMessage.createdAt) : 1000;
+    const duration = 3600;
+    if (age >= duration) return;
 
-    let bx, by;
-    let tailPoints;
+    // Animation physics: Spring bounce in (0-280ms), breathing/float (280-3000ms), drift fade-out (3000-3600ms)
+    let scale = 1;
+    let alpha = 1;
+    let floatY = 0;
 
-    if (cardX < 200) {
-      bx = cardX + cardWidth + 12;
-      by = cardY + 12;
-      tailPoints = [
-        [bx, by + 10],
-        [cardX + cardWidth + 2, by + 16],
-        [bx, by + 22],
-      ];
-    } else if (cardX > 600) {
-      bx = cardX - bubbleWidth - 12;
-      by = cardY + 12;
-      tailPoints = [
-        [bx + bubbleWidth, by + 10],
-        [cardX - 2, by + 16],
-        [bx + bubbleWidth, by + 22],
-      ];
+    if (age < 280) {
+      const t = age / 280;
+      const s = 1.70158;
+      const p = t - 1;
+      scale = Math.max(0.05, p * p * ((s + 1) * p + s) + 1);
+      alpha = Math.min(1, age / 90);
+    } else if (age < 3000) {
+      const floatT = (age - 280) / 1000;
+      floatY = Math.sin(floatT * 2.8) * 2.2;
+      scale = 1 + Math.sin(floatT * 3.4) * 0.018;
+      alpha = 1;
     } else {
-      bx = cardX + cardWidth / 2 - bubbleWidth / 2;
-      by = cardY + cardHeight + 8;
-      tailPoints = [
-        [bx + bubbleWidth / 2 - 7, by],
-        [cardX + cardWidth / 2, cardY + cardHeight + 2],
-        [bx + bubbleWidth / 2 + 7, by],
-      ];
+      const exitProgress = Math.min(1, (age - 3000) / 600);
+      alpha = Math.max(0, 1 - exitProgress);
+      floatY = -exitProgress * 10;
+      scale = Math.max(0.8, 1 - exitProgress * 0.12);
     }
 
-    ctx.save();
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
-    ctx.shadowBlur = 10;
-    ctx.shadowOffsetY = 3;
+    // Dimensions: Plumper capsule shape (height 40px, rounded corners 18px)
+    const paddingX = 18;
+    const textWidth = Math.min(230, text.length * 13.5 + paddingX * 2);
+    const bubbleWidth = Math.max(116, textWidth);
+    const bubbleHeight = 40;
+    const radius = 18;
 
-    this.roundRect(bx, by, bubbleWidth, bubbleHeight, 8, '#fffdf4', '#d09f3e');
-    this.polygon(tailPoints, '#fffdf4', '#d09f3e', 1.5);
+    let bx, by;
+    let tailSide = 'top';
+
+    if (cardX < 200) {
+      bx = cardX + cardWidth + 14;
+      by = cardY + 8;
+      tailSide = 'left';
+    } else if (cardX > 600) {
+      bx = cardX - bubbleWidth - 14;
+      by = cardY + 8;
+      tailSide = 'right';
+    } else {
+      bx = cardX + cardWidth / 2 - bubbleWidth / 2;
+      by = cardY + cardHeight + 10;
+      tailSide = 'top';
+    }
+
+    const finalBy = by + floatY;
+    const cx = bx + bubbleWidth / 2;
+    const cy = finalBy + bubbleHeight / 2;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(scale, scale);
+    ctx.translate(-cx, -cy);
+    ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+
+    // Outer rich drop shadow
+    ctx.save();
+    ctx.shadowColor = 'rgba(10, 6, 2, 0.45)';
+    ctx.shadowBlur = 14;
+    ctx.shadowOffsetY = 4;
+
+    // Bubble capsule body with warm ivory jade gradient
+    const bubbleBg = this.linearFill(bx, finalBy, bx, finalBy + bubbleHeight,
+      [[0, '#ffffff'], [0.45, '#fffcf4'], [1, '#faeed6']], '#fffcf4');
+    this.roundRect(bx, finalBy, bubbleWidth, bubbleHeight, radius, bubbleBg, '#dca742', 2);
+
+    // Tail pointer with seamless connection to bubble
+    let tailPoints;
+    let seamPoints;
+    let companionBubble;
+    if (tailSide === 'left') {
+      tailPoints = [[bx + 1, finalBy + 13], [cardX + cardWidth + 2, finalBy + 20], [bx + 1, finalBy + 27]];
+      seamPoints = [[bx, finalBy + 14], [bx + 6, finalBy + 20], [bx, finalBy + 26]];
+      companionBubble = { x: cardX + cardWidth - 2, y: finalBy + 22, r: 3 };
+    } else if (tailSide === 'right') {
+      tailPoints = [[bx + bubbleWidth - 1, finalBy + 13], [cardX - 2, finalBy + 20], [bx + bubbleWidth - 1, finalBy + 27]];
+      seamPoints = [[bx + bubbleWidth, finalBy + 14], [bx + bubbleWidth - 6, finalBy + 20], [bx + bubbleWidth, finalBy + 26]];
+      companionBubble = { x: cardX + 2, y: finalBy + 22, r: 3 };
+    } else {
+      tailPoints = [[bx + bubbleWidth / 2 - 9, finalBy + 1], [cardX + cardWidth / 2, cardY + cardHeight + 2], [bx + bubbleWidth / 2 + 9, finalBy + 1]];
+      seamPoints = [[bx + bubbleWidth / 2 - 8, finalBy + 1], [bx + bubbleWidth / 2, finalBy + 6], [bx + bubbleWidth / 2 + 8, finalBy + 1]];
+      companionBubble = { x: cardX + cardWidth / 2, y: cardY + cardHeight - 2, r: 3 };
+    }
+
+    this.polygon(tailPoints, '#fffcf4', '#dca742', 2);
     ctx.restore();
 
-    this.polygon(tailPoints, '#fffdf4');
-    const displayText = this.fitText(text, bubbleWidth - 20, 12);
-    this.text(displayText, bx + bubbleWidth / 2, by + 20, 12, '#2d1d0f', 'center', '700');
+    // Clean seam and draw companion micro-bubble
+    this.polygon(seamPoints, '#fffcf4');
+    if (companionBubble) {
+      this.circle(companionBubble.x, companionBubble.y, companionBubble.r, '#fffcf4', '#dca742', 1.2);
+    }
+
+    // Top glossy reflection arc (plump 3D highlight)
+    this.roundRect(bx + 4, finalBy + 3, bubbleWidth - 8, bubbleHeight * 0.42, radius - 4, 'rgba(255, 255, 255, 0.72)');
+
+    // Sparkle star accents
+    const sparklePhase = Math.sin(age / 180);
+    const sparkleSize = 4.5 + sparklePhase * 2;
+    this.drawSparkle(bx + bubbleWidth - 10, finalBy + 2, sparkleSize, '#ffd447');
+    if (age < 1500) {
+      this.drawSparkle(bx + 10, finalBy + bubbleHeight - 3, 3 + sparklePhase * 1.5, '#f6ba33');
+    }
+
+    // Text: bold, crisp, comfortable padding
+    const displayText = this.fitText(text, bubbleWidth - 24, 13, '700');
+    this.text(displayText, cx, cy + 5, 13, '#2a1606', 'center', '700');
+
+    ctx.restore();
   }
 
   drawInteractionEffect(state, message, targetSeat, cardX, cardY, cardWidth) {
@@ -1851,6 +1940,8 @@ class MahjongRenderer {
 
   drawInteractionPicker(state) {
     if (!state.selectedTarget) return;
+    const ownSeat = state.snapshot?.private?.seat;
+    if (ownSeat && state.selectedTarget.seat === ownSeat) return;
     const width = 316;
     const height = 82;
     const x = this.roomLayout().width / 2 - width / 2;

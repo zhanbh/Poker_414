@@ -272,6 +272,22 @@ class FourOneFourRenderer {
     }
   }
 
+  drawSparkle(cx, cy, size, color = '#38bdf8') {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - size);
+    ctx.quadraticCurveTo(cx, cy, cx + size, cy);
+    ctx.quadraticCurveTo(cx, cy, cx, cy + size);
+    ctx.quadraticCurveTo(cx, cy, cx - size, cy);
+    ctx.quadraticCurveTo(cx, cy, cx, cy - size);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
   text(value, x, y, size = 16, color = COLORS.text, align = 'left', weight = '400') {
     this.ctx.fillStyle = color;
     this.ctx.font = `${weight} ${size}px sans-serif`;
@@ -792,12 +808,12 @@ class FourOneFourRenderer {
         this.text('庄', x + width - 22, y + 14, 10, '#ffedd5', 'center', '700');
       }
 
-      // Gift badge
-      this.circle(x + width - 18, y + height - 18, 10, selected ? '#eab308' : 'rgba(18, 48, 58, 0.9)', selected ? '#ffffff' : 'rgba(255, 215, 120, 0.7)');
-      this.text('🎁', x + width - 18, y + height - 17, 9.5, selected ? '#1f2937' : '#ffd875', 'center');
-
-      // Touch target for avatar interaction (allows self-interaction for testing!)
-      this.targets.push({ x, y, w: width, h: height, width, height, type: 'select-player', data: { seat: player.seat, nickname: player.nickname } });
+      // Gift badge and touch target (only for other players)
+      if (!isMe) {
+        this.circle(x + width - 18, y + height - 18, 10, selected ? '#eab308' : 'rgba(18, 48, 58, 0.9)', selected ? '#ffffff' : 'rgba(255, 215, 120, 0.7)');
+        this.text('🎁', x + width - 18, y + height - 17, 9.5, selected ? '#1f2937' : '#ffd875', 'center');
+        this.targets.push({ x, y, w: width, h: height, width, height, type: 'select-player', data: { seat: player.seat, nickname: player.nickname } });
+      }
     } else {
       this.circle(x + 24, y + height / 2, 16, 'rgba(16, 40, 52, 0.6)', 'rgba(56, 106, 128, 0.5)');
       this.text('+', x + 24, y + height / 2, 18, '#8ba4b0', 'center');
@@ -818,49 +834,135 @@ class FourOneFourRenderer {
       (m) => m.kind === 'phrase' && m.senderSeat === seat && Date.now() - m.createdAt < 3600,
     );
     if (latestPhrase && latestPhrase.text) {
-      this.drawSpeechBubble(latestPhrase.text, x, y, width, height);
+      this.drawSpeechBubble(latestPhrase.text, x, y, width, height, latestPhrase);
     }
   }
 
-  drawSpeechBubble(text, cardX, cardY, cardWidth, cardHeight) {
+  drawSpeechBubble(text, cardX, cardY, cardWidth, cardHeight, phraseMessage = null) {
     const ctx = this.ctx;
-    const paddingX = 14;
-    const textWidth = Math.min(220, text.length * 13 + paddingX * 2);
-    const bubbleWidth = Math.max(100, textWidth);
-    const bubbleHeight = 32;
+    if (!ctx) return;
+    const age = phraseMessage && phraseMessage.createdAt ? Math.max(0, Date.now() - phraseMessage.createdAt) : 1000;
+    const duration = 3600;
+    if (age >= duration) return;
+
+    // Animation physics: Spring bounce in (0-280ms), breathing/float (280-3000ms), drift fade-out (3000-3600ms)
+    let scale = 1;
+    let alpha = 1;
+    let floatY = 0;
+
+    if (age < 280) {
+      const t = age / 280;
+      const s = 1.70158;
+      const p = t - 1;
+      scale = Math.max(0.05, p * p * ((s + 1) * p + s) + 1);
+      alpha = Math.min(1, age / 90);
+    } else if (age < 3000) {
+      const floatT = (age - 280) / 1000;
+      floatY = Math.sin(floatT * 2.8) * 2.2;
+      scale = 1 + Math.sin(floatT * 3.4) * 0.018;
+      alpha = 1;
+    } else {
+      const exitProgress = Math.min(1, (age - 3000) / 600);
+      alpha = Math.max(0, 1 - exitProgress);
+      floatY = -exitProgress * 10;
+      scale = Math.max(0.8, 1 - exitProgress * 0.12);
+    }
+
+    // Dimensions: Plumper capsule shape (height 40px, rounded corners 18px)
+    const paddingX = 18;
+    const textWidth = Math.min(230, text.length * 13.5 + paddingX * 2);
+    const bubbleWidth = Math.max(116, textWidth);
+    const bubbleHeight = 40;
+    const radius = 18;
 
     let bx;
     let by;
-    let tailPoints;
+    let tailSide = 'bottom';
 
     if (cardX < 200) {
-      bx = cardX + cardWidth + 10;
-      by = cardY + 12;
-      tailPoints = [[bx, by + 10], [cardX + cardWidth + 2, by + 16], [bx, by + 22]];
+      bx = cardX + cardWidth + 14;
+      by = cardY + 8;
+      tailSide = 'left';
     } else if (cardX > 600) {
-      bx = cardX - bubbleWidth - 10;
-      by = cardY + 12;
-      tailPoints = [[bx + bubbleWidth, by + 10], [cardX - 2, by + 16], [bx + bubbleWidth, by + 22]];
+      bx = cardX - bubbleWidth - 14;
+      by = cardY + 8;
+      tailSide = 'right';
     } else if (cardY < 120) {
       bx = cardX + cardWidth / 2 - bubbleWidth / 2;
       by = cardY + cardHeight + 10;
-      tailPoints = [[bx + bubbleWidth / 2 - 8, by], [cardX + cardWidth / 2, cardY + cardHeight + 2], [bx + bubbleWidth / 2 + 8, by]];
+      tailSide = 'top';
     } else {
       bx = cardX + cardWidth / 2 - bubbleWidth / 2;
       by = cardY - bubbleHeight - 10;
-      tailPoints = [[bx + bubbleWidth / 2 - 8, by + bubbleHeight], [cardX + cardWidth / 2, cardY - 2], [bx + bubbleWidth / 2 + 8, by + bubbleHeight]];
+      tailSide = 'bottom';
     }
 
+    const finalBy = by + floatY;
+    const cx = bx + bubbleWidth / 2;
+    const cy = finalBy + bubbleHeight / 2;
+
     ctx.save();
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
-    ctx.shadowBlur = 8;
-    ctx.shadowOffsetY = 3;
-    this.roundRect(bx, by, bubbleWidth, bubbleHeight, 8, '#ffffff', '#38bdf8', 1.5);
-    this.polygon(tailPoints, '#ffffff');
+    ctx.translate(cx, cy);
+    ctx.scale(scale, scale);
+    ctx.translate(-cx, -cy);
+    ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+
+    // Outer drop shadow
+    ctx.save();
+    ctx.shadowColor = 'rgba(2, 20, 30, 0.45)';
+    ctx.shadowBlur = 14;
+    ctx.shadowOffsetY = 4;
+
+    // Crisp crystal white-blue gradient
+    const bubbleBg = this.linearFill(bx, finalBy, bx, finalBy + bubbleHeight,
+      [[0, '#ffffff'], [0.45, '#f8fcff'], [1, '#e0f2fe']], '#ffffff');
+    this.roundRect(bx, finalBy, bubbleWidth, bubbleHeight, radius, bubbleBg, '#38bdf8', 2);
+
+    let tailPoints;
+    let seamPoints;
+    let companionBubble;
+
+    if (tailSide === 'left') {
+      tailPoints = [[bx + 1, finalBy + 13], [cardX + cardWidth + 2, finalBy + 20], [bx + 1, finalBy + 27]];
+      seamPoints = [[bx, finalBy + 14], [bx + 6, finalBy + 20], [bx, finalBy + 26]];
+      companionBubble = { x: cardX + cardWidth - 2, y: finalBy + 22, r: 3 };
+    } else if (tailSide === 'right') {
+      tailPoints = [[bx + bubbleWidth - 1, finalBy + 13], [cardX - 2, finalBy + 20], [bx + bubbleWidth - 1, finalBy + 27]];
+      seamPoints = [[bx + bubbleWidth, finalBy + 14], [bx + bubbleWidth - 6, finalBy + 20], [bx + bubbleWidth, finalBy + 26]];
+      companionBubble = { x: cardX + 2, y: finalBy + 22, r: 3 };
+    } else if (tailSide === 'top') {
+      tailPoints = [[bx + bubbleWidth / 2 - 9, finalBy + 1], [cardX + cardWidth / 2, cardY + cardHeight + 2], [bx + bubbleWidth / 2 + 9, finalBy + 1]];
+      seamPoints = [[bx + bubbleWidth / 2 - 8, finalBy + 1], [bx + bubbleWidth / 2, finalBy + 6], [bx + bubbleWidth / 2 + 8, finalBy + 1]];
+      companionBubble = { x: cardX + cardWidth / 2, y: cardY + cardHeight - 2, r: 3 };
+    } else {
+      tailPoints = [[bx + bubbleWidth / 2 - 9, finalBy + bubbleHeight - 1], [cardX + cardWidth / 2, cardY - 2], [bx + bubbleWidth / 2 + 9, finalBy + bubbleHeight - 1]];
+      seamPoints = [[bx + bubbleWidth / 2 - 8, finalBy + bubbleHeight - 1], [bx + bubbleWidth / 2, finalBy + bubbleHeight - 6], [bx + bubbleWidth / 2 + 8, finalBy + bubbleHeight - 1]];
+      companionBubble = { x: cardX + cardWidth / 2, y: cardY + 2, r: 3 };
+    }
+
+    this.polygon(tailPoints, '#f0f9ff', '#38bdf8', 2);
     ctx.restore();
 
-    const displayText = this.fit(text, bubbleWidth - 20, 12);
-    this.text(displayText, bx + bubbleWidth / 2, by + bubbleHeight / 2, 12, '#0f172a', 'center', '700');
+    this.polygon(seamPoints, '#f0f9ff');
+    if (companionBubble) {
+      this.circle(companionBubble.x, companionBubble.y, companionBubble.r, '#f0f9ff', '#38bdf8', 1.2);
+    }
+
+    // Top glossy highlight arc
+    this.roundRect(bx + 4, finalBy + 3, bubbleWidth - 8, bubbleHeight * 0.42, radius - 4, 'rgba(255, 255, 255, 0.85)');
+
+    // Sparkle star accents
+    const sparklePhase = Math.sin(age / 180);
+    const sparkleSize = 4.5 + sparklePhase * 2;
+    this.drawSparkle(bx + bubbleWidth - 10, finalBy + 2, sparkleSize, '#38bdf8');
+    if (age < 1500) {
+      this.drawSparkle(bx + 10, finalBy + bubbleHeight - 3, 3 + sparklePhase * 1.5, '#facc15');
+    }
+
+    const displayText = this.fit(text, bubbleWidth - 24, 13);
+    this.text(displayText, cx, cy + 5, 13, '#0f172a', 'center', '700');
+
+    ctx.restore();
   }
 
   drawInteractionEffect(state, message, targetSeat, cardX, cardY, cardWidth) {
@@ -1303,6 +1405,8 @@ class FourOneFourRenderer {
 
   drawInteractionPicker(state, width) {
     if (!state.selectedTarget) return;
+    const me = state.snapshot?.private?.seat;
+    if (me && state.selectedTarget.seat === me) return;
     const barW = 320;
     const barH = 82;
     const x = width / 2 - barW / 2;

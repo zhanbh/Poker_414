@@ -565,6 +565,8 @@ class FourOneFourGameApp {
       return;
     }
     if (type === 'select-player') {
+      const me = this.state.snapshot?.private?.seat;
+      if (me && data.seat === me) return;
       this.state.selectedTarget = this.state.selectedTarget?.seat === data.seat ? null : data;
       this.draw();
       return;
@@ -607,13 +609,18 @@ class FourOneFourGameApp {
 
   async sendInteraction(interaction, explicitTarget = null) {
     let target = explicitTarget || this.state.selectedTarget;
+    const me = this.state.snapshot?.private?.seat;
+    if (target && me && target.seat === me) {
+      this.state.selectedTarget = null;
+      this.draw();
+      return;
+    }
     if (!target) {
       const players = this.state.snapshot?.public?.players || [];
-      const me = this.state.snapshot?.private?.seat;
-      const other = players.find((p) => p.seat !== me) || players[0];
+      const other = players.find((p) => p.seat !== me);
       if (other) target = { seat: other.seat, nickname: other.nickname };
     }
-    if (!target) return;
+    if (!target || (me && target.seat === me)) return;
     try {
       await this.transport.chat({ kind: 'interaction', interaction, target: { nickname: target.nickname, seat: target.seat } });
       this.state.statusMessage = `已向 ${target.nickname} 发送 ${INTERACTION_LABELS[interaction] || '互动'}`;

@@ -889,110 +889,151 @@ class MahjongRenderer {
     if (progress < flyRatio) {
       const p = progress / flyRatio;
       const easeP = p * (2 - p);
-      const arc = -75 * Math.sin(p * Math.PI);
+      const arc = -85 * Math.sin(p * Math.PI);
       const curX = startX + (targetX - startX) * easeP;
-      const curY = startY + (targetY - startY) * easeP + arc;
+      const curY = startY + (targetY - (type === 'water' ? 60 : 0) - startY) * easeP + arc;
 
       ctx.save();
       if (type === 'tomato') {
         ctx.translate(curX, curY);
-        ctx.rotate(p * Math.PI * 4);
-        for (let i = 1; i <= 3; i += 1) {
-          this.circle(-i * 10, Math.sin(i) * 5, Math.max(1, 4 - i), `rgba(239, 68, 68, ${0.6 - i * 0.16})`);
+        ctx.rotate(p * Math.PI * 6);
+        for (let i = 1; i <= 4; i += 1) {
+          this.circle(-i * 9, Math.sin(i * 1.5) * 4, Math.max(1.5, 5 - i), `rgba(239, 68, 68, ${0.7 - i * 0.15})`);
         }
-        this.text('🍅', 0, 9, 28, COLORS.text, 'center');
+        this.text('🍅', 0, 11, 36, COLORS.text, 'center');
       } else if (type === 'water') {
-        const p = progress / flyRatio;
-        const easeP = p * (2 - p);
-        const arc = -75 * Math.sin(p * Math.PI);
-        const curX = startX + (targetX - startX) * easeP;
-        const curY = startY + (targetY - 60 - startY) * easeP + arc;
-
-        // Rocking tilt as it flies, tipping over at the end
         const flyTilt = (targetX >= startX ? 0.2 : -0.2) + Math.sin(p * Math.PI * 3) * 0.15;
         const tipAtEnd = p > 0.65 ? ((p - 0.65) / 0.35) * Math.PI * 0.55 : 0;
-        const totalTilt = flyTilt + tipAtEnd;
-
-        // Droplet trail behind flying bucket
         for (let i = 1; i <= 4; i += 1) {
           const tp = Math.max(0, p - i * 0.08);
           const tx = startX + (targetX - startX) * tp;
-          const ty = startY + (targetY - 60 - startY) * tp - 75 * Math.sin(tp * Math.PI);
+          const ty = startY + (targetY - 60 - startY) * tp - 85 * Math.sin(tp * Math.PI);
           this.circle(tx, ty, Math.max(1.5, 4 - i * 0.7), 'rgba(186, 230, 253, 0.75)');
         }
-
-        this.drawWaterBucket(curX, curY, totalTilt, 1.2, p > 0.75);
+        this.drawWaterBucket(curX, curY, flyTilt + tipAtEnd, 1.25, p > 0.75);
       } else if (type === 'heart') {
-        const pulse = 1 + 0.2 * Math.sin(p * Math.PI * 5);
+        const pulse = 1 + 0.35 * Math.sin(p * Math.PI * 8);
         ctx.translate(curX, curY);
         ctx.scale(pulse, pulse);
-        this.circle(0, 0, 16, 'rgba(244, 114, 182, 0.35)');
-        for (let i = 1; i <= 3; i += 1) {
-          const tp = Math.max(0, p - i * 0.08);
+        this.circle(0, 0, 20, 'rgba(244, 114, 182, 0.45)');
+        for (let i = 1; i <= 4; i += 1) {
+          const tp = Math.max(0, p - i * 0.07);
           const tx = startX + (targetX - startX) * tp;
-          const ty = startY + (targetY - startY) * tp - 75 * Math.sin(tp * Math.PI);
-          this.text('✨', tx, ty + 4, 11 - i * 2, '#fde047', 'center');
+          const ty = startY + (targetY - startY) * tp - 85 * Math.sin(tp * Math.PI);
+          this.text(i % 2 === 0 ? '✨' : '💕', tx, ty + 3, 13 - i * 2, '#fde047', 'center');
         }
-        this.text('💖', 0, 9, 28, COLORS.text, 'center');
+        this.text('💖', 0, 10, 36, COLORS.text, 'center');
       } else if (type === 'kiss') {
-        const wave = Math.sin(p * Math.PI * 4) * 8;
+        const wave = Math.sin(p * Math.PI * 5) * 10;
         ctx.translate(curX, curY + wave);
-        ctx.rotate(-0.15 + Math.sin(p * Math.PI * 4) * 0.15);
-        for (let i = 1; i <= 3; i += 1) {
-          const tp = Math.max(0, p - i * 0.08);
+        ctx.rotate(-0.15 + Math.sin(p * Math.PI * 5) * 0.2);
+        for (let i = 1; i <= 4; i += 1) {
+          const tp = Math.max(0, p - i * 0.07);
           const tx = startX + (targetX - startX) * tp;
-          const ty = startY + (targetY - startY) * tp - 75 * Math.sin(tp * Math.PI);
-          this.text('❤️', tx, ty + 3, 10 - i * 2, '#f43f5e', 'center');
+          const ty = startY + (targetY - startY) * tp - 85 * Math.sin(tp * Math.PI);
+          this.text(i % 2 === 0 ? '❤️' : '💋', tx, ty + 3, 12 - i * 2, '#f43f5e', 'center');
         }
-        this.text('💋', 0, 9, 28, COLORS.text, 'center');
+        this.text('💋', 0, 10, 36, COLORS.text, 'center');
       } else {
-        this.text(icon, curX, curY + 8, 28, COLORS.text, 'center');
+        this.text(icon, curX, curY + 8, 30, COLORS.text, 'center');
       }
       ctx.restore();
     } else {
       const p = (progress - flyRatio) / (1 - flyRatio);
-      const alpha = p > 0.65 ? Math.max(0, 1 - (p - 0.65) / 0.35) : 1;
+      const alpha = p > 0.75 ? Math.max(0, 1 - (p - 0.75) / 0.25) : 1;
 
       ctx.save();
       ctx.globalAlpha = alpha;
 
       if (type === 'tomato') {
-        const dripY = targetY + p * 10;
-        if (p < 0.28) {
-          const ringR = 12 + p * 80;
-          this.circle(targetX, targetY, ringR, null, `rgba(255, 100, 100, ${1 - p * 3.5})`, 3);
-          for (let i = 0; i < 4; i += 1) {
-            const ang = i * Math.PI / 2 + 0.3;
-            const d = 22 + p * 45;
-            this.text('✦', targetX + Math.cos(ang) * d, targetY + Math.sin(ang) * d + 5, 13, '#ffd54f', 'center');
+        // 番茄爆浆：把头像完全打满，然后番茄汁慢慢向下流淌！
+        const dripY = targetY + p * 16;
+
+        // 1. 命中瞬间震波爆开 (p < 0.25)
+        if (p < 0.25) {
+          const shockR = 15 + p * 120;
+          this.circle(targetX, targetY, shockR, null, `rgba(239, 68, 68, ${1 - p * 3.8})`, 4);
+          for (let i = 0; i < 8; i += 1) {
+            const ang = i * (Math.PI / 4) + 0.2;
+            const dist = 28 + p * 80;
+            this.text('✦', targetX + Math.cos(ang) * dist, targetY + Math.sin(ang) * dist + 5, 14, '#fde047', 'center');
           }
         }
-        this.circle(targetX, dripY, 20 + Math.min(6, p * 8), '#d32f2f');
-        const lobes = [
-          [-16, -10, 11], [15, -12, 12], [-14, 12, 13], [16, 11, 10],
-          [-2, -18, 9], [4, 18, 12], [-19, 2, 8], [19, -2, 9],
+
+        // 2. 超大番茄果肉与浓浆底，完整铺满/打满整个头像 (半径 36~44，远远超出 26px 的头像)
+        this.circle(targetX, dripY, 36 + Math.min(8, p * 8), '#991b1b');
+        const mainLobes = [
+          [-24, -16, 17], [22, -18, 18], [-22, 18, 19], [24, 16, 17],
+          [-4, -28, 16], [6, 26, 18], [-30, 2, 15], [30, -2, 16],
+          [-14, -26, 14], [16, -24, 15], [-16, 26, 16], [18, 24, 15],
         ];
-        lobes.forEach(([ox, oy, rad]) => {
-          this.circle(targetX + ox, dripY + oy, rad, '#c62828');
+        mainLobes.forEach(([ox, oy, rad]) => {
+          this.circle(targetX + ox, dripY + oy, rad, '#b91c1c');
         });
-        this.circle(targetX - 7, dripY - 7, 5, 'rgba(255, 138, 128, 0.75)');
-        this.circle(targetX + 6, dripY + 4, 3, 'rgba(255, 235, 238, 0.85)');
-        this.roundRect(targetX - 9, dripY + 12, 5, 12 + p * 12, 2.5, '#b71c1c');
-        this.roundRect(targetX + 8, dripY + 10, 4, 9 + p * 10, 2, '#b71c1c');
-        for (let i = 0; i < 8; i += 1) {
-          const angle = i * (Math.PI / 4) + 0.25;
-          const speed = 28 + (i % 3) * 14;
-          const dist = speed * Math.sin(p * Math.PI * 0.5);
-          const grav = p * p * 32;
+        // 鲜亮红心肉块与果浆高光
+        this.circle(targetX, dripY, 26, '#dc2626');
+        this.circle(targetX - 10, dripY - 10, 8, 'rgba(254, 202, 202, 0.85)');
+        this.circle(targetX + 8, dripY + 6, 5, 'rgba(255, 255, 255, 0.8)');
+
+        // 黄色番茄小籽粒
+        for (let i = 0; i < 5; i += 1) {
+          const seedX = targetX + Math.sin(i * 1.3) * 16;
+          const seedY = dripY + Math.cos(i * 1.5) * 14;
+          this.drawOval(seedX, seedY, 3, 1.8, '#fef08a', '#ca8a04', 0.8);
+        }
+
+        // 3. 慢慢往下流下的多条浓稠番茄汁挂流 (Drips running down!)
+        const dripStreams = [
+          { ox: -16, maxLen: 48, w: 6.5, speed: 1.1 },
+          { ox: 10, maxLen: 62, w: 7.5, speed: 1.3 },
+          { ox: -28, maxLen: 32, w: 5.0, speed: 0.9 },
+          { ox: 26, maxLen: 36, w: 5.5, speed: 0.95 },
+          { ox: -3, maxLen: 54, w: 6.0, speed: 1.2 },
+        ];
+        dripStreams.forEach(({ ox, maxLen, w, speed }) => {
+          const curLen = Math.min(maxLen, p * speed * maxLen);
+          const startStreamY = dripY + 18;
+          const endStreamY = startStreamY + curLen;
+          // 流淌暗色外框
+          this.roundRect(targetX + ox - w / 2, startStreamY, w, curLen, w / 2, '#991b1b');
+          // 流淌鲜红核心
+          this.roundRect(targetX + ox - w / 2 + 1, startStreamY, w - 2, curLen, (w - 2) / 2, '#dc2626');
+          // 悬垂挂珠（底端圆水滴）
+          this.circle(targetX + ox, endStreamY, w * 0.75, '#b91c1c');
+          this.circle(targetX + ox - 1, endStreamY - 1, w * 0.35, 'rgba(254, 202, 202, 0.85)');
+
+          // 滴落分离的小液滴向下落下
+          if (p * speed > 0.6) {
+            const dropProgress = (p * speed - 0.6) / 0.4;
+            const dropFallY = endStreamY + dropProgress * 28;
+            this.circle(targetX + ox, dropFallY, w * 0.55, '#dc2626');
+          }
+        });
+
+        // 底部汇聚的小番茄酱池
+        if (p > 0.3) {
+          const puddleW = Math.min(48, (p - 0.3) * 70);
+          this.drawOval(targetX - 2, targetY + 68, puddleW, 6, '#991b1b');
+          this.drawOval(targetX - 2, targetY + 68, puddleW * 0.8, 4, '#dc2626');
+        }
+
+        // 4. 初炸四溅的果肉液滴向外抛物线炸开
+        for (let i = 0; i < 14; i += 1) {
+          const angle = i * (Math.PI * 2 / 14) + 0.15;
+          const speed = 36 + (i % 4) * 14;
+          const dist = speed * Math.sin(Math.min(1, p * 1.8) * Math.PI * 0.5);
+          const grav = p * p * 42;
           const px = targetX + Math.cos(angle) * dist;
           const py = targetY + Math.sin(angle) * dist + grav;
-          const pr = Math.max(1, (4 - (i % 2)) * (1 - p * 0.7));
-          this.circle(px, py, pr, i % 2 === 0 ? '#ff5252' : '#d50000');
+          const pr = Math.max(1.5, (5 - (i % 3)) * (1 - p * 0.65));
+          this.circle(px, py, pr, i % 2 === 0 ? '#ef4444' : '#b91c1c');
         }
+
+        // 扁平番茄皮与压扁的菜蒂
         ctx.save();
         ctx.translate(targetX, dripY);
-        ctx.scale(1.3, Math.max(0.3, 0.7 - p * 1.2));
-        this.text('🍅', 0, 8, 28, COLORS.text, 'center');
+        ctx.scale(1.5, Math.max(0.4, 0.75 - p * 1.1));
+        this.text('🍅', 0, 8, 32, COLORS.text, 'center');
         ctx.restore();
       } else if (type === 'water') {
         const bucketX = targetX - 16;
@@ -1109,47 +1150,89 @@ class MahjongRenderer {
           }
         }
       } else if (type === 'heart') {
-        const auraR = 15 + p * 45;
-        this.circle(targetX, targetY, auraR, `rgba(244, 114, 182, ${0.35 * (1 - p)})`, `rgba(253, 224, 71, ${0.5 * (1 - p)})`, 2);
-        const miniHearts = ['💕', '💗', '✨', '💖', '💕', '✨'];
-        for (let i = 0; i < 6; i += 1) {
-          const ang = i * (Math.PI / 3) + p * 1.2;
-          const dist = (20 + (i % 3) * 14) * Math.sqrt(p);
-          const lift = p * 38;
-          const hx = targetX + Math.cos(ang) * dist;
-          const hy = targetY + Math.sin(ang) * dist - lift;
-          this.text(miniHearts[i], hx, hy + 5, 16 - (i % 2) * 3, COLORS.text, 'center');
+        // 比心狂欢：超大爱心震荡波 + 夸张巨型心跳 + 漫天爱心螺旋雨！
+        // 1. 巨大粉金双层冲击波光环 (扩散至 110px)
+        const outerAuraR = 20 + p * 110;
+        const innerAuraR = 15 + p * 75;
+        this.circle(targetX, targetY, outerAuraR, `rgba(244, 114, 182, ${0.45 * (1 - p)})`, `rgba(253, 224, 71, ${0.7 * (1 - p)})`, 3);
+        this.circle(targetX, targetY, innerAuraR, `rgba(251, 113, 133, ${0.35 * (1 - p)})`, `rgba(244, 114, 182, ${0.8 * (1 - p)})`, 2);
+
+        // 2. 漫天喷涌升腾的夸张爱心雨 (16 颗绚烂彩心螺旋扩散升腾)
+        const burstHearts = ['💖', '💕', '💓', '💘', '✨', '💝', '🥰', '🌸', '💗', '💕', '✨', '💖', '💓', '💘', '💕', '✨'];
+        for (let i = 0; i < burstHearts.length; i += 1) {
+          const ang = i * (Math.PI * 2 / burstHearts.length) + p * 1.5;
+          const spread = (25 + (i % 4) * 16) * Math.sin(Math.min(1, p * 1.6) * Math.PI * 0.5);
+          const lift = p * 65;
+          const sway = Math.sin(p * 5 + i * 0.9) * 10;
+          const hx = targetX + Math.cos(ang) * spread + sway;
+          const hy = targetY + Math.sin(ang) * spread - lift;
+          const hSize = 18 - (i % 3) * 3;
+          this.text(burstHearts[i], hx, hy + 5, hSize, COLORS.text, 'center');
         }
-        const beat = 1 + 0.36 * Math.sin(p * Math.PI * 4) * Math.exp(-p * 2);
+
+        // 3. 中央巨型浮空立体大爱心（剧烈弹性心跳放大至 56px！）
+        const beatScale = 1 + 0.45 * Math.sin(p * Math.PI * 6) * Math.max(0, 1 - p * 0.6);
         ctx.save();
-        ctx.translate(targetX, targetY);
-        ctx.scale(beat, beat);
-        this.text('💖', 0, 10, 36, COLORS.text, 'center');
+        ctx.translate(targetX, targetY - 4);
+        ctx.scale(beatScale, beatScale);
+        this.circle(0, 0, 28, 'rgba(244, 114, 182, 0.4)');
+        this.circle(0, 0, 20, 'rgba(254, 240, 138, 0.6)');
+        this.text('💖', 0, 12, 56, COLORS.text, 'center');
         ctx.restore();
       } else if (type === 'kiss') {
-        if (p < 0.3) {
-          const stampR = 12 + p * 80;
-          this.circle(targetX, targetY, stampR, null, `rgba(244, 63, 94, ${1 - p * 3.3})`, 3);
-        }
-        this.circle(targetX - 16, targetY + 6, 12, `rgba(251, 113, 133, ${0.35 * (1 - p)})`);
-        this.circle(targetX + 16, targetY + 6, 12, `rgba(251, 113, 133, ${0.35 * (1 - p)})`);
-        const kissHearts = ['❤️', '💕', '🥰', '❤️', '💋'];
-        for (let i = 0; i < 5; i += 1) {
-          const lift = p * 42;
-          const sway = Math.sin(p * 6 + i) * 14;
-          const hx = targetX + (i - 2) * 13 + sway;
-          const hy = targetY - 6 - lift;
-          this.text(kissHearts[i], hx, hy, 14, COLORS.text, 'center');
-        }
-        const stampScale = p < 0.15 ? 1.6 - (p / 0.15) * 0.6 : 1.0;
+        // 亲吻暴击：巨型红唇盖章 + 头像全脸打满 4 重吻痕 + 满天飞吻红心！
+        // 1. 盖章落地红色冲击光环 (扩散至 95px)
+        const stampWaveR = 16 + p * 95;
+        this.circle(targetX, targetY, stampWaveR, null, `rgba(244, 63, 94, ${0.9 * (1 - p)})`, 3.5);
+
+        // 2. 头像两侧泛起娇羞大红晕
+        this.circle(targetX - 25, targetY + 6, 16, `rgba(251, 113, 133, ${0.45 * (1 - p)})`);
+        this.circle(targetX + 25, targetY + 6, 16, `rgba(251, 113, 133, ${0.45 * (1 - p)})`);
+
+        // 3. 头像各部位打满 4 处深情烈焰大红唇印 (全脸狂亲印记)
+        // 印迹 1：左上脸颊吻痕 (34px, 顺时针旋转)
+        ctx.save();
+        ctx.translate(targetX - 22, targetY - 18);
+        ctx.rotate(0.28);
+        this.text('💋', 0, 0, 34, COLORS.text, 'center');
+        ctx.restore();
+
+        // 印迹 2：右下脸颊吻痕 (36px, 逆时针旋转)
+        ctx.save();
+        ctx.translate(targetX + 24, targetY + 16);
+        ctx.rotate(-0.32);
+        this.text('💋', 0, 0, 36, COLORS.text, 'center');
+        ctx.restore();
+
+        // 印迹 3：下巴小巧吻痕 (28px)
+        ctx.save();
+        ctx.translate(targetX - 8, targetY + 24);
+        ctx.rotate(0.12);
+        this.text('💋', 0, 0, 28, COLORS.text, 'center');
+        ctx.restore();
+
+        // 印迹 4：中央重磅超级大红唇 (54px，落地盖章缩放)
+        const mainScale = p < 0.16 ? 1.8 - (p / 0.16) * 0.7 : 1.1 + 0.1 * Math.sin(p * Math.PI * 4);
         ctx.save();
         ctx.translate(targetX, targetY);
-        ctx.rotate(-0.2);
-        ctx.scale(stampScale, stampScale);
-        this.text('💋', 0, 10, 36, COLORS.text, 'center');
+        ctx.rotate(-0.15);
+        ctx.scale(mainScale, mainScale);
+        this.text('💋', 0, 8, 54, COLORS.text, 'center');
         ctx.restore();
+
+        // 4. 满天飞舞的 14 颗红唇爱心与烈焰礼花粒子
+        const kissBursts = ['💋', '❤️', '🔥', '😘', '💕', '✨', '😍', '💋', '❤️', '💕', '🔥', '😘', '✨', '❤️'];
+        for (let i = 0; i < kissBursts.length; i += 1) {
+          const ang = i * (Math.PI * 2 / kissBursts.length) + p * 1.8;
+          const spread = (22 + (i % 4) * 15) * Math.sin(Math.min(1, p * 1.6) * Math.PI * 0.5);
+          const lift = p * 58;
+          const sway = Math.sin(p * 5.5 + i) * 12;
+          const kx = targetX + Math.cos(ang) * spread + sway;
+          const ky = targetY + Math.sin(ang) * spread - lift;
+          this.text(kissBursts[i], kx, ky + 4, 16 - (i % 2) * 3, COLORS.text, 'center');
+        }
       } else {
-        this.text(icon, targetX, targetY + 8, 28, COLORS.text, 'center');
+        this.text(icon, targetX, targetY + 8, 30, COLORS.text, 'center');
       }
 
       ctx.restore();

@@ -38,23 +38,17 @@ npm run dev
 - 支持对玩家发送番茄、泼水、比心、亲吻等互动，消息会记录在房间聊天中，并在玩家卡片上显示动画；
 - 使用 `?test=1` 进行单设备多标签页测试。
 
-如果手机浏览器或小程序真机出现 TLS 连接重置，记录见 [docs/known-issues.md](docs/known-issues.md)。
-
-## 微信小程序内测端
-
-仓库新增了独立的原生微信小程序前端，代码位于 miniprogram/，不会替换电脑网页版。小程序和网页版共用同一个 Node.js 房间服务与 `shared/` 规则模型；网页版继续使用 Socket.IO，小程序使用服务端新增的 `/414-ws` WebSocket 兼容通道，因此两端可以进入同一房间混合测试。当前 H5 和小程序内测入口仅提供 414 和麻将；德州扑克入口暂时隐藏，玩法代码仍保留。
-
-使用微信开发者工具导入 miniprogram/ 目录即可查看页面。详细导入、AppID、服务地址和 HTTPS/WSS 配置说明见 miniprogram/README.md。当前默认地址为 http://localhost:3000，真机测试前需要改成可访问的 HTTPS 地址，并在微信后台配置合法 socket 域名。
+如果手机浏览器或小游戏真机出现 TLS 连接重置，记录见 [docs/known-issues.md](docs/known-issues.md)。
 
 ## 微信小游戏端（414）
 
-414 微信小游戏客户端位于 `minigame-414/`，与麻将小游戏 `minigame/` 是两个独立工程，可分别导入和提交版本；H5、小程序工程均不受影响。414 工程使用 `gameId: 414`、麻将使用 `gameId: mahjong`，由同一 Node.js 服务按游戏类型隔离房间状态，因此现阶段无需复制云托管服务。
+414 微信小游戏客户端位于 `minigame-414/`，与麻将小游戏 `minigame/` 是两个独立工程，可分别导入和提交版本；H5 工程不受影响。414 工程使用 `gameId: 414`、麻将使用 `gameId: mahjong`，由同一 Node.js 服务按游戏类型隔离房间状态，因此现阶段无需复制云托管服务。
 
 导入 `minigame-414/` 后，项目已配置 414 专用小游戏 AppID；还需在 CloudBase 配置中授权该 AppID 使用现有环境 `prod-d0gncxity070cbe6f` 的 `express-xgjy` 服务。详细步骤见 [minigame-414/README.md](minigame-414/README.md)。上传体验版前，请确认 CloudBase 授权及小游戏后台的合法域名配置。
 
 ## 微信小游戏端（麻将）
 
-标准微信麻将小游戏客户端位于 `minigame/`，与 414 小游戏及上述小程序工程分别独立，使用 `compileType: game` 和 `game.js` Canvas 入口，不会修改 H5 或 `miniprogram/`。登录入口启动为竖屏，加入房间后动态切换横屏，退出后恢复竖屏，并复用同一个 `/414-ws` 房间服务。开发者工具中应直接导入 `minigame/` 目录。CloudBase/WSS 连接与小游戏合法 socket 域名配置要求见 [minigame/README.md](minigame/README.md)。
+标准微信麻将小游戏客户端位于 `minigame/`，与 414 小游戏分别独立，使用 `compileType: game` 和 `game.js` Canvas 入口，不会修改 H5。登录入口启动为竖屏，加入房间后动态切换横屏，退出后恢复竖屏，并复用同一个 `/414-ws` 房间服务。开发者工具中应直接导入 `minigame/` 目录。CloudBase/WSS 连接与小游戏合法 socket 域名配置要求见 [minigame/README.md](minigame/README.md)。
 
 小游戏客户端尚需在微信开发者工具模拟器和真机验证后才能上传体验版；微信小游戏代码不由现有 ECS 网站 CI/CD 自动发布。
 

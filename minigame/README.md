@@ -1,10 +1,10 @@
 # 308娱乐微信小游戏
 
-这是一个独立的微信小游戏客户端，不覆盖 `miniprogram/`、H5 或网页端。客户端用 `game.js` 启动，在 Canvas 上绘制入口、大厅、麻将牌桌和房间聊天；登录、座位、发牌、规则校验与结算继续复用现有 Node.js 服务端和 `/414-ws` 协议。
+这是一个独立的微信小游戏客户端，不覆盖 H5 或网页端。客户端用 `game.js` 启动，在 Canvas 上绘制入口、大厅、麻将牌桌和房间聊天；登录、座位、发牌、规则校验与结算继续复用现有 Node.js 服务端和 `/414-ws` 协议。
 
 ## 在微信开发者工具中导入
 
-1. 导入仓库中的 `minigame/` 目录，不要导入仓库根目录或 `miniprogram/`。
+1. 导入仓库中的 `minigame/` 目录，不要导入仓库根目录。
 2. 检查 `project.config.json`：`compileType` 应为 `game`，`appid` 应与已经开通小游戏的 AppID 一致。
 3. `game.json` 默认启动方向为竖屏，登录入口使用竖屏布局；成功加入麻将房间后会调用 `wx.setDeviceOrientation` 切换到横屏，退出后切回竖屏。该方向 API 从基础库 2.26.0 起支持，本项目配置基础库 3.8.8；切换后会重新设置 Canvas 尺寸并重绘。工具顶部应进入“小游戏”模式，并从 `game.js` 启动 Canvas 客户端。
 4. `src/config.js` 默认连接 CloudBase 环境 `prod-d0gncxity070cbe6f`、云托管服务 `express-xgjy` 和 `/414-ws`。先在开发者工具中确认小游戏 AppID 已关联该 CloudBase 环境。

@@ -35,17 +35,6 @@ module.exports = tseslint.config(
     },
   },
   {
-    files: ['miniprogram/**/*.js'],
-    languageOptions: {
-      globals: {
-        App: 'readonly',
-        Page: 'readonly',
-        getApp: 'readonly',
-        wx: 'readonly',
-      },
-    },
-  },
-  {
     files: ['minigame/**/*.js', 'minigame-414/**/*.js'],
     languageOptions: {
       globals: {

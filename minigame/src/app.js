@@ -53,7 +53,7 @@ class MahjongGameApp {
       canRequestUserInfo: typeof this.wx.createUserInfoButton === 'function',
       busy: false, chatOpen: false, chatReadId: '', chatMode: 'text', chatTab: 'messages',
       recordingVoice: false, playingVoiceId: '', selectedTileId: '', selectedTarget: null,
-      focus: '', keyboardOpen: false, snapshot: null, actionCallouts: [],
+      draggedTile: null, focus: '', keyboardOpen: false, snapshot: null, actionCallouts: [],
     };
     if (this.wx.getStorageSync) {
       const savedNickname = this.wx.getStorageSync(config.nicknameStorageKey) || '';
@@ -84,11 +84,14 @@ class MahjongGameApp {
     this.sessionReplaced = false;
     this.lastInteractionId = '';
     this.interactionTimer = null;
+    this.tileGesture = null;
+    this.lastTileTap = null;
     this.orientationRequested = 'portrait';
     this.orientationFailedFor = null;
     this.orientationError = '';
     this.draw = this.draw.bind(this);
     this.onTouchStart = this.onTouchStart.bind(this);
+    this.onTouchMove = this.onTouchMove.bind(this);
     this.onTouchEnd = this.onTouchEnd.bind(this);
     this.onTouchCancel = this.onTouchCancel.bind(this);
     this.onKeyboardInput = this.onKeyboardInput.bind(this);
@@ -109,6 +112,7 @@ class MahjongGameApp {
       this.draw();
     });
     if (typeof this.wx.onTouchStart === 'function') this.wx.onTouchStart(this.onTouchStart);
+    if (typeof this.wx.onTouchMove === 'function') this.wx.onTouchMove(this.onTouchMove);
     this.wx.onTouchEnd(this.onTouchEnd);
     if (typeof this.wx.onTouchCancel === 'function') this.wx.onTouchCancel(this.onTouchCancel);
     if (typeof this.wx.onKeyboardInput === 'function') this.wx.onKeyboardInput(this.onKeyboardInput);
@@ -440,18 +444,21 @@ class MahjongGameApp {
     this.state.statusMessage = '连接中断，正在尝试恢复房间…';
     this.draw();
     let failed = false;
+    let recoveryError = null;
     try {
       await this.transport.login('', token);
       const snapshot = await this.transport.join(nickname, avatarUrl);
       this.recoveryAttempt = 0;
       this.updateSnapshot(snapshot);
-    } catch {
+    } catch (error) {
       failed = true;
+      recoveryError = error;
     } finally {
       this.recovering = false;
     }
     if (failed) {
-      if (this.recoveryAttempt >= 4) {
+      const sessionExpired = /会话无效或已过期|登录状态已失效/.test(String(recoveryError?.message || recoveryError || ''));
+      if (sessionExpired) {
         if (this.wx.removeStorageSync) {
           this.wx.removeStorageSync(config.sessionStorageKey);
         }
@@ -462,6 +469,14 @@ class MahjongGameApp {
         this.setOrientation('portrait');
         this.startAnimationLoop();
         this.updateUserInfoButton();
+        this.draw();
+        return;
+      }
+      if (this.recoveryAttempt >= 4) {
+        // A transport/TLS failure does not prove that the room session expired.
+        // Keep the last room snapshot and token so a later manual retry can resume it.
+        this.state.error = '实时连接中断，请点此重连';
+        this.state.statusMessage = '房间状态已保留，网络恢复后可重连';
         this.draw();
         return;
       }
@@ -756,33 +771,75 @@ class MahjongGameApp {
     if (typeof this.draw === 'function') this.draw();
   }
 
+  getTouchPoint(touch) {
+    const ratio = this.pixelRatio || 1;
+    const clientX = touch.clientX ?? touch.pageX ?? touch.x ?? 0;
+    const clientY = touch.clientY ?? touch.pageY ?? touch.y ?? 0;
+    const canvasX = clientX * ratio;
+    const canvasY = clientY * ratio;
+    const viewport = this.renderer.viewport || { x: 0, y: 0, scale: 1 };
+    const scale = viewport.scale || 1;
+    return {
+      clientX, clientY, canvasX, canvasY,
+      x: (canvasX - viewport.x) / scale,
+      y: (canvasY - viewport.y) / scale,
+    };
+  }
+
   onTouchStart(event) {
     const touch = event.changedTouches && event.changedTouches[0] || event.touches && event.touches[0];
     if (!touch) return;
-    const target = this.renderer.hit(
-      (touch.clientX ?? touch.pageX ?? touch.x) * this.pixelRatio,
-      (touch.clientY ?? touch.pageY ?? touch.y) * this.pixelRatio,
-    );
+    this.tileGesture = null;
+    const point = this.getTouchPoint(touch);
+    const target = this.renderer.hit(point.canvasX, point.canvasY);
     if (target && target.type === 'voice-bar') {
       this.startVoiceRecording();
+      return;
     }
+    if (this.state.screen === 'game' && !this.state.chatOpen && !this.state.keyboardOpen
+      && target?.type === 'select-tile') {
+      this.tileGesture = {
+        tileId: target.data.tileId,
+        startX: point.clientX,
+        startY: point.clientY,
+        moved: false,
+      };
+    }
+  }
+
+  onTouchMove(event) {
+    const gesture = this.tileGesture;
+    if (!gesture || this.state.recordingVoice) return;
+    const touch = event.changedTouches && event.changedTouches[0] || event.touches && event.touches[0];
+    if (!touch) return;
+    const point = this.getTouchPoint(touch);
+    if (!gesture.moved && Math.hypot(point.clientX - gesture.startX, point.clientY - gesture.startY) < 10) return;
+    gesture.moved = true;
+    this.state.draggedTile = { tileId: gesture.tileId, x: point.x, y: point.y };
+    this.draw();
   }
 
   onTouchEnd(event) {
     if (this.state.recordingVoice) {
+      this.tileGesture = null;
       this.stopVoiceRecording(false);
       return;
     }
     const touch = event.changedTouches && event.changedTouches[0] || event.touches && event.touches[0];
-    if (!touch) return;
-    const target = this.renderer.hit(
-      (touch.clientX ?? touch.pageX ?? touch.x) * this.pixelRatio,
-      (touch.clientY ?? touch.pageY ?? touch.y) * this.pixelRatio,
-    );
+    if (!touch) {
+      this.tileGesture = null;
+      this.state.draggedTile = null;
+      return;
+    }
+    const point = this.getTouchPoint(touch);
+    const gesture = this.tileGesture;
+    this.tileGesture = null;
+    const target = this.renderer.hit(point.canvasX, point.canvasY);
     const insideChat = target && (['chat-panel', 'toggle-chat', 'close-chat', 'send-chat', 'chat-tab', 'toggle-chat-mode', 'voice-bar', 'send-phrase', 'play-voice'].includes(target.type)
       || target.type === 'input' && target.data?.field === 'chatDraft');
     if (this.state.chatOpen && !insideChat) {
       // Dismissal consumes the tap so a covered tile or game action cannot fire accidentally.
+      this.state.draggedTile = null;
       this.closeChat();
       return;
     }
@@ -792,13 +849,39 @@ class MahjongGameApp {
       this.draw();
       if (!target) return;
     }
+    if (gesture?.moved) {
+      this.state.draggedTile = null;
+      const privateState = this.state.snapshot?.private;
+      const canDiscard = privateState?.availableActions?.includes('discard') && !privateState.isListening && !this.state.busy;
+      if (canDiscard && this.isPointOnTable(point.x, point.y)) {
+        this.state.selectedTileId = '';
+        this.lastTileTap = null;
+        this.draw();
+        void this.runCommand('discard', { tileId: gesture.tileId });
+      } else {
+        this.draw();
+      }
+      return;
+    }
     if (target) void this.handleTarget(target);
+  }
+
+  isPointOnTable(x, y) {
+    const table = this.renderer.roomLayout().table;
+    const v = (y - table.topY) / (table.bottomY - table.topY);
+    if (v < 0 || v > 1) return false;
+    const left = table.topLeft + (table.bottomLeft - table.topLeft) * v;
+    const right = table.topRight + (table.bottomRight - table.topRight) * v;
+    return x >= left && x <= right;
   }
 
   onTouchCancel() {
     if (this.state.recordingVoice) {
       this.stopVoiceRecording(true);
     }
+    this.tileGesture = null;
+    this.state.draggedTile = null;
+    this.draw();
   }
 
   closeChat() {
@@ -864,11 +947,27 @@ class MahjongGameApp {
     }
     if (type === 'select-tile') {
       const sameTile = this.state.selectedTileId === data.tileId;
-      this.state.selectedTileId = data.tileId;
-      this.draw();
-      if (sameTile && this.state.snapshot?.private.availableActions.includes('discard') && !this.state.snapshot.private.isListening) {
-        await this.runCommand('discard', { tileId: data.tileId });
+      const now = Date.now();
+      const isDoubleTap = sameTile && this.lastTileTap?.tileId === data.tileId && now - this.lastTileTap.at <= 350;
+      if (sameTile && !isDoubleTap) {
+        this.state.selectedTileId = '';
+        this.lastTileTap = null;
+        this.draw();
+        return;
       }
+      if (isDoubleTap) {
+        this.lastTileTap = null;
+        const canDiscard = this.state.snapshot?.private?.availableActions?.includes('discard') && !this.state.snapshot.private.isListening;
+        if (canDiscard) {
+          this.state.selectedTileId = '';
+          this.draw();
+          await this.runCommand('discard', { tileId: data.tileId });
+        }
+        return;
+      }
+      this.state.selectedTileId = data.tileId;
+      this.lastTileTap = { tileId: data.tileId, at: now };
+      this.draw();
       return;
     }
     if (type === 'enter') {
@@ -879,6 +978,7 @@ class MahjongGameApp {
     }
     if (type === 'reconnect') {
       this.state.error = '正在重新连接…';
+      this.recoveryAttempt = 0;
       this.draw();
       void this.recoverRoom();
       return;

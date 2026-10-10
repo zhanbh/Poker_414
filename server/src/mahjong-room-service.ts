@@ -232,7 +232,7 @@ export class MahjongRoomService {
         seatedPlayer!.nickname = cleanNickname;
         seatedPlayer!.avatarUrl = avatarUrl;
       }
-      this.sessions.setIdentity(sessionToken, 'player', cleanNickname);
+      this.sessions.setIdentity(sessionToken, 'player', cleanNickname, avatarUrl);
       this.sessions.touch(sessionToken, this.now());
       if (changed && this.state) this.state.version += 1;
       return this.getSnapshot(sessionToken);
@@ -241,7 +241,7 @@ export class MahjongRoomService {
     if (session.role === 'spectator' && this.state && this.state.phase !== 'lobby') {
       let changed = false;
       if (session.nickname !== cleanNickname) changed = true;
-      this.sessions.setIdentity(sessionToken, 'spectator', cleanNickname);
+      this.sessions.setIdentity(sessionToken, 'spectator', cleanNickname, avatarUrl);
       this.sessions.touch(sessionToken, this.now());
       if (changed && this.state) this.state.version += 1;
       return this.getSnapshot(sessionToken);
@@ -253,11 +253,11 @@ export class MahjongRoomService {
       player?.nickname === cleanNickname && player.id !== session.playerId);
     if (duplicate) throw new MahjongRoomServiceError('NICKNAME_EXISTS', '昵称已经被使用，请稍后重试授权');
 
-    if (this.state.phase !== 'lobby') return this.joinSpectator(sessionToken, cleanNickname);
+    if (this.state.phase !== 'lobby') return this.joinSpectator(sessionToken, cleanNickname, avatarUrl);
     const seat = MAHJONG_SEATS.find((candidate) => this.state?.players[candidate] === null);
-    if (!seat) return this.joinSpectator(sessionToken, cleanNickname);
+    if (!seat) return this.joinSpectator(sessionToken, cleanNickname, avatarUrl);
     this.addPlayer(seat, session, cleanNickname, avatarUrl);
-    this.sessions.setIdentity(sessionToken, 'player', cleanNickname);
+    this.sessions.setIdentity(sessionToken, 'player', cleanNickname, avatarUrl);
     this.sessions.touch(sessionToken, this.now());
     this.state.version += 1;
     return this.getSnapshot(sessionToken);
@@ -729,8 +729,6 @@ export class MahjongRoomService {
     const allowed = player.isListening
       && Boolean(tile)
       && (player.melds.length < 4 && waitingHand.length >= 4 || singleRedWait && tile?.suit === 'dragons' && tile.rank === 'red')
-      && hasMahjongPairStructure(waitingHand, player.melds)
-      && hasMahjongSequence(waitingHand, player.melds)
       && (onDiscard
         ? !isBaoTile && Boolean(state.pending?.options[seat]?.includes('hu'))
         : state.currentTurn === seat && state.awaitingDiscard && (matchingReadyWait || bigWind || baoWin));
@@ -865,8 +863,7 @@ export class MahjongRoomService {
       const isBaoTile = baoSeatsBeforeDiscard.has(candidate)
         || Boolean(player.listenBao && tileKey(player.listenBao) === tileKey(tile));
       if (player.isListening && (player.melds.length < 4 && player.hand.length >= 4 || this.isRedCenterSingleWait(player.hand, player.melds) && tile.suit === 'dragons' && tile.rank === 'red')
-        && hasMahjongPairStructure(player.hand, player.melds)
-        && hasMahjongSequence(player.hand, player.melds) && structuralWait && !isBaoTile) actions.push('hu');
+        && structuralWait && !isBaoTile) actions.push('hu');
       const kongTiles = findTilesByKey(player.hand, tileKey(tile), 3);
       const pengTiles = kongTiles.slice(0, 2);
       if (!player.isListening && player.melds.length < 4 && kongTiles.length === 3
@@ -991,10 +988,17 @@ export class MahjongRoomService {
   }
 
   private validListenWaits(hand: MahjongTile[], meldCount: number, melds: readonly MahjongMeld[]): MahjongTile[] {
-    if ((meldCount >= 4 && !this.isRedCenterSingleWait(hand, melds)) || (meldCount < 4 && hand.length < 4)
-      || !hasMahjongPairStructure(hand, melds) || !hasMahjongSequence(hand, melds)) return [];
+    if ((meldCount >= 4 && !this.isRedCenterSingleWait(hand, melds)) || (meldCount < 4 && hand.length < 4)) return [];
     return mahjongWaits(hand, meldCount, melds)
-      .filter((tile) => (meldCount < 4 || tile.suit === 'dragons' && tile.rank === 'red') && hasMahjongListenYao(hand, tile, melds));
+      .filter((tile) => {
+        const standardWait = isWinningMahjongHand([...hand, tile], meldCount);
+        const bigWindWait = isBigWindWin(hand, tile, melds)
+          && hasMahjongPairStructure(hand, melds)
+          && hasMahjongSequence(hand, melds);
+        return (standardWait || bigWindWait)
+          && (meldCount < 4 || tile.suit === 'dragons' && tile.rank === 'red')
+          && hasMahjongListenYao(hand, tile, melds);
+      });
   }
 
   private isRedCenterSingleWait(hand: readonly MahjongTile[], melds: readonly MahjongMeld[]): boolean {
@@ -1083,8 +1087,6 @@ export class MahjongRoomService {
     return player.isListening
       && (player.melds.length < 4 && player.hand.filter((handTile) => handTile.id !== tile.id).length >= 4
         || this.isRedCenterSingleWait(player.hand.filter((handTile) => handTile.id !== tile.id), player.melds) && tile.suit === 'dragons' && tile.rank === 'red')
-      && hasMahjongPairStructure(player.hand.filter((handTile) => handTile.id !== tile.id), player.melds)
-      && hasMahjongSequence(player.hand.filter((handTile) => handTile.id !== tile.id), player.melds)
       && (
         player.listenWaits.some((wait) => tileKey(wait) === tileKey(tile))
         || isBigWindWin(player.hand.filter((handTile) => handTile.id !== tile.id), tile, player.melds)
@@ -1180,11 +1182,12 @@ export class MahjongRoomService {
         player.lastDrawnTileId = null;
       }
     }
+    this.promoteSpectators();
   }
 
-  private joinSpectator(sessionToken: string, nickname: string): MahjongSnapshot {
+  private joinSpectator(sessionToken: string, nickname: string, avatarUrl?: string): MahjongSnapshot {
     if (this.sessions.listSpectators().filter((viewer) => !viewer.mahjongSeat).length >= MAX_SPECTATORS) throw new MahjongRoomServiceError('SPECTATORS_FULL', '观战位已满');
-    this.sessions.setIdentity(sessionToken, 'spectator', nickname);
+    this.sessions.setIdentity(sessionToken, 'spectator', nickname, avatarUrl);
     this.sessions.touch(sessionToken, this.now());
     return this.getSnapshot(sessionToken);
   }
@@ -1209,6 +1212,22 @@ export class MahjongRoomService {
     if (Object.values(this.state.players).every((candidate) => candidate === null)) {
       this.state = null;
       this.chatMessages = [];
+      return;
+    }
+    if (this.state.phase === 'lobby') this.promoteSpectators();
+  }
+
+  private promoteSpectators(): void {
+    if (!this.state || this.state.phase !== 'lobby') return;
+    const waiting = this.sessions.listSpectators().filter((session) => !session.mahjongSeat);
+    for (const session of waiting) {
+      const seat = MAHJONG_SEATS.find((candidate) => this.state?.players[candidate] === null);
+      if (!seat || !this.state) break;
+      const nickname = session.nickname ?? '玩家';
+      this.addPlayer(seat, session, nickname, session.avatarUrl);
+      this.state.players[seat]!.connected = Boolean(session.connectionId);
+      this.sessions.setIdentity(session.sessionToken, 'player', nickname, session.avatarUrl);
+      this.state.version += 1;
     }
   }
 

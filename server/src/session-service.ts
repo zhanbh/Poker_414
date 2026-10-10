@@ -10,6 +10,7 @@ export interface Session {
   readonly playerId: string;
   role: 'player' | 'spectator' | null;
   nickname: string | null;
+  avatarUrl?: string;
   seat: Seat | null;
   texasSeat: TexasSeat | null;
   mahjongSeat: MahjongSeat | null;
@@ -56,16 +57,18 @@ export class SessionService {
     this.get(sessionToken).mahjongSeat = seat;
   }
 
-  setIdentity(sessionToken: string, role: 'player' | 'spectator', nickname: string): void {
+  setIdentity(sessionToken: string, role: 'player' | 'spectator', nickname: string, avatarUrl?: string): void {
     const session = this.get(sessionToken);
     session.role = role;
     session.nickname = nickname;
+    if (avatarUrl !== undefined) session.avatarUrl = avatarUrl;
   }
 
   clearIdentity(sessionToken: string): void {
     const session = this.get(sessionToken);
     session.role = null;
     session.nickname = null;
+    delete session.avatarUrl;
     session.seat = null;
     session.texasSeat = null;
     session.mahjongSeat = null;

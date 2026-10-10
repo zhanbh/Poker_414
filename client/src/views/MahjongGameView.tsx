@@ -193,7 +193,7 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode, intera
     };
   }) : [];
   const revealedHands = new Map([
-    ...(snapshot.private.opponentHands ?? []),
+    ...(snapshot.private.isListening ? snapshot.private.opponentHands ?? [] : []),
     ...(snapshot.public.revealedHands ?? []),
   ].map((opponent) => [opponent.seat, opponent.hand]));
   const wallCount = snapshot.public.wallCount;

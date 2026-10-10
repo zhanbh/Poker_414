@@ -171,6 +171,55 @@ describe('native mini-game Canvas renderer', () => {
     expect(labels).toContain('听');
   });
 
+  it('shows opponents’ faces to a listening player when their hands are included in the private snapshot', () => {
+    const backs = [];
+    const faces = [];
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext());
+    renderer.drawStandingBack = (...args) => backs.push(args);
+    renderer.drawProjectedTile = (...args) => faces.push(args);
+    const state = {
+      snapshot: {
+        public: { players: [{ seat: 'B', handCount: 2 }] },
+        private: {
+          seat: 'A',
+          isListening: true,
+          opponentHands: [{ seat: 'B', nickname: '对手', hand: [
+            { id: 'secret-tile-1', suit: 'characters', rank: 9 },
+            { id: 'secret-tile-2', suit: 'characters', rank: 8 },
+          ] }],
+        },
+      },
+    };
+
+    renderer.drawOpponentHands(state, { topY: 80, bottomY: 460, width: 900 });
+
+    expect(backs).toHaveLength(0);
+    expect(faces).toHaveLength(2);
+  });
+
+  it('keeps opponents hidden for non-listening players even if a stale snapshot has their hands', () => {
+    const backs = [];
+    const faces = [];
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext());
+    renderer.drawStandingBack = (...args) => backs.push(args);
+    renderer.drawProjectedTile = (...args) => faces.push(args);
+    const state = {
+      snapshot: {
+        public: { players: [{ seat: 'B', handCount: 2 }] },
+        private: {
+          seat: 'A',
+          isListening: false,
+          opponentHands: [{ seat: 'B', nickname: '对手', hand: [{ id: 'secret-tile', suit: 'characters', rank: 9 }] }],
+        },
+      },
+    };
+
+    renderer.drawOpponentHands(state, { topY: 80, bottomY: 460, width: 900 });
+
+    expect(backs).toHaveLength(2);
+    expect(faces).toHaveLength(0);
+  });
+
   it('shows a detailed Mahjong settlement ledger and lets the host advance', () => {
     const labels = [];
     const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels.push(String(value)) }));
@@ -431,6 +480,30 @@ describe('native mini-game Canvas renderer', () => {
     expect(labels).not.toContain('南家 · 空位');
   });
 
+  it('starts an interaction animation from the sender seat even when only the sender nickname is available', () => {
+    const translations = [];
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({
+      translate: (x, y) => translations.push([x, y]),
+    }));
+    const snapshot = {
+      public: {
+        players: [
+          { seat: 'A', nickname: '雀友A' },
+          { seat: 'D', nickname: '雀友D' },
+        ],
+        chat: [],
+      },
+      private: { seat: 'A' },
+    };
+    const targetCard = renderer.roomLayout().cards[3];
+    renderer.drawInteractionEffect({ snapshot, nickname: '雀友A' }, {
+      kind: 'interaction', interaction: 'tomato', senderNickname: '雀友A', targetSeat: 'D', createdAt: Date.now(),
+    }, 'D', targetCard.x, targetCard.y, targetCard.width);
+
+    const senderCard = renderer.roomLayout().cards[0];
+    expect(translations[0]).toEqual([senderCard.x + senderCard.width / 2, senderCard.y + 32]);
+  });
+
   it('keeps the table and hand-card hit areas fixed while the floating chat is open', () => {
     const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext());
     const snapshot = {
@@ -484,6 +557,7 @@ describe('native mini-game Canvas renderer', () => {
     let keyboardHidden = false;
     const app = {
       state, renderer, pixelRatio: 1,
+      getTouchPoint: MahjongGameApp.prototype.getTouchPoint,
       draw: () => renderer.draw(state),
       hideKeyboard: () => { keyboardHidden = true; state.keyboardOpen = false; state.focus = ''; },
       handleTarget: (target) => { handled = target; },
@@ -507,7 +581,11 @@ describe('native mini-game Canvas renderer', () => {
       screen: 'lobby', chatOpen: false, chatReadId: '',
       snapshot: { public: { gameId: 'mahjong', phase: 'lobby', players: [], chat: [{ id: 'm1', kind: 'text', text: '你好', senderNickname: '小明' }] }, private: { seat: 'A' } },
     };
-    const app = { state, renderer, pixelRatio: 1, draw: () => renderer.draw(state) };
+    const app = {
+      state, renderer, pixelRatio: 1,
+      getTouchPoint: MahjongGameApp.prototype.getTouchPoint,
+      draw: () => renderer.draw(state),
+    };
     app.handleTarget = (target) => MahjongGameApp.prototype.handleTarget.call(app, target);
     app.closeChat = () => MahjongGameApp.prototype.closeChat.call(app);
     await app.handleTarget({ type: 'toggle-chat' });
@@ -519,6 +597,119 @@ describe('native mini-game Canvas renderer', () => {
     expect(state.chatOpen).toBe(true);
     await app.handleTarget({ type: 'close-chat' });
     expect(state.chatOpen).toBe(false);
+  });
+
+  it('deselects a tile on a later second tap but discards on a rapid double tap', async () => {
+    const discarded = [];
+    const app = {
+      state: {
+        selectedTileId: '',
+        snapshot: { private: { availableActions: ['discard'], isListening: false } },
+      },
+      draw: () => {},
+      lastTileTap: null,
+      runCommand: async (...args) => discarded.push(args),
+    };
+    const target = { type: 'select-tile', data: { tileId: 'tile-1' } };
+
+    await MahjongGameApp.prototype.handleTarget.call(app, target);
+    expect(app.state.selectedTileId).toBe('tile-1');
+    app.lastTileTap.at = Date.now() - 1000;
+    await MahjongGameApp.prototype.handleTarget.call(app, target);
+    expect(app.state.selectedTileId).toBe('');
+    expect(discarded).toHaveLength(0);
+
+    await MahjongGameApp.prototype.handleTarget.call(app, target);
+    await MahjongGameApp.prototype.handleTarget.call(app, target);
+    expect(app.state.selectedTileId).toBe('');
+    expect(discarded).toEqual([['discard', { tileId: 'tile-1' }]]);
+  });
+
+  it('keeps the room and session token after repeated TLS failures instead of treating them as expired', async () => {
+    const storage = { 'mahjong.sessionToken': 'session-1', 'mahjong.nickname': '雀友A' };
+    const removed = [];
+    const oldSnapshot = { public: { gameId: 'mahjong', phase: 'settled' }, private: { seat: 'A' } };
+    let redraws = 0;
+    const app = {
+      wx: {
+        getStorageSync: (key) => storage[key],
+        removeStorageSync: (key) => { removed.push(key); delete storage[key]; },
+      },
+      transport: { login: async () => { throw new Error('open fail: _code:8,_msg:TLS handshake failed'); } },
+      state: { screen: 'game', snapshot: oldSnapshot, connectionStatus: 'disconnected', nickname: '雀友A', avatarUrl: '', error: '', statusMessage: '' },
+      recoveryAttempt: 3,
+      recovering: false,
+      leaving: false,
+      sessionReplaced: false,
+      visible: true,
+      draw: () => { redraws += 1; },
+    };
+
+    await MahjongGameApp.prototype.recoverRoom.call(app);
+
+    expect(app.state.screen).toBe('game');
+    expect(app.state.snapshot).toBe(oldSnapshot);
+    expect(storage['mahjong.sessionToken']).toBe('session-1');
+    expect(removed).toEqual([]);
+    expect(app.state.error).toContain('实时连接中断');
+    expect(redraws).toBeGreaterThan(0);
+  });
+
+  it('clears the saved session only when the server explicitly reports an expired session', async () => {
+    const removed = [];
+    const app = {
+      wx: {
+        getStorageSync: (key) => ({ 'mahjong.sessionToken': 'expired-session', 'mahjong.nickname': '雀友A' })[key],
+        removeStorageSync: (key) => removed.push(key),
+      },
+      transport: { login: async () => { throw new Error('会话无效或已过期'); } },
+      state: { screen: 'game', snapshot: { public: { gameId: 'mahjong' } }, connectionStatus: 'disconnected', nickname: '雀友A', avatarUrl: '', error: '', statusMessage: '' },
+      recoveryAttempt: 0,
+      recovering: false,
+      leaving: false,
+      sessionReplaced: false,
+      visible: true,
+      draw: () => {},
+      setOrientation: () => {},
+      startAnimationLoop: () => {},
+      updateUserInfoButton: () => {},
+    };
+
+    await MahjongGameApp.prototype.recoverRoom.call(app);
+
+    expect(removed).toContain('mahjong.sessionToken');
+    expect(app.state.screen).toBe('entry');
+    expect(app.state.snapshot).toBeNull();
+  });
+
+  it('discards a hand tile when it is dragged onto the table', () => {
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext());
+    const state = {
+      screen: 'game', chatOpen: false, keyboardOpen: false, busy: false,
+      snapshot: {
+        public: { gameId: 'mahjong', phase: 'playing', players: [], chat: [], currentTurn: 'A', wallCount: 59 },
+        private: { seat: 'A', hand: [{ id: 'tile-1', suit: 'characters', rank: 1 }], availableActions: ['discard'], isListening: false },
+      },
+    };
+    const commands = [];
+    const app = {
+      state, renderer, pixelRatio: 1, tileGesture: null, lastTileTap: null,
+      getTouchPoint: MahjongGameApp.prototype.getTouchPoint,
+      isPointOnTable: MahjongGameApp.prototype.isPointOnTable,
+      draw: () => renderer.draw(state),
+      runCommand: (...args) => commands.push(args),
+    };
+    renderer.draw(state);
+    const tile = renderer.targets.find((target) => target.type === 'select-tile');
+    MahjongGameApp.prototype.onTouchStart.call(app, {
+      changedTouches: [{ clientX: tile.x + tile.width / 2, clientY: tile.y + tile.height / 2 }],
+    });
+    MahjongGameApp.prototype.onTouchMove.call(app, { touches: [{ clientX: 480, clientY: 250 }] });
+    expect(state.draggedTile).toMatchObject({ tileId: 'tile-1', x: 480, y: 250 });
+    MahjongGameApp.prototype.onTouchEnd.call(app, { changedTouches: [{ clientX: 480, clientY: 250 }] });
+
+    expect(commands).toEqual([['discard', { tileId: 'tile-1' }]]);
+    expect(state.draggedTile).toBeNull();
   });
 
   it('keeps a fourteen-tile hand and room controls within a notched phone safe area', () => {
@@ -954,6 +1145,28 @@ describe('native mini-game Canvas renderer', () => {
     expect(labels).toContain('碰');
   });
 
+  it('shows a short plain-text action cue and flashes the acting player avatar without a giant seal', () => {
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext());
+    const textCalls = [];
+    const roundedRects = [];
+    renderer.text = (...args) => textCalls.push(args);
+    renderer.roundRect = (...args) => roundedRects.push(args);
+    renderer.circle = () => { throw new Error('action cue should not draw a giant circular badge'); };
+
+    renderer.drawActionCallouts({
+      snapshot: {
+        private: { seat: 'A' },
+        public: { players: [{ seat: 'B', nickname: '碰牌玩家' }] },
+      },
+      actionCallouts: [{ seat: 'B', kind: 'peng', text: '碰', startTime: Date.now(), duration: 1500 }],
+    });
+
+    expect(textCalls).toHaveLength(1);
+    expect(textCalls[0]).toEqual(['碰', 0, 0, 21, '#fff2c9', 'center', '700']);
+    expect(roundedRects).toHaveLength(1);
+    expect(roundedRects[0].slice(2, 5)).toEqual([74, 74, 12]);
+  });
+
   it('MahjongGameApp diffs snapshots to create action callouts on meld and ting transitions', () => {
     const app = {
       state: { screen: 'room', actionCallouts: [], snapshot: null },
@@ -1047,5 +1260,3 @@ describe('native mini-game Canvas renderer', () => {
     expect(labels).toContain('北位 等待入座');
   });
 });
-
-

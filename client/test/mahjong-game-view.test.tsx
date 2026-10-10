@@ -334,12 +334,20 @@ describe('MahjongGameView listen information privacy', () => {
     const listeningSnapshot: MahjongSnapshot = {
       ...snapshot,
       public: { ...snapshot.public, version: 6, players: snapshot.public.players.map((player) => player.seat === 'A' ? { ...player, isListening: true } : player) },
-      private: { ...snapshot.private, availableActions: [], isListening: true, listenWaits: [waitTile], baoTile, discardableTileId: hand[13]!.id },
+      private: {
+        ...snapshot.private, availableActions: [], isListening: true, listenWaits: [waitTile], baoTile,
+        discardableTileId: hand[13]!.id,
+        opponentHands: seats.filter((seat) => seat !== 'A').map((seat, index) => ({
+          seat, nickname: ['乙', '丙', '丁'][index]!, hand: [waitTile],
+        })),
+      },
     };
     rerender(<MahjongGameView snapshot={listeningSnapshot} {...props} />);
 
     expect(container.querySelector('.mahjong-listen-preview strong')?.textContent).toBe('已听牌');
     expect(container.querySelector('.mahjong-bao-preview .mahjong-face')?.getAttribute('aria-label')).toBe(baoTile.label);
     expect(container.querySelector('.mahjong-bao-preview b')?.textContent).toBe('宝');
+    expect(container.querySelectorAll('.mahjong-revealed-hand')).toHaveLength(3);
+    expect(container.querySelectorAll('.mahjong-revealed-hand .mahjong-face')).toHaveLength(3);
   });
 });

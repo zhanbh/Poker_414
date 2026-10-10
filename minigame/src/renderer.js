@@ -1047,20 +1047,21 @@ class MahjongRenderer {
     const targetX = cardX + cardWidth / 2;
     const targetY = cardY + 32;
 
-    let startX = targetX;
-    let startY = targetY;
-    if (message.senderSeat && state.snapshot) {
-      const order = relativeSeats(state.snapshot.private.seat || 'A');
-      const senderIdx = order.indexOf(message.senderSeat);
+    let startX = this.roomLayout().center.x;
+    let startY = this.roomLayout().center.y;
+    if (state.snapshot) {
+      const players = state.snapshot.public.players || [];
+      const sender = players.find((player) => player.seat === message.senderSeat)
+        || players.find((player) => player.nickname === message.senderNickname)
+        || (message.senderNickname === state.nickname
+          ? { seat: state.snapshot.private.seat }
+          : null);
+      const senderIdx = relativeSeats(state.snapshot.private.seat || 'A').indexOf(sender?.seat);
       if (senderIdx >= 0 && this.roomLayout().cards[senderIdx]) {
         const sCard = this.roomLayout().cards[senderIdx];
         startX = sCard.x + sCard.width / 2;
         startY = sCard.y + 32;
       }
-    }
-    if (Math.abs(startX - targetX) < 10 && Math.abs(startY - targetY) < 10) {
-      startX = targetX > 480 ? targetX - 100 : targetX + 100;
-      startY = targetY + 60;
     }
 
     const icon = ({ tomato: '🍅', water: '💦', heart: '❤️', kiss: '💋' })[type] || '✨';
@@ -1772,14 +1773,50 @@ class MahjongRenderer {
     relativeSeats(snapshot.private.seat || 'A').forEach((seat, position) => {
       if (position === 0 && !snapshot.private.spectator) return;
       const player = playerForSeat(snapshot, seat);
-      const count = Math.max(0, Math.min(14, Number(player?.handCount) || 0));
+      const revealedHand = snapshot.private.isListening
+        ? snapshot.private.opponentHands?.find((opponent) => opponent.seat === seat)?.hand
+        : undefined;
+      const count = Math.max(0, Math.min(14, Number(player?.handCount) || revealedHand?.length || 0));
       const lastV = (this.roomLayout().contentBottom - 116 - table.topY) / (table.bottomY - table.topY);
       const sideStep = Math.min(0.037, (lastV - 0.255) / Math.max(1, count - 1));
       for (let index = 0; index < count; index += 1) {
-        if (position === 2) this.drawStandingBack(table, 0.5 - count * 0.019 + index * 0.038, 0.133, 0.037, 0.024, 24);
-        else if (position === 1) this.drawStandingBack(table, 0.09, 0.22 + index * sideStep, 0.012, sideStep * 0.94, 24, 'left');
-        else if (position === 3) this.drawStandingBack(table, 0.898, 0.22 + index * sideStep, 0.012, sideStep * 0.94, 24, 'right');
-        else this.drawStandingBack(table, 0.5 - count * 0.019 + index * 0.038, 0.8, 0.037, 0.024, 24);
+        let u;
+        let v;
+        let du;
+        let dv;
+        let rotation = 0;
+        let side = 'front';
+        if (position === 2) {
+          u = 0.5 - count * 0.019 + index * 0.038;
+          v = 0.133;
+          du = 0.037;
+          dv = 0.024;
+          rotation = Math.PI;
+          side = 'back';
+        } else if (position === 1) {
+          u = 0.09;
+          v = 0.22 + index * sideStep;
+          du = 0.012;
+          dv = sideStep * 0.94;
+          rotation = Math.PI / 2;
+          side = 'left';
+        } else if (position === 3) {
+          u = 0.898;
+          v = 0.22 + index * sideStep;
+          du = 0.012;
+          dv = sideStep * 0.94;
+          rotation = -Math.PI / 2;
+          side = 'right';
+        } else {
+          u = 0.5 - count * 0.019 + index * 0.038;
+          v = 0.8;
+          du = 0.037;
+          dv = 0.024;
+        }
+
+        const tile = revealedHand?.[index];
+        if (tile) this.drawProjectedTile(table, tile, u, v, du, dv, rotation);
+        else this.drawStandingBack(table, u, v, du, dv, 24, side);
       }
     });
   }
@@ -1839,10 +1876,18 @@ class MahjongRenderer {
     const listenTileIds = new Set(state.snapshot.private.listenTileIds || []);
     hand.forEach((tile, index) => {
       const selected = state.selectedTileId === tile.id;
+      const dragged = state.draggedTile?.tileId === tile.id;
       const canListen = listenTileIds.has(tile.id);
       const tx = x + (width - totalWidth) / 2 + index * tileWidth + (tile === drawnTile ? drawnGap : 0);
       const ty = y + (selected ? -12 : 0);
+      if (dragged) {
+        this.ctx.save();
+        this.ctx.globalAlpha = 0.38;
+      }
       this.drawTile(tile, tx, ty, tileWidth - 0.5, tileHeight, selected);
+      if (dragged) {
+        this.ctx.restore();
+      }
       if (canListen && selected) {
         const badgeW = Math.max(18, tileWidth * 0.4);
         const badgeH = 14;
@@ -1853,6 +1898,13 @@ class MahjongRenderer {
       }
       this.targets.push({ x: tx, y: ty, width: tileWidth, height: tileHeight + 4, type: 'select-tile', data: { tileId: tile.id } });
     });
+    if (state.draggedTile) {
+      const draggedTile = hand.find((tile) => tile.id === state.draggedTile.tileId);
+      if (draggedTile) {
+        this.drawTile(draggedTile, state.draggedTile.x - tileWidth / 2, state.draggedTile.y - tileHeight / 2,
+          tileWidth, tileHeight, true, 0, 7);
+      }
+    }
   }
 
   drawListenPreview(state) {
@@ -2024,134 +2076,42 @@ class MahjongRenderer {
       const card = cards[seatIndex];
       if (!card) return;
 
-      const avatarCenterX = card.x + card.width / 2;
-      const avatarCenterY = card.y + 32;
-
-      // Position in front of the player (offset towards table center by 44px)
+      const avatarSize = 64;
+      const avatarX = card.x + (card.width - avatarSize) / 2;
+      const avatarY = card.y;
+      const avatarCenterX = avatarX + avatarSize / 2;
+      const avatarCenterY = avatarY + avatarSize / 2;
       const dx = center.x - avatarCenterX;
       const dy = center.y - avatarCenterY;
       const dist = Math.hypot(dx, dy) || 1;
-      const posX = avatarCenterX + (dx / dist) * 44;
-      const posY = avatarCenterY + (dy / dist) * 44;
+      const posX = avatarCenterX + (dx / dist) * 68;
+      const posY = avatarCenterY + (dy / dist) * 68;
 
       const elapsed = now - callout.startTime;
       const duration = callout.duration || 1500;
+      const pop = Math.max(0, 1 - elapsed / 260);
+      const scale = 1 + 0.65 * pop * pop;
+      const alpha = Math.min(1, Math.max(0, (duration - elapsed) / 320));
+      const avatarFlash = Math.max(0, 1 - elapsed / 420);
+      const character = callout.text || ({ chi: '吃', peng: '碰', gang: '杠', listen: '听', hu: '胡' }[
+        (callout.kind || '').includes('kong') ? 'gang' : callout.kind
+      ] || '碰');
 
-      // Animation stages:
-      // 1. 0ms - 280ms: Slam down from big to normal (从大到小) with elastic bounce & shockwave
-      // 2. 280ms - 1100ms: Short hold & breathing shimmer (短暂停留)
-      // 3. 1100ms - 1500ms: Gentle float up & fade out (平滑消失)
-      let scale = 1.0;
-      let alpha = 1.0;
-      let floatY = 0;
-      let ringScale = 0;
-      let ringAlpha = 0;
-
-      if (elapsed < 280) {
-        const p1 = elapsed / 280;
-        scale = 1.0 + 1.5 * Math.pow(1 - p1, 2.2);
-        alpha = Math.min(1, p1 * 3.5);
-        ringScale = 1.0 + p1 * 1.6;
-        ringAlpha = (1 - p1) * 0.75;
-      } else if (elapsed < 1100) {
-        const holdT = (elapsed - 280) / 820;
-        scale = 1.0 + 0.035 * Math.sin(holdT * Math.PI * 4);
-        alpha = 1.0;
-      } else {
-        const p3 = (elapsed - 1100) / 400;
-        scale = 1.0 + 0.12 * p3;
-        alpha = Math.max(0, 1.0 - p3);
-        floatY = -18 * p3;
-      }
-
-      const themes = {
-        peng: {
-          bgGradient: [[0, '#fffbeb'], [0.22, '#f59e0b'], [0.72, '#b45309'], [1, '#78350f']],
-          borderColor: '#fef08a',
-          glowColor: '#f59e0b',
-          textColor: '#ffffff',
-          textShadow: '#d97706',
-          label: '碰',
-        },
-        chi: {
-          bgGradient: [[0, '#ecfdf5'], [0.22, '#10b981'], [0.72, '#047857'], [1, '#064e3b']],
-          borderColor: '#a7f3d0',
-          glowColor: '#10b981',
-          textColor: '#ffffff',
-          textShadow: '#059669',
-          label: '吃',
-        },
-        gang: {
-          bgGradient: [[0, '#faf5ff'], [0.22, '#a855f7'], [0.72, '#6b21a8'], [1, '#3b0764']],
-          borderColor: '#e9d5ff',
-          glowColor: '#a855f7',
-          textColor: '#ffffff',
-          textShadow: '#7c3aed',
-          label: '杠',
-        },
-        listen: {
-          bgGradient: [[0, '#fff1f2'], [0.22, '#ef4444'], [0.72, '#991b1b'], [1, '#450a0a']],
-          borderColor: '#fecdd3',
-          glowColor: '#ef4444',
-          textColor: '#ffffff',
-          textShadow: '#b91c1c',
-          label: '听',
-        },
-        hu: {
-          bgGradient: [[0, '#fefce8'], [0.25, '#eab308'], [0.65, '#dc2626'], [1, '#7f1d1d']],
-          borderColor: '#fde047',
-          glowColor: '#eab308',
-          textColor: '#ffffff',
-          textShadow: '#b91c1c',
-          label: '胡',
-        },
-      };
-
-      const kindKey = (callout.kind || '').includes('kong') ? 'gang' : (callout.kind || 'peng');
-      const theme = themes[kindKey] || themes.peng;
-      const character = callout.text || theme.label;
-      const badgeR = 34;
-
-      // Expanding shockwave ring on initial slam
-      if (ringScale > 0 && ringAlpha > 0) {
-        ctx.save();
-        ctx.globalAlpha = alpha * ringAlpha;
-        this.circle(posX, posY, badgeR * ringScale, null, theme.glowColor, 2.5);
-        ctx.restore();
-      }
+      // Flash the player's avatar once, then show only a brief text cue toward the table.
+      ctx.save();
+      ctx.globalAlpha = avatarFlash * 0.9;
+      this.roundRect(avatarX - 5, avatarY - 5, avatarSize + 10, avatarSize + 10, 12,
+        `rgba(255, 239, 190, ${avatarFlash * 0.14})`, `rgba(255, 238, 176, ${avatarFlash})`, 3);
+      ctx.restore();
 
       ctx.save();
       ctx.globalAlpha = alpha;
-      ctx.translate(posX, posY + floatY);
+      ctx.translate(posX, posY);
       ctx.scale(scale, scale);
-
-      // Outer glow and shadow
-      ctx.shadowColor = theme.glowColor;
-      ctx.shadowBlur = 20;
-      this.circle(0, 0, badgeR, 'rgba(0, 0, 0, 0.55)');
-
-      // Multi-layer Callout Seal Badge
-      const grad = this.linearFill(0, -badgeR, 0, badgeR, theme.bgGradient, theme.glowColor);
-      this.circle(0, 0, badgeR, grad, theme.borderColor, 2.5);
-
-      // Inner ornate golden ring
-      this.circle(0, 0, badgeR - 4.5, null, 'rgba(255, 255, 255, 0.4)', 1);
-      this.circle(0, 0, badgeR - 6.5, null, 'rgba(254, 240, 138, 0.65)', 1.2);
-
-      // Shimmer sparkles around perimeter
-      const sparkAng = (now / 280) % (Math.PI * 2);
-      for (let i = 0; i < 4; i++) {
-        const a = sparkAng + (i * Math.PI) / 2;
-        const sx = Math.cos(a) * (badgeR + 4);
-        const sy = Math.sin(a) * (badgeR + 4);
-        this.drawSparkle(sx, sy, 3.5, theme.borderColor);
-      }
-
-      // Stylized Bold Chinese Character
-      ctx.shadowColor = theme.textShadow;
-      ctx.shadowBlur = 8;
-      ctx.shadowOffsetY = 2;
-      this.text(character, 0, 1, 38, theme.textColor, 'center', '900');
+      ctx.shadowColor = 'rgba(12, 31, 22, 0.72)';
+      ctx.shadowBlur = 4;
+      ctx.shadowOffsetY = 1;
+      this.text(character, 0, 0, 21, '#fff2c9', 'center', '700');
 
       ctx.restore();
     });

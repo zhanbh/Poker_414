@@ -484,8 +484,8 @@ class FourOneFourGameApp {
   }
 
   onKeyboardConfirm(event = {}) {
-    if (this.state.focus && typeof event.value === 'string') this.state[this.state.focus] = event.value;
-    const field = this.state.focus;
+    const field = this.state.focus || (this.state.screen === 'entry' ? 'inviteCode' : '');
+    if (field && typeof event.value === 'string') this.state[field] = event.value;
     this.state.focus = '';
     if (typeof this.wx.hideKeyboard === 'function') this.wx.hideKeyboard({});
     this.draw();
@@ -921,7 +921,13 @@ class FourOneFourGameApp {
     const leave = async () => {
       this.leaving = true;
       try {
-        await this.transport.leave();
+        if (this.recoveryTimer) clearTimeout(this.recoveryTimer);
+        this.recoveryTimer = null;
+        try {
+          await this.transport.leave();
+        } catch {
+          this.transport.close();
+        }
         this.wx.removeStorageSync?.(config.sessionStorageKey);
         this.wx.removeStorageSync?.(config.nicknameStorageKey);
         this.state.snapshot = null;
@@ -936,10 +942,9 @@ class FourOneFourGameApp {
         this.updateUserInfoButton();
         this.startAnimationLoop();
         this.draw();
-      } catch (error) {
-        this.state.error = error.message || '退出失败';
-        this.draw();
-      } finally { this.leaving = false; }
+      } finally {
+        this.leaving = false;
+      }
     };
     this.confirm('退出房间', '确定离开当前 414 房间吗？', () => { void leave(); });
   }

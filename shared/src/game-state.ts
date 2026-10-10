@@ -14,6 +14,7 @@ import {
   settleHand,
   teamOf,
 } from './scoring';
+export type { Seat };
 
 export const SEATS = ['A', 'B', 'C', 'D'] as const;
 export type GamePhase = 'lobby' | 'opening' | 'playing' | 'settled' | 'ended';

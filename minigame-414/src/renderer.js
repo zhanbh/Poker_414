@@ -865,10 +865,11 @@ class FourOneFourRenderer {
 
   drawInteractionEffect(state, message, targetSeat, cardX, cardY, cardWidth) {
     const age = Math.max(0, Date.now() - message.createdAt);
-    const duration = 2000;
+    const duration = 2200;
     if (age >= duration) return;
     const progress = Math.min(1, age / duration);
-    const flyRatio = 0.35;
+    const type = message.interaction || 'tomato';
+    const flyRatio = type === 'heart' ? 0.48 : 0.35;
     const ctx = this.ctx;
 
     const targetX = cardX + cardWidth / 2;
@@ -889,8 +890,7 @@ class FourOneFourRenderer {
       startY = targetY + 60;
     }
 
-    const type = message.interaction || 'tomato';
-    const icon = ({ tomato: '🍅', water: '💦', heart: '💖', kiss: '💋' })[type] || '✨';
+    const icon = ({ tomato: '🍅', water: '💦', heart: '❤️', kiss: '💋' })[type] || '✨';
 
     if (progress < flyRatio) {
       const p = progress / flyRatio;
@@ -918,17 +918,33 @@ class FourOneFourRenderer {
         }
         this.drawWaterBucket(curX, curY, flyTilt + tipAtEnd, 1.25, p > 0.75);
       } else if (type === 'heart') {
-        const pulse = 1 + 0.35 * Math.sin(p * Math.PI * 8);
-        ctx.translate(curX, curY);
-        ctx.scale(pulse, pulse);
-        this.circle(0, 0, 20, 'rgba(244, 114, 182, 0.45)');
-        for (let i = 1; i <= 4; i += 1) {
-          const tp = Math.max(0, p - i * 0.07);
-          const tx = startX + (targetX - startX) * tp;
-          const ty = startY + (targetY - startY) * tp - 85 * Math.sin(tp * Math.PI);
-          this.text(i % 2 === 0 ? '✨' : '💕', tx, ty + 3, 13 - i * 2, '#fde047', 'center');
+        // 红心慢慢飞向目标，越飞越大，飞到目标头像时最大！
+        // 1. 越飞越大：从 0.55 (约 20px) 持续放大至 1.9 (约 68px)！
+        const baseScale = 0.55 + 1.35 * p;
+        const pulse = 1 + 0.08 * Math.sin(p * Math.PI * 10);
+        const heartScale = baseScale * pulse;
+
+        // 2. 飞行尾迹：身后拖拽闪烁的星芒碎钻流光 (Stardust bling-trail)
+        for (let i = 1; i <= 5; i += 1) {
+          const tp = Math.max(0, p - i * 0.06);
+          const tEase = tp * (2 - tp);
+          const tx = startX + (targetX - startX) * tEase;
+          const ty = startY + (targetY - startY) * tEase - 85 * Math.sin(tp * Math.PI);
+          const trailAlpha = Math.max(0, (1 - i * 0.18) * (1 - p * 0.25));
+          const trailGems = ['✨', '⭐', '🌟', '💫', '✨'];
+          ctx.save();
+          ctx.globalAlpha = trailAlpha;
+          this.text(trailGems[i - 1], tx, ty + 4, Math.max(9, 14 - i * 2), '#fde047', 'center');
+          ctx.restore();
         }
-        this.text('💖', 0, 10, 36, COLORS.text, 'center');
+
+        // 3. 鲜艳红心本体绘制：粉金双色光晕 + 红心 ❤️
+        ctx.save();
+        ctx.translate(curX, curY);
+        ctx.scale(heartScale, heartScale);
+        this.circle(0, 0, 18, `rgba(239, 68, 68, ${0.3 + p * 0.25})`, `rgba(253, 224, 71, ${0.45 * p})`, 1.5);
+        this.text('❤️', 0, 9, 36, COLORS.text, 'center');
+        ctx.restore();
       } else if (type === 'kiss') {
         const wave = Math.sin(p * Math.PI * 5) * 10;
         ctx.translate(curX, curY + wave);
@@ -1118,35 +1134,67 @@ class FourOneFourRenderer {
           ctx.restore();
         }
       } else if (type === 'heart') {
-        // 比心狂欢：超大爱心震荡波 + 夸张巨型心跳 + 漫天爱心螺旋雨！
-        // 1. 巨大粉金双层冲击波光环 (扩散至 110px)
-        const outerAuraR = 20 + p * 110;
-        const innerAuraR = 15 + p * 75;
-        this.circle(targetX, targetY, outerAuraR, `rgba(244, 114, 182, ${0.45 * (1 - p)})`, `rgba(253, 224, 71, ${0.7 * (1 - p)})`, 3);
-        this.circle(targetX, targetY, innerAuraR, `rgba(251, 113, 133, ${0.35 * (1 - p)})`, `rgba(244, 114, 182, ${0.8 * (1 - p)})`, 2);
+        // 飞到目标头像时最大，然后瞬间炸开，blingbling的璀璨钻石星芒雨！
+        // 1. 瞬时炸开金色与粉金双层超大冲击光波 (扩散至 115px)
+        const outerAuraR = 22 + p * 95;
+        const innerAuraR = 15 + p * 65;
+        this.circle(targetX, targetY, outerAuraR, null, `rgba(253, 224, 71, ${0.85 * (1 - p)})`, 3.5);
+        this.circle(targetX, targetY, innerAuraR, `rgba(244, 63, 94, ${0.45 * (1 - p)})`, `rgba(244, 114, 182, ${0.9 * (1 - p)})`, 2.5);
 
-        // 2. 漫天喷涌升腾的夸张爱心雨 (16 颗绚烂彩心螺旋扩散升腾)
-        const burstHearts = ['💖', '💕', '💓', '💘', '✨', '💝', '🥰', '🌸', '💗', '💕', '✨', '💖', '💓', '💘', '💕', '✨'];
-        for (let i = 0; i < burstHearts.length; i += 1) {
-          const ang = i * (Math.PI * 2 / burstHearts.length) + p * 1.5;
-          const spread = (25 + (i % 4) * 16) * Math.sin(Math.min(1, p * 1.6) * Math.PI * 0.5);
-          const lift = p * 65;
-          const sway = Math.sin(p * 5 + i * 0.9) * 10;
-          const hx = targetX + Math.cos(ang) * spread + sway;
-          const hy = targetY + Math.sin(ang) * spread - lift;
-          const hSize = 18 - (i % 3) * 3;
-          this.text(burstHearts[i], hx, hy + 5, hSize, COLORS.text, 'center');
+        // 2. 爆开瞬间闪烁十字星芒 (Bling Flash)
+        if (p < 0.28) {
+          const flashP = p / 0.28;
+          const flashSize = (1 - flashP) * 52;
+          ctx.save();
+          ctx.translate(targetX, targetY);
+          ctx.rotate(p * 2.5);
+          ctx.strokeStyle = `rgba(255, 255, 255, ${0.95 * (1 - flashP)})`;
+          ctx.lineWidth = 3.5;
+          ctx.beginPath();
+          ctx.moveTo(-flashSize, 0); ctx.lineTo(flashSize, 0);
+          ctx.moveTo(0, -flashSize); ctx.lineTo(0, flashSize);
+          ctx.stroke();
+          ctx.restore();
         }
 
-        // 3. 中央巨型浮空立体大爱心（剧烈弹性心跳放大至 56px！）
-        const beatScale = 1 + 0.45 * Math.sin(p * Math.PI * 6) * Math.max(0, 1 - p * 0.6);
-        ctx.save();
-        ctx.translate(targetX, targetY - 4);
-        ctx.scale(beatScale, beatScale);
-        this.circle(0, 0, 28, 'rgba(244, 114, 182, 0.4)');
-        this.circle(0, 0, 20, 'rgba(254, 240, 138, 0.6)');
-        this.text('💖', 0, 12, 56, COLORS.text, 'center');
-        ctx.restore();
+        // 3. 20 颗璀璨闪烁的 blingbling 钻石星芒、彩钻与耀眼金星向外漫天炸开
+        const blingSymbols = [
+          '✨', '⭐', '🌟', '💫', '💖', '✨', '💎', '🌟', '✨', '💛',
+          '⭐', '✨', '💖', '🌟', '✨', '💫', '⭐', '✨', '🌟', '💎',
+        ];
+        for (let i = 0; i < blingSymbols.length; i += 1) {
+          const ang = i * (Math.PI * 2 / blingSymbols.length) + p * 1.6;
+          const dist = (28 + (i % 5) * 16) * Math.sin(Math.min(1, p * 1.5) * Math.PI * 0.5);
+          const lift = p * 62;
+          const sway = Math.sin(p * 6 + i * 1.2) * 12;
+          const bx = targetX + Math.cos(ang) * dist + sway;
+          const by = targetY + Math.sin(ang) * dist - lift;
+
+          // Blingbling 关键：极高频闪耀闪烁效果 (Twinkling shine)
+          const twinkleAlpha = Math.max(0.18, (0.55 + 0.45 * Math.sin(p * 26 + i * 2.1)) * (1 - p * 0.75));
+          const twinkleScale = 0.8 + 0.35 * Math.sin(p * 20 + i * 1.7);
+          const bSize = Math.round((18 - (i % 3) * 3) * twinkleScale);
+
+          ctx.save();
+          ctx.globalAlpha = twinkleAlpha;
+          ctx.translate(bx, by);
+          ctx.rotate(p * 3.5 + i);
+          this.text(blingSymbols[i], 0, 4, bSize, COLORS.text, 'center');
+          ctx.restore();
+        }
+
+        // 4. 红心在命中点最大状态下爆碎向外膨胀消散 (前半段超大红心炸裂)
+        if (p < 0.42) {
+          const burstP = p / 0.42;
+          const burstScale = 1.9 + burstP * 0.65;
+          const burstAlpha = Math.max(0, 1 - burstP);
+          ctx.save();
+          ctx.globalAlpha = burstAlpha;
+          ctx.translate(targetX, targetY);
+          ctx.scale(burstScale, burstScale);
+          this.text('❤️', 0, 9, 36, COLORS.text, 'center');
+          ctx.restore();
+        }
       } else if (type === 'kiss') {
         // 亲吻暴击：巨型红唇盖章 + 头像全脸打满 4 重吻痕 + 满天飞吻红心！
         // 1. 盖章落地红色冲击光环 (扩散至 95px)

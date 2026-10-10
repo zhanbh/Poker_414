@@ -1011,12 +1011,12 @@ main { min-height: 100svh; padding: clamp(16px, 4vw, 32px); }
   100% { opacity: 0; width: 90px; height: 90px; top: calc(50% - 45px); left: calc(50% - 45px); border-width: 1px; }
 }
 @keyframes heart-flight-pulse {
-  0% { opacity: 0; transform: translate(-20px, -40px) scale(.3); filter: drop-shadow(0 0 0 transparent); }
-  25% { opacity: 1; transform: translate(0, 0) scale(1.65); filter: drop-shadow(0 0 24px #f472b6); }
-  40% { transform: scale(1.15); }
-  58% { transform: scale(1.6); filter: drop-shadow(0 0 30px #fde047); }
-  78% { opacity: 1; transform: scale(1.25); }
-  100% { opacity: 0; transform: scale(1) translateY(-24px); }
+  0% { opacity: 0; transform: translate(-32px, -60px) scale(.35); filter: drop-shadow(0 0 0 transparent); }
+  22% { opacity: 1; transform: translate(-14px, -24px) scale(.85); filter: drop-shadow(0 0 12px #f43f5e); }
+  46% { opacity: 1; transform: translate(0, 0) scale(1.9); filter: drop-shadow(0 0 32px #fde047); }
+  54% { transform: scale(2.25); filter: drop-shadow(0 0 42px #facc15); }
+  72% { opacity: .85; transform: scale(1.35); }
+  100% { opacity: 0; transform: scale(.6) translateY(-28px); }
 }
 @keyframes kiss-flight-stamp {
   0% { opacity: 0; transform: translate(-25px, -50px) scale(2.4) rotate(-30deg); }

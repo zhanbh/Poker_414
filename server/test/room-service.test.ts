@@ -319,4 +319,20 @@ describe('单房间会话与命令服务', () => {
     players.forEach((auth) => room.leave(auth.sessionToken));
     expect(room.getSnapshot(players[0].sessionToken).public.chat).toEqual([]);
   });
+
+  it('允许玩家在对局结算（settled）或结束（ended）状态下直接退出房间', () => {
+    const room = service();
+    const players = ['甲', '乙', '丙', '丁'].map((nickname) => {
+      const auth = room.login('inner-414');
+      room.join(auth.sessionToken, nickname, '414');
+      return auth;
+    });
+
+    const state = room.getState()!;
+    (state as { phase: string }).phase = 'settled';
+
+    expect(() => room.leave(players[1].sessionToken)).not.toThrow();
+    expect(room.getState()!.phase).toBe('lobby');
+    expect(room.getState()!.players.B).toBeNull();
+  });
 });

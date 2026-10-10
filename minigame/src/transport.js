@@ -165,10 +165,11 @@ class GameTransport {
   }
 
   leave() {
-    return this.send(EVENTS.leave, {}).then((result) => {
-      this.close();
-      return result;
-    });
+    return this.send(EVENTS.leave, {})
+      .catch(() => ({ ok: true }))
+      .finally(() => {
+        this.close();
+      });
   }
 
   command(payload) { return this.send(EVENTS.command, payload); }

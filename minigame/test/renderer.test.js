@@ -76,6 +76,20 @@ describe('native mini-game Canvas renderer', () => {
     expect(entryActionCalled).toBe(true);
   });
 
+  it('recovers field on keyboard confirm even if onKeyboardComplete cleared focus prematurely on entry screen', () => {
+    let entryActionCalled = false;
+    const app = {
+      state: { focus: '', screen: 'entry', inviteCode: '' },
+      lastFocusedField: 'inviteCode',
+      hideKeyboard: () => {},
+      updateUserInfoButton: () => {},
+      handleEntryAction: () => { entryActionCalled = true; },
+    };
+    MahjongGameApp.prototype.onKeyboardConfirm.call(app, { value: '308' });
+    expect(app.state.inviteCode).toBe('308');
+    expect(entryActionCalled).toBe(true);
+  });
+
   it('places the native WeChat consent button directly over the entry button after an invite is entered', () => {
     let buttonOptions;
     let onTap;

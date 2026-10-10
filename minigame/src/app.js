@@ -135,6 +135,7 @@ class MahjongGameApp {
       this.updateUserInfoButton(true);
     });
     if (typeof this.wx.onKeyboardComplete === 'function') this.wx.onKeyboardComplete(() => {
+      if (this.state.focus) this.lastFocusedField = this.state.focus;
       this.state.focus = '';
       this.scheduleCanvasRestoreAfterKeyboard();
     });
@@ -544,11 +545,13 @@ class MahjongGameApp {
   }
 
   onKeyboardConfirm(event = {}) {
-    const field = this.state.focus;
+    const field = this.state.focus || this.lastFocusedField || (this.state.screen === 'entry' ? 'inviteCode' : '');
     if (field && typeof event.value === 'string') {
       const length = field === 'inviteCode' ? 32 : 200;
       this.state[field] = event.value.slice(0, length);
     }
+    this.state.focus = '';
+    this.lastFocusedField = '';
     this.hideKeyboard();
     if (field === 'inviteCode') {
       if (typeof this.updateUserInfoButton === 'function') this.updateUserInfoButton(true);
@@ -556,7 +559,7 @@ class MahjongGameApp {
         const fn = this.handleEntryAction || MahjongGameApp.prototype.handleEntryAction;
         if (typeof fn === 'function') void fn.call(this);
       }
-    } else if (field === 'chatDraft' && this.state.chatDraft.trim()) {
+    } else if (field === 'chatDraft' && this.state.chatDraft && this.state.chatDraft.trim()) {
       void this.sendChat();
     }
   }
@@ -566,20 +569,24 @@ class MahjongGameApp {
     const code = this.state.inviteCode.trim();
     if (!code) {
       this.state.error = '请输入房间邀请码';
-      this.draw();
+      if (typeof this.draw === 'function') this.draw();
       return;
     }
-    if (this.userInfoBtn) return;
+    if (this.userInfoBtn) {
+      this.state.statusMessage = '请点击“进入房间”并确认昵称头像授权';
+      if (typeof this.draw === 'function') this.draw();
+      return;
+    }
     if (!this.state.profileAuthorized && typeof this.wx.createUserInfoButton === 'function') {
-      this.updateUserInfoButton();
+      if (typeof this.updateUserInfoButton === 'function') this.updateUserInfoButton();
       if (!this.userInfoBtn) {
         this.state.error = this.authorizationButtonError
           ? '微信授权按钮未能创建，请重新输入邀请码后再试'
           : '正在准备微信授权，请稍后再点';
-        this.draw();
+        if (typeof this.draw === 'function') this.draw();
       } else {
         this.state.statusMessage = '邀请码已就绪，请点击“进入房间”确认授权';
-        this.draw();
+        if (typeof this.draw === 'function') this.draw();
       }
       return;
     }
@@ -594,7 +601,7 @@ class MahjongGameApp {
     this.state.focus = '';
     const wasOpen = this.state.keyboardOpen;
     if (!wasOpen) this.state.keyboardOpen = false;
-    this.draw();
+    if (typeof this.draw === 'function') this.draw();
     if (wasOpen) this.scheduleCanvasRestoreAfterKeyboard();
   }
 
@@ -604,22 +611,24 @@ class MahjongGameApp {
       this.keyboardResizeTimer = null;
       this.state.keyboardOpen = false;
       this.resizeCanvas();
-      this.draw();
-      this.updateUserInfoButton(true);
+      if (typeof this.draw === 'function') this.draw();
+      if (typeof this.updateUserInfoButton === 'function') this.updateUserInfoButton(true);
     }, 150);
   }
 
   showKeyboard(field) {
     this.state.focus = field;
+    this.lastFocusedField = field;
     this.state.keyboardOpen = true;
     this.state.error = '';
+    if (typeof this.destroyUserInfoButton === 'function') this.destroyUserInfoButton();
     const defaults = { inviteCode: this.state.inviteCode, chatDraft: this.state.chatDraft };
     const length = field === 'inviteCode' ? 32 : 200;
     if (typeof this.wx.showKeyboard !== 'function') {
       this.state.statusMessage = '当前基础库不支持键盘输入';
       this.state.focus = '';
       this.state.keyboardOpen = false;
-      this.draw();
+      if (typeof this.draw === 'function') this.draw();
       return;
     }
     this.wx.showKeyboard({
@@ -630,10 +639,10 @@ class MahjongGameApp {
         this.state.focus = '';
         this.state.keyboardOpen = false;
         this.state.error = '无法打开输入键盘，请重试';
-        this.draw();
+        if (typeof this.draw === 'function') this.draw();
       },
     });
-    this.draw();
+    if (typeof this.draw === 'function') this.draw();
   }
 
   onTouchStart(event) {
@@ -1049,7 +1058,11 @@ class MahjongGameApp {
       try {
         clearTimeout(this.recoveryTimer);
         this.recoveryTimer = null;
-        await this.transport.leave();
+        try {
+          await this.transport.leave();
+        } catch {
+          this.transport.close();
+        }
         this.wx.removeStorageSync(config.sessionStorageKey);
         this.wx.removeStorageSync(config.nicknameStorageKey);
         this.wx.removeStorageSync('mahjong_avatar_url');

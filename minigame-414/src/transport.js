@@ -154,7 +154,11 @@ class GameTransport {
     if (avatarUrl) payload.avatarUrl = avatarUrl;
     return this.send(EVENTS.join, payload).then((result) => result.snapshot);
   }
-  leave() { return this.send(EVENTS.leave, {}).then((result) => { this.close(); return result; }); }
+  leave() {
+    return this.send(EVENTS.leave, {})
+      .catch(() => ({ ok: true }))
+      .finally(() => { this.close(); });
+  }
   command(payload) { return this.send(EVENTS.command, payload); }
   chat(payload) { return this.send(EVENTS.chat, payload); }
   activity() { if (this.opened && this.authenticated) void this.sendRaw(EVENTS.activity, {}).catch(() => undefined); }

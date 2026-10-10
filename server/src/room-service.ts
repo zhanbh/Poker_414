@@ -23,6 +23,9 @@ import {
   resolveOpening,
   scanPresence,
   setPlayerConnection,
+  SEATS,
+  Seat,
+  PlayerState,
   startHand,
 } from '../../shared/src/game-state';
 import { HandKind } from '../../shared/src/hand-types';
@@ -258,7 +261,29 @@ export class RoomService {
       this.clearChatIfEmpty();
       return;
     }
-    if (this.state?.phase === 'opening' || this.state?.phase === 'playing') this.state = abortHand(this.state);
+    if (this.state?.phase === 'opening' || this.state?.phase === 'playing') {
+      this.state = abortHand(this.state);
+    } else if (this.state && (this.state.phase === 'settled' || this.state.phase === 'ended')) {
+      const players = Object.fromEntries(SEATS.map((s) => {
+        const player = this.state!.players[s];
+        return [s, player ? {
+          ...player,
+          hand: [],
+          activeInHand: true,
+          finishedRank: null,
+          burstLocked: false,
+          burstKind: null,
+        } : null];
+      })) as Record<Seat, PlayerState | null>;
+      this.state = {
+        ...this.state,
+        version: this.state.version + 1,
+        phase: 'lobby',
+        players,
+        candidateLeader: null,
+        burstPending: null,
+      };
+    }
     if (!this.state || this.state.phase !== 'lobby') throw new RoomServiceError('HAND_IN_PROGRESS', '当前状态不能退出玩家位');
     const leavingPlayer = this.state.players[session.seat];
     const next = removePlayer(this.state, session.seat);

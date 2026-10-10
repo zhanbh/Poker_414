@@ -220,7 +220,10 @@ export function createServer(config: ServerConfig = loadConfig()): RunningServer
         service.leave(sessionToken);
         acknowledgeMini(state, requestId, { ok: true });
         sendSnapshots();
-        state.socket.close();
+        removeMiniSocket(state);
+        setTimeout(() => {
+          try { state.socket.close(); } catch { /* ignore */ }
+        }, 100);
         return;
       }
 

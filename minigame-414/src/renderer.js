@@ -215,6 +215,28 @@ class FourOneFourRenderer {
   }
 
   button(label, x, y, w, h, type, data = {}, disabled = false, secondary = false) {
+    if (type === 'enter') {
+      const radius = 14;
+      if (!disabled) {
+        // 3D bottom bevel for tactile cartoon feel
+        this.roundRect(x, y + 4, w, h, radius, '#b45309', null);
+      }
+      let fill = disabled ? '#94a3b8' : '#f59e0b';
+      if (!disabled && this.ctx.createLinearGradient) {
+        const grad = this.ctx.createLinearGradient(x, y, x, y + h);
+        if (grad && typeof grad.addColorStop === 'function') {
+          grad.addColorStop(0, '#fde047');
+          grad.addColorStop(1, '#f59e0b');
+          fill = grad;
+        }
+      }
+      const stroke = disabled ? '#cbd5e1' : '#fef08a';
+      this.roundRect(x, y, w, h, radius, fill, stroke, 1.5);
+      this.text(label, x + w / 2, y + h / 2, 18, disabled ? '#f1f5f9' : '#ffffff', 'center', '800');
+      if (!disabled) this.targets.push({ x, y, w, h, width: w, height: h, type, data });
+      return;
+    }
+
     let fill = disabled ? '#374953' : (secondary ? COLORS.panel : COLORS.gold);
     if (!disabled && !secondary && this.ctx.createLinearGradient) {
       const grad = this.ctx.createLinearGradient(x, y, x, y + h);
@@ -231,10 +253,23 @@ class FourOneFourRenderer {
   }
 
   input(label, value, x, y, width, field) {
-    this.text(label, x, y - 14, 14, COLORS.muted, 'left', '500');
+    this.text(label, x + 2, y - 13, 13, '#047857', 'left', '700');
     const isFocused = this.currentFocus === field;
-    this.roundRect(x, y, width, 52, 10, 'rgba(8, 24, 34, 0.75)', isFocused ? COLORS.gold : 'rgba(58, 114, 130, 0.6)', isFocused ? 2 : 1.5);
-    this.text(value || `点击输入${label}`, x + 16, y + 26, 15, value ? '#ffdf79' : '#698795', 'left', value ? '600' : 'normal');
+    this.roundRect(x, y + 2, width, 52, 12, 'rgba(16, 185, 129, 0.12)', null);
+    this.roundRect(
+      x, y, width, 52, 12,
+      isFocused ? '#ffffff' : '#f0fdf4',
+      isFocused ? '#059669' : '#a7f3d0',
+      isFocused ? 2 : 1.5,
+    );
+    this.text(
+      value || `点击输入${label}`,
+      x + 16, y + 26,
+      value ? 17 : 14,
+      value ? '#064e3b' : '#94a3b8',
+      'left',
+      value ? '700' : '500',
+    );
     this.targets.push({ x, y, w: width, h: 52, width, height: 52, type: 'input', data: { field } });
   }
 
@@ -286,12 +321,12 @@ class FourOneFourRenderer {
 
   initSuits() {
     this.suits = [
-      { char: '♠', x: 90, baseY: 180, size: 180, color: COLORS.gold, baseAlpha: 0.05, phase: 0 },
-      { char: '♥', x: 450, baseY: 220, size: 160, color: '#ef4444', baseAlpha: 0.05, phase: 1.5 },
-      { char: '♣', x: 80, baseY: 820, size: 150, color: COLORS.gold, baseAlpha: 0.05, phase: 3.1 },
-      { char: '♦', x: 460, baseY: 800, size: 170, color: '#ef4444', baseAlpha: 0.05, phase: 4.7 },
-      { char: '♠', x: 470, baseY: 480, size: 85, color: '#38bdf8', baseAlpha: 0.035, phase: 2.1 },
-      { char: '♦', x: 68, baseY: 490, size: 80, color: '#f59e0b', baseAlpha: 0.035, phase: 5.3 },
+      { char: '♠', x: 80, baseY: 175, size: 70, color: '#ffffff', baseAlpha: 0.16, phase: 0 },
+      { char: '♥', x: 460, baseY: 205, size: 68, color: '#f87171', baseAlpha: 0.20, phase: 1.5 },
+      { char: '♣', x: 75, baseY: 810, size: 66, color: '#6ee7b7', baseAlpha: 0.18, phase: 3.1 },
+      { char: '♦', x: 465, baseY: 790, size: 72, color: '#fde047', baseAlpha: 0.20, phase: 4.7 },
+      { char: '♠', x: 475, baseY: 460, size: 55, color: '#ffffff', baseAlpha: 0.14, phase: 2.1 },
+      { char: '♦', x: 65, baseY: 470, size: 52, color: '#fb923c', baseAlpha: 0.18, phase: 5.3 },
     ];
   }
 
@@ -314,16 +349,16 @@ class FourOneFourRenderer {
     const ctx = this.ctx;
     if (!ctx || typeof ctx.arc !== 'function') return;
     for (const p of this.particles) {
-      const alpha = Math.max(0.05, Math.min(1, p.alpha * (0.65 + 0.35 * Math.sin(p.pulse))));
+      const alpha = Math.max(0.08, Math.min(0.9, p.alpha * (0.65 + 0.35 * Math.sin(p.pulse))));
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(255, 215, 120, ${alpha.toFixed(2)})`;
+      ctx.fillStyle = `rgba(255, 255, 255, ${alpha.toFixed(2)})`;
       ctx.fill();
 
-      if (p.r > 2.0) {
+      if (p.r > 1.8) {
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r * 2.2, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255, 195, 77, ${(alpha * 0.25).toFixed(2)})`;
+        ctx.fillStyle = `rgba(167, 243, 208, ${(alpha * 0.35).toFixed(2)})`;
         ctx.fill();
       }
     }
@@ -334,10 +369,12 @@ class FourOneFourRenderer {
     const t = this.animTime * 0.0015;
     for (const s of this.suits) {
       const floatY = s.baseY + Math.sin(t + s.phase) * 9;
-      const alpha = Math.max(0.02, Math.min(0.09, s.baseAlpha + Math.sin(t * 0.8 + s.phase) * 0.025));
+      const alpha = Math.max(0.04, Math.min(0.25, s.baseAlpha + Math.sin(t * 0.8 + s.phase) * 0.04));
       ctx.save();
       ctx.globalAlpha = alpha;
-      this.text(s.char, s.x, floatY, s.size, s.color, 'center');
+      // Miniature rounded cartoon card backing behind suits for playful flair
+      this.roundRect(s.x - s.size * 0.32, floatY - s.size * 0.42, s.size * 0.64, s.size * 0.84, 8, 'rgba(255, 255, 255, 0.15)', 'rgba(255, 255, 255, 0.3)', 1);
+      this.text(s.char, s.x, floatY, s.size * 0.45, s.color, 'center');
       ctx.restore();
     }
   }
@@ -352,12 +389,12 @@ class FourOneFourRenderer {
     const shimmerX = bx - 60 + p * (bw + 120);
 
     ctx.save();
-    this.roundRect(bx, by, bw, bh, 10, null, null);
+    this.roundRect(bx, by, bw, bh, 14, null, null);
     try {
       ctx.clip();
       const grad = this.linearFill(shimmerX - 35, by, shimmerX + 35, by + bh, [
         [0, 'rgba(255, 255, 255, 0)'],
-        [0.5, 'rgba(255, 255, 255, 0.28)'],
+        [0.5, 'rgba(255, 255, 255, 0.35)'],
         [1, 'rgba(255, 255, 255, 0)'],
       ], null);
       if (grad) {
@@ -380,68 +417,83 @@ class FourOneFourRenderer {
       } catch { /* Use the gradient fallback if the image cannot be drawn. */ }
     }
     if (hasSceneBackground) {
+      // Light airy vignette to preserve the vibrant emerald table and white card highlights
       const overlay = this.linearFill(0, 0, 0, 960, [
-        [0, 'rgba(6, 17, 24, 0.48)'],
-        [0.35, 'rgba(6, 17, 24, 0.68)'],
-        [0.75, 'rgba(6, 17, 24, 0.86)'],
-        [1, 'rgba(4, 12, 18, 0.96)'],
-      ], 'rgba(6, 17, 24, 0.76)');
+        [0, 'rgba(4, 78, 59, 0.12)'],
+        [0.3, 'rgba(4, 47, 46, 0.08)'],
+        [0.7, 'rgba(4, 78, 59, 0.22)'],
+        [1, 'rgba(4, 47, 46, 0.50)'],
+      ], 'rgba(4, 78, 59, 0.18)');
       ctx.fillStyle = overlay;
       ctx.fillRect(0, 0, 540, 960);
     } else {
-      // Luxury dark velvet fallback while the scene image loads or if unavailable.
+      // Vibrant fresh cartoon green felt fallback
       const bgGrad = this.linearFill(0, 0, 540, 960, [
-        [0, '#0a1d27'],
-        [0.35, '#0d2836'],
-        [0.75, '#07161f'],
-        [1, '#040d13'],
-      ], '#07161e');
+        [0, '#10b981'],
+        [0.3, '#059669'],
+        [0.7, '#047857'],
+        [1, '#064e3b'],
+      ], '#059669');
       ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, 540, 960);
+
+      // Playful cartoon table rim
+      this.drawOval(270, 480, 245, 450, null, 'rgba(255, 255, 255, 0.22)', 3);
+      this.drawOval(270, 480, 235, 440, null, 'rgba(52, 211, 153, 0.35)', 1.5);
     }
 
-    // Decorative dynamic ambient poker suit watermarks in background
+    // Floating cartoon mini-cards & suits
     this.drawSuits();
 
-    // Floating starlight & gold dust particles
+    // Sparkling starlight particles
     this.drawParticles();
 
-    // Brand Header
-    const badgePulse = Math.sin(this.animTime * 0.003);
-    const badgeBorder = badgePulse > 0 ? '#e6af3f' : '#d49b29';
-    this.roundRect(228, 86, 84, 26, 6, '#861c24', badgeBorder);
-    this.text('私房牌局', 270, 99, 13, '#ffdb88', 'center', '600');
+    // Brand Header - Modern Cartoon Capsule
+    const badgeW = 144;
+    const badgeH = 28;
+    const badgeX = (540 - badgeW) / 2;
+    const badgeY = 82;
+    this.roundRect(badgeX, badgeY + 2, badgeW, badgeH, 14, 'rgba(4, 47, 46, 0.35)', null);
+    this.roundRect(badgeX, badgeY, badgeW, badgeH, 14, '#ffffff', '#34d399', 2);
+    this.text('♣ 414 欢乐扑克 ♠', 270, badgeY + 14, 13, '#059669', 'center', '700');
 
-    this.text('414 私房扑克 · 微信小游戏', 270, 152, 29, COLORS.gold, 'center', '700');
-    this.text('经典四人二打二 · 跨端实时互通', 270, 192, 14, COLORS.muted, 'center');
+    // Vibrant 3D Cartoon Title: 414 扑克对决
+    this.text('414 扑克对决', 270, 150, 36, '#064e3b', 'center', '900');
+    this.text('414 扑克对决', 270, 146, 36, '#ffffff', 'center', '900');
 
-    // Frosted Glass Card with breathing golden border glow
+    // Modern Subtitle Pill
+    this.roundRect(165, 182, 210, 26, 13, 'rgba(255, 255, 255, 0.22)', 'rgba(255, 255, 255, 0.45)', 1);
+    this.text('经典四人二打二 · 欢乐开局', 270, 195, 13, '#ffffff', 'center', '600');
+
+    // Pure White Cartoon Card with 3D bottom bevel
     const cardX = 75;
     const cardY = 270;
     const cardW = 390;
     const cardH = 370;
-    const borderAlpha = (0.35 + 0.18 * Math.sin(this.animTime * 0.0024)).toFixed(2);
-    const innerAlpha = (0.10 + 0.08 * Math.sin(this.animTime * 0.0024 + 1.2)).toFixed(2);
-    this.roundRect(cardX, cardY, cardW, cardH, 20, 'rgba(10, 28, 38, 0.68)', `rgba(218, 170, 75, ${borderAlpha})`);
-    this.roundRect(cardX + 6, cardY + 6, cardW - 12, cardH - 12, 16, null, `rgba(255, 225, 140, ${innerAlpha})`);
+    // 3D shadow for card
+    this.roundRect(cardX, cardY + 5, cardW, cardH, 22, 'rgba(4, 78, 59, 0.35)', null);
+    // Main card face: pure crisp white with mint border
+    this.roundRect(cardX, cardY, cardW, cardH, 22, '#ffffff', '#a7f3d0', 2.5);
+    // Inner gentle rim
+    this.roundRect(cardX + 6, cardY + 6, cardW - 12, cardH - 12, 17, null, 'rgba(16, 185, 129, 0.15)', 1.2);
 
-    this.text('✦ 加入牌局 ✦', 270, cardY + 36, 18, COLORS.gold, 'center', '700');
+    this.text('✦ 快速加入房间 ✦', 270, cardY + 36, 18, '#059669', 'center', '800');
 
-    // Invite Code Input (single input, no nickname input needed!)
+    // Invite Code Input
     this.input('邀请码', state.inviteCode, cardX + 25, cardY + 70, cardW - 50, 'inviteCode');
 
     // Mode Tag
-    this.text('四人二打二 · 跨端实时互通', 270, cardY + 144, 12, '#8ba4ae', 'center');
+    this.text('四人二打二 · 跨端实时互通', 270, cardY + 144, 12.5, '#059669', 'center', '600');
 
-    // Tip Banner
-    this.roundRect(cardX + 25, cardY + 166, cardW - 50, 26, 6, 'rgba(212, 155, 41, 0.15)', 'rgba(212, 155, 41, 0.35)');
-    this.text('💡 按键盘【前往】或点【进入房间】继续', 270, cardY + 179, 10.5, '#ffd275', 'center', '600');
+    // Tip Banner (Sunny lemon yellow pill)
+    this.roundRect(cardX + 25, cardY + 166, cardW - 50, 26, 8, '#fef9c3', '#fde047', 1);
+    this.text('💡 输入邀请码后点【进入房间】即可入局', 270, cardY + 179, 11, '#854d0e', 'center', '600');
 
     // Authorization Notice
     const authAvailable = state.canRequestUserInfo && !state.profileAuthorized;
-    this.text(authAvailable ? '首次进入需确认微信昵称头像授权' : '输入房间邀请码即可入局对战', 270, cardY + 214, 11.5, '#76949f', 'center');
+    this.text(authAvailable ? '首次进入将同步微信昵称与头像' : '输入 6 位房间邀请码即可入局对战', 270, cardY + 214, 12, '#64748b', 'center', '500');
 
-    // Enter Button
+    // Enter Button (Cartoon 3D Amber Button)
     this.button(state.busy ? '正在进入…' : '进入房间', cardX + 25, cardY + 240, cardW - 50, 56, 'enter', {}, state.busy);
     if (!state.busy) {
       this.drawButtonShimmer(cardX + 25, cardY + 240, cardW - 50, 56);
@@ -449,11 +501,11 @@ class FourOneFourRenderer {
 
     // Status Message
     const cardMsg = state.statusMessage || (state.error ? state.error : '请输入 6 位房间邀请码');
-    this.text(this.fit(cardMsg, cardW - 30, 12), 270, cardY + 326, 12, state.error ? '#f87171' : COLORS.muted, 'center');
+    this.text(this.fit(cardMsg, cardW - 30, 12), 270, cardY + 326, 12, state.error ? '#ef4444' : '#64748b', 'center', '500');
 
     // Footer
-    this.text('虚拟筹码不具有现金或财产价值，仅供测试、学习和交流', 270, 875, 11, '#537280', 'center');
-    this.text('308娱乐 出品', 270, 902, 13, '#537280', 'center');
+    this.text('虚拟筹码不具有现金或财产价值，仅供测试、学习和交流', 270, 875, 11, 'rgba(255, 255, 255, 0.85)', 'center');
+    this.text('308娱乐 出品', 270, 902, 13, '#ffffff', 'center', '700');
   }
 
   drawRoom(state, width) {

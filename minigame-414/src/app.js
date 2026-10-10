@@ -203,13 +203,13 @@ class FourOneFourGameApp {
         lang: 'zh_CN',
         style: {
           left, top, width, height,
-          backgroundColor: '#e7a52d',
-          borderColor: '#fff0ba',
-          color: '#15252b',
+          backgroundColor: '#f59e0b',
+          borderColor: '#fde68a',
+          color: '#ffffff',
           textAlign: 'center',
-          fontSize: 17,
+          fontSize: 18,
           lineHeight: height,
-          borderRadius: 10,
+          borderRadius: 14,
         },
       });
       if (!this.userInfoBtn || typeof this.userInfoBtn.onTap !== 'function') {

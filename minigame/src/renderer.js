@@ -1106,15 +1106,15 @@ class MahjongRenderer {
     const ctx = this.ctx;
     const radius = Math.min(5, width * 0.12);
     if (bodyDepth > 0) {
-      ctx.save(); ctx.shadowColor = 'rgba(5, 24, 12, 0.5)'; ctx.shadowBlur = 3; ctx.shadowOffsetY = 3;
-      this.roundRect(x, y + bodyDepth, width, height, radius, '#2a6f33', '#19492a');
+      ctx.save(); ctx.shadowColor = 'rgba(5, 24, 12, 0.45)'; ctx.shadowBlur = 4; ctx.shadowOffsetY = 3;
+      this.roundRect(x, y + bodyDepth, width, height, radius, '#1b5e20', '#0d3813');
       ctx.restore();
     }
     this.roundRect(x, y, width, height, radius,
-      this.linearFill(x, y, x + width, y + height, [[0, '#ffffff'], [0.24, '#fdfdf7'], [0.86, '#eeeede'], [1, '#cfd7c8']], '#fafbf2'),
-      selected ? '#ffe083' : '#9cae97');
-    this.roundRect(x + 1.5, y + 2, width - 3, height - 4, Math.max(1, radius - 1), null, '#ffffff');
-    if (selected) this.roundRect(x - 1, y - 1, width + 2, height + 2, radius, null, '#ffd965');
+      this.linearFill(x, y, x + width, y + height, [[0, '#ffffff'], [0.2, '#fcfcf5'], [0.85, '#f4f5e7'], [1, '#dce3d2']], '#fafbf2'),
+      selected ? '#ffe083' : '#a8bba4');
+    this.roundRect(x + 1.2, y + 1.5, width - 2.4, height - 3, Math.max(1, radius - 1), null, '#ffffff', 1);
+    if (selected) this.roundRect(x - 1, y - 1, width + 2, height + 2, radius, null, '#ffd965', 2);
     ctx.save(); ctx.translate(x + width / 2, y + height / 2); ctx.rotate(rotation);
     const sideways = Math.abs(Math.sin(rotation)) > 0.5;
     this.drawTileArt(tile, sideways ? height : width, sideways ? width : height);
@@ -1124,6 +1124,37 @@ class MahjongRenderer {
   drawTileArt(tile, width, height) {
     const ctx = this.ctx;
     const rank = Number(tile.rank);
+
+    // High-resolution open-source tile atlas rendering
+    if (this.tileAtlas && this.tileAtlas.width) {
+      let row = -1;
+      let col = -1;
+      if (tile.suit === 'dots' && rank >= 1 && rank <= 9) {
+        row = 0; col = rank - 1;
+      } else if (tile.suit === 'bamboo' && rank >= 1 && rank <= 9) {
+        row = 1; col = rank - 1;
+      } else if (tile.suit === 'characters' && rank >= 1 && rank <= 9) {
+        row = 2; col = rank - 1;
+      } else if (tile.suit === 'dragons' || tile.suit === 'winds') {
+        row = 3;
+        const honorCols = { east: 0, south: 1, west: 2, north: 3, red: 4, green: 5, white: 6 };
+        col = honorCols[tile.rank] ?? 4;
+      }
+      if (row >= 0 && col >= 0) {
+        const cellWidth = this.tileAtlas.width / 9;
+        const cellHeight = this.tileAtlas.height / 4;
+        const sx = col * cellWidth;
+        const sy = row * cellHeight;
+        const drawW = width * 0.82;
+        const drawH = height * 0.82;
+        try {
+          ctx.drawImage(this.tileAtlas, sx, sy, cellWidth, cellHeight, -drawW / 2, -drawH / 2, drawW, drawH);
+          return;
+        } catch { /* proceed to procedural fallback */ }
+      }
+    }
+
+    // Procedural canvas fallback if atlas is not loaded
     const glyph = (value, y, size, color) => {
       ctx.fillStyle = color; ctx.font = `700 ${size}px "Kaiti SC", STKaiti, KaiTi, serif`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(value, 0, y);
@@ -1139,15 +1170,8 @@ class MahjongRenderer {
       return;
     }
     if (tile.suit === 'bamboo' && rank === 1) {
-      if (this.tileAtlas) {
-        const cellWidth = this.tileAtlas.width / 9;
-        const cellHeight = this.tileAtlas.height / 4;
-        ctx.drawImage(this.tileAtlas, 2, cellHeight + 2, cellWidth - 4, cellHeight - 4,
-          -width * 0.4, -height * 0.36, width * 0.8, height * 0.72);
-      } else {
-        glyph('幺', -height * 0.18, width * 0.6, '#277739');
-        glyph('雞', height * 0.22, width * 0.6, '#277739');
-      }
+      glyph('幺', -height * 0.18, width * 0.6, '#277739');
+      glyph('雞', height * 0.22, width * 0.6, '#277739');
       return;
     }
     if (tile.suit === 'dots' || tile.suit === 'bamboo') {

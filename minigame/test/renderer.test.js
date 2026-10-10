@@ -787,7 +787,7 @@ describe('native mini-game Canvas renderer', () => {
     expect(renderer.targets.some((t) => t.type === 'interaction')).toBe(false);
   });
 
-  it('renders listen preview when selecting a tile that can enter ting', () => {
+  it('dynamically reveals ting action button and hand badge when selecting a tile that can enter ting without showing discard-to-listen banner', () => {
     const labels = [];
     const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels.push(String(value)) }));
     const snapshot = {
@@ -803,13 +803,7 @@ describe('native mini-game Canvas renderer', () => {
           { id: 't-2', suit: 'characters', rank: 2, label: '二万' },
         ],
         listenTileIds: ['t-1'],
-        listenOptions: [
-          {
-            discardTileId: 't-1',
-            waits: [{ id: 'w-1', suit: 'characters', rank: 3, label: '三万' }],
-          },
-        ],
-        availableActions: ['discard'],
+        availableActions: ['discard', 'listen'],
       },
     };
 
@@ -818,9 +812,9 @@ describe('native mini-game Canvas renderer', () => {
       selectedTileId: 't-1',
     });
 
-    expect(labels).toContain('打出此牌可听');
-    expect(labels).toContain('胡：');
+    expect(labels).not.toContain('打出此牌可听');
     expect(labels).toContain('听');
+    expect(renderer.targets.some((t) => t.type === 'action' && t.data.action === 'listen')).toBe(true);
   });
 
   it('renders listen preview with postDiscardListenWaits when waiting to declare listen after discarding', () => {
@@ -919,7 +913,7 @@ describe('native mini-game Canvas renderer', () => {
     const labels3 = [];
     const renderer3 = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels3.push(String(value)) }));
     renderer3.draw({ screen: 'room', snapshot, connectionStatus: 'connected', chatOpen: false, selectedTileId: 't-1' });
-    expect(labels3).toContain('打出此牌可听');
+    expect(labels3).not.toContain('打出此牌可听');
     expect(labels3).toContain('听');
     expect(renderer3.targets.some((t) => t.type === 'action' && t.data.action === 'listen')).toBe(true);
   });

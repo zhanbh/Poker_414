@@ -1849,9 +1849,6 @@ class MahjongRenderer {
     const snapshot = state.snapshot;
     if (!snapshot || !snapshot.private) return;
     const priv = snapshot.private;
-    const effectiveSelectedTileId = priv.isListening
-      ? priv.discardableTileId ?? null
-      : state.selectedTileId;
     const postDiscardListenWaits = priv.postDiscardListenWaits || [];
 
     let preview = null;
@@ -1873,18 +1870,6 @@ class MahjongRenderer {
         waits: postDiscardListenWaits,
         baoTile: null,
       };
-    } else if (effectiveSelectedTileId && new Set(priv.listenTileIds || []).has(effectiveSelectedTileId) && priv.listenOptions && priv.listenOptions.length > 0) {
-      const option = priv.listenOptions.find((opt) => opt.discardTileId === effectiveSelectedTileId);
-      if (option && option.waits && option.waits.length > 0) {
-        preview = {
-          mode: 'discard-to-listen',
-          title: '打出此牌可听',
-          badgeBg: '#0f766e',
-          badgeBorder: '#5eead4',
-          waits: option.waits,
-          baoTile: null,
-        };
-      }
     }
 
     if (!preview || preview.waits.length === 0) return;

@@ -787,7 +787,7 @@ describe('native mini-game Canvas renderer', () => {
     expect(renderer.targets.some((t) => t.type === 'interaction')).toBe(false);
   });
 
-  it('dynamically reveals ting action button and hand badge when selecting a tile that can enter ting without showing discard-to-listen banner', () => {
+  it('dynamically reveals ting action button and winning wait tiles preview when selecting a tile that can enter ting', () => {
     const labels = [];
     const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels.push(String(value)) }));
     const snapshot = {
@@ -803,6 +803,12 @@ describe('native mini-game Canvas renderer', () => {
           { id: 't-2', suit: 'characters', rank: 2, label: '二万' },
         ],
         listenTileIds: ['t-1'],
+        listenOptions: [
+          {
+            discardTileId: 't-1',
+            waits: [{ id: 'w-1', suit: 'characters', rank: 3, label: '三万' }],
+          },
+        ],
         availableActions: ['discard', 'listen'],
       },
     };
@@ -813,6 +819,7 @@ describe('native mini-game Canvas renderer', () => {
     });
 
     expect(labels).not.toContain('打出此牌可听');
+    expect(labels).toContain('可胡：');
     expect(labels).toContain('听');
     expect(renderer.targets.some((t) => t.type === 'action' && t.data.action === 'listen')).toBe(true);
   });
@@ -897,6 +904,7 @@ describe('native mini-game Canvas renderer', () => {
     const labels1 = [];
     const renderer1 = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels1.push(String(value)) }));
     renderer1.draw({ screen: 'room', snapshot, connectionStatus: 'connected', chatOpen: false, selectedTileId: '' });
+    expect(labels1).not.toContain('可胡：');
     expect(labels1).not.toContain('打出此牌可听');
     expect(labels1).not.toContain('听');
     expect(renderer1.targets.some((t) => t.type === 'action' && t.data.action === 'listen')).toBe(false);
@@ -905,6 +913,7 @@ describe('native mini-game Canvas renderer', () => {
     const labels2 = [];
     const renderer2 = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels2.push(String(value)) }));
     renderer2.draw({ screen: 'room', snapshot, connectionStatus: 'connected', chatOpen: false, selectedTileId: 't-2' });
+    expect(labels2).not.toContain('可胡：');
     expect(labels2).not.toContain('打出此牌可听');
     expect(labels2).not.toContain('听');
     expect(renderer2.targets.some((t) => t.type === 'action' && t.data.action === 'listen')).toBe(false);
@@ -914,6 +923,7 @@ describe('native mini-game Canvas renderer', () => {
     const renderer3 = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels3.push(String(value)) }));
     renderer3.draw({ screen: 'room', snapshot, connectionStatus: 'connected', chatOpen: false, selectedTileId: 't-1' });
     expect(labels3).not.toContain('打出此牌可听');
+    expect(labels3).toContain('可胡：');
     expect(labels3).toContain('听');
     expect(renderer3.targets.some((t) => t.type === 'action' && t.data.action === 'listen')).toBe(true);
   });

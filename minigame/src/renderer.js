@@ -1856,6 +1856,7 @@ class MahjongRenderer {
       preview = {
         mode: 'listening',
         title: '已听牌',
+        label: '胡：',
         badgeBg: '#b91c1c',
         badgeBorder: '#fca5a5',
         waits: priv.listenWaits || [],
@@ -1865,11 +1866,28 @@ class MahjongRenderer {
       preview = {
         mode: 'pending-listen',
         title: '已出牌 · 可选择听牌',
+        label: '胡：',
         badgeBg: '#c2410c',
         badgeBorder: '#fdba74',
         waits: postDiscardListenWaits,
         baoTile: null,
       };
+    } else if (state.selectedTileId && priv.listenOptions && priv.listenOptions.length > 0) {
+      const listenTileIds = new Set(priv.listenTileIds || []);
+      if (listenTileIds.has(state.selectedTileId)) {
+        const option = priv.listenOptions.find((opt) => opt.discardTileId === state.selectedTileId);
+        if (option && option.waits && option.waits.length > 0) {
+          preview = {
+            mode: 'discard-to-listen',
+            title: null,
+            label: '可胡：',
+            badgeBg: '#0f766e',
+            badgeBorder: '#5eead4',
+            waits: option.waits,
+            baoTile: null,
+          };
+        }
+      }
     }
 
     if (!preview || preview.waits.length === 0) return;
@@ -1892,33 +1910,41 @@ class MahjongRenderer {
     const miniTileGap = 4;
 
     const ctx = this.ctx;
-    const metrics = typeof ctx.measureText === 'function' ? ctx.measureText(preview.title) : null;
-    const titleTextW = (metrics && Number.isFinite(metrics.width) ? metrics.width : Array.from(String(preview.title)).length * 11) + 16;
-    const badgeW = Math.max(50, titleTextW);
-    const labelW = 28;
+    let badgeW = 0;
+    if (preview.title) {
+      const metrics = typeof ctx.measureText === 'function' ? ctx.measureText(preview.title) : null;
+      const titleTextW = (metrics && Number.isFinite(metrics.width) ? metrics.width : Array.from(String(preview.title)).length * 11) + 16;
+      badgeW = Math.max(50, titleTextW);
+    }
+    const labelText = preview.label || '胡：';
+    const labelMetrics = typeof ctx.measureText === 'function' ? ctx.measureText(labelText) : null;
+    const labelW = (labelMetrics && Number.isFinite(labelMetrics.width) ? labelMetrics.width : Array.from(String(labelText)).length * 12) + 6;
     const waitsW = preview.waits.length * (miniTileW + miniTileGap);
     const baoW = preview.baoTile ? (28 + miniTileW + miniTileGap) : 0;
     const paddingX = 12;
-    const barW = Math.max(160, badgeW + 8 + labelW + waitsW + baoW + paddingX * 2);
+    const titlePartW = preview.title ? (badgeW + 8) : 0;
+    const barW = Math.max(100, titlePartW + labelW + waitsW + baoW + paddingX * 2);
     const barX = Math.max(handX, Math.min(roomWidth - rightInset - barW, (roomWidth - barW) / 2));
 
     ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
     ctx.shadowBlur = 12;
     ctx.shadowOffsetY = 3;
-    this.roundRect(barX, barY, barW, barH, 8, 'rgba(6, 26, 28, 0.94)', preview.badgeBorder, 1.5);
+    this.roundRect(barX, barY, barW, barH, 8, 'rgba(6, 26, 28, 0.94)', preview.badgeBorder || '#5eead4', 1.5);
     ctx.restore();
 
     this.roundRect(barX + 1.5, barY + 1.5, barW - 3, barH - 3, 6.5, null, 'rgba(255, 255, 255, 0.18)', 1);
 
     // Title badge
     let curX = barX + paddingX;
-    const badgeY = barY + (barH - 22) / 2;
-    this.roundRect(curX, badgeY, badgeW, 22, 4, preview.badgeBg, preview.badgeBorder, 1);
-    this.text(preview.title, curX + badgeW / 2, badgeY + 11.5, 11, '#ffffff', 'center', '700');
-    curX += badgeW + 8;
+    if (preview.title) {
+      const badgeY = barY + (barH - 22) / 2;
+      this.roundRect(curX, badgeY, badgeW, 22, 4, preview.badgeBg, preview.badgeBorder, 1);
+      this.text(preview.title, curX + badgeW / 2, badgeY + 11.5, 11, '#ffffff', 'center', '700');
+      curX += badgeW + 8;
+    }
 
-    // '胡：' label
-    this.text('胡：', curX, barY + barH / 2 + 0.5, 12, '#ffd878', 'left', '700');
+    // Label ('可胡：' or '胡：')
+    this.text(labelText, curX, barY + barH / 2 + 0.5, 12, '#ffd878', 'left', '700');
     curX += labelW;
 
     // Mini wait tiles

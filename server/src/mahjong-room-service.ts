@@ -343,7 +343,7 @@ export class MahjongRoomService {
     const ownPlayer = session.mahjongSeat ? state.players[session.mahjongSeat] : null;
     const available = ownPlayer ? this.availableActions(ownPlayer) : [];
     const listenOptions = ownPlayer && state.phase === 'playing' && state.currentTurn === ownPlayer.seat && state.awaitingDiscard
-      && !state.pending && !ownPlayer.isListening && this.canDeclareListen(ownPlayer)
+      && !state.pending && !ownPlayer.isListening
       ? this.listenPreviews(ownPlayer)
       : [];
     const privateSnapshot: MahjongPrivateSnapshot = {
@@ -621,22 +621,28 @@ export class MahjongRoomService {
     const player = this.requirePlayer(seat);
     const tile = player.hand.find((candidate) => candidate.id === tileId);
     if (!tile) throw new MahjongRoomServiceError('TILE_NOT_OWNED', '选择的牌不在手牌中');
-    if (player.mustListenAfterChi) throw new MahjongRoomServiceError('MUST_LISTEN_AFTER_CHI', '这次隔位吃牌后必须听牌并打出一张牌');
     if (player.isListening && player.lastDrawnTileId !== tileId) throw new MahjongRoomServiceError('LISTEN_LOCKED', '听牌后只能打出刚摸到的牌');
     const postDiscardWaits = !player.isListening && player.melds.some((meld) => meld.kind !== 'concealed-kong')
       ? this.validListenWaits(player.hand.filter((candidate) => candidate.id !== tileId), player.melds.length, player.melds)
       : [];
+    if (player.mustListenAfterChi && postDiscardWaits.length === 0) throw new MahjongRoomServiceError('MUST_LISTEN_AFTER_CHI', '这次隔位吃牌后必须听牌并打出一张牌');
     const baoSeatsBeforeDiscard = this.baoSeatsFor(tile);
     player.hand = removeTileIds(player.hand, [tileId]);
     player.lastDrawnTileId = null;
     state.autoDiscardAt = null;
     player.discards.push(tile);
     state.discardRiver.push({ seat, tile });
+    // Commit the discard and listening state together, before opening opponents' reactions.
+    if (postDiscardWaits.length > 0) {
+      player.isListening = true;
+      player.listenWaits = postDiscardWaits;
+      player.mustListenAfterChi = false;
+    }
     this.refreshListenerBao();
     state.lastDiscard = { seat, tile };
     state.awaitingDiscard = false;
     state.pending = this.createPending(seat, tile, baoSeatsBeforeDiscard, player.isListening);
-    state.pendingListen = postDiscardWaits.length > 0 ? { seat, tile, waits: postDiscardWaits } : null;
+    state.pendingListen = null;
     state.version += 1;
     if (!state.pendingListen && !state.pending) this.advanceAfterNoResponse();
   }
@@ -944,7 +950,7 @@ export class MahjongRoomService {
       const drawnTile = player.lastDrawnTileId ? player.hand.find((tile) => tile.id === player.lastDrawnTileId) : undefined;
       return drawnTile && this.canSelfDrawHu(player, drawnTile) ? ['hu', 'pass'] : [];
     }
-    const actions: MahjongAction[] = player.mustListenAfterChi ? [] : ['discard'];
+    const actions: MahjongAction[] = ['discard'];
     {
       if (this.canDeclareListen(player)) actions.push('listen');
       if (player.melds.length < 4 && player.hand.some((tile) => matchingTileCount(player.hand, tile) === 4
@@ -1010,26 +1016,41 @@ export class MahjongRoomService {
       || this.validListenWaits(hand, melds.length, melds).some((wait) => wait.suit === 'dragons' && wait.rank === 'red');
   }
 
-  private listenDiscardOptions(player: MahjongPlayer): MahjongTile[] {
-    return this.listenPreviews(player)
-      .map((option) => player.hand.find((tile) => tile.id === option.discardTileId))
-      .filter((tile): tile is MahjongTile => Boolean(tile));
-  }
-
-  private listenPreviews(player: MahjongPlayer): NonNullable<MahjongPrivateSnapshot['listenOptions']> {
+  private listenPreviews(player: MahjongPlayer, includeFans = true): NonNullable<MahjongPrivateSnapshot['listenOptions']> {
     if (!this.state || player.isListening || !player.melds.some((meld) => meld.kind !== 'concealed-kong')) return [];
     return player.hand.flatMap((discard) => {
       const remaining = player.hand.filter((tile) => tile.id !== discard.id);
       const waits = this.validListenWaits(remaining, player.melds.length, player.melds);
       if (waits.length === 0) return [];
-      return [{ discardTileId: discard.id, waits }];
+      if (!includeFans) return [{ discardTileId: discard.id, waits }];
+      const structural = waits.filter((wait) => isWinningMahjongHand([...remaining, wait], player.melds.length));
+      const cardang = structural.length === 1 && isMahjongCardangWait(remaining, structural[0]!, player.melds.length);
+      const winPreviews = waits.map((wait) => {
+        const standard = structural.some((tile) => tileKey(tile) === tileKey(wait));
+        const bigWind = isBigWindWin(remaining, wait, player.melds);
+        const isCardang = cardang && standard;
+        const methods: NonNullable<NonNullable<MahjongPrivateSnapshot['listenOptions']>[number]['winPreviews']>[number]['methods'] = [];
+        const add = (label: string, type: 'discard-win' | 'self-draw', winPattern: 'standard' | 'big-wind' | 'bao', flags: Partial<MahjongSettlement> = {}, condition?: string) => {
+          const settlement: MahjongSettlement = { winnerSeat: player.seat, type, winPattern, ...flags };
+          const fans = MAHJONG_SEATS.filter((seat) => seat !== player.seat).map((seat) => this.winFan(settlement, seat, type === 'discard-win'));
+          methods.push({ label, minFan: Math.min(...fans), maxFan: Math.max(...fans), ...(condition ? { condition } : {}) });
+        };
+        if (standard) add(isCardang ? '卡当点炮' : '平和点炮', 'discard-win', 'standard', { isCardang }, '非宝牌');
+        if (bigWind) add('大风', 'self-draw', 'big-wind');
+        else if (standard) {
+          add(isCardang ? '卡当自摸' : '自摸', 'self-draw', 'standard', { isCardang });
+          add(isCardang ? '宝中宝' : '对宝', 'self-draw', 'bao', { isCardang, isBaoZhongBao: isCardang, isDuiBao: !isCardang }, '此牌为宝且自摸');
+        }
+        return { tileId: wait.id, methods };
+      });
+      return [{ discardTileId: discard.id, waits, winPreviews }];
     });
   }
 
   private canDeclareListen(player: MahjongPlayer): boolean {
     return !player.isListening
       && player.melds.some((meld) => meld.kind !== 'concealed-kong')
-      && this.listenDiscardOptions(player).length > 0;
+      && this.listenPreviews(player, false).length > 0;
   }
 
   private chiPlans(player: MahjongPlayer, discard: MahjongTile, fromSeat: MahjongSeat): Array<{ tiles: MahjongTile[]; requiresListen: boolean }> {
@@ -1094,6 +1115,16 @@ export class MahjongRoomService {
       );
   }
 
+  /** Shared by real settlement and ready-hand previews: fan is charged per payer. */
+  private winFan(settlement: MahjongSettlement, seat: MahjongSeat, onDiscard: boolean): number {
+    if (settlement.isBaoZhongBao) return 12;
+    if (settlement.isDuiBao) return 6;
+    const special = settlement.winPattern === 'bao' || settlement.winPattern === 'big-wind';
+    const closed = this.state?.players[seat]?.melds.every((meld) => meld.kind === 'concealed-kong') ?? false;
+    const fan = special ? 3 : closed ? 3 : onDiscard ? 1 : 2;
+    return fan * (settlement.isCardang ? 2 : 1);
+  }
+
   private settle(settlement: MahjongSettlement): void {
     if (!this.state) return;
     const baseScore = 5;
@@ -1105,16 +1136,7 @@ export class MahjongRoomService {
       payments[from] = (payments[from] ?? 0) - amount;
       payments[to] = (payments[to] ?? 0) + amount;
     };
-    const specialWin = settlement.winPattern === 'bao' || settlement.winPattern === 'big-wind';
-    const fanFor = (seat: MahjongSeat, onDiscard: boolean): number => {
-      if (settlement.isBaoZhongBao) return 12;
-      if (settlement.isDuiBao) return 6;
-      const player = this.state!.players[seat];
-      const closed = player ? player.melds.every((meld) => meld.kind === 'concealed-kong') : false;
-      let fan = specialWin ? 3 : closed ? 3 : onDiscard ? 1 : 2;
-      if (settlement.isCardang) fan *= 2;
-      return fan;
-    };
+    const fanFor = (seat: MahjongSeat, onDiscard: boolean): number => this.winFan(settlement, seat, onDiscard);
     if (settlement.winnerSeat && settlement.type === 'discard-win' && settlement.payingSeat) {
       const losers = MAHJONG_SEATS.filter((seat) => seat !== settlement.winnerSeat);
       const discarderListening = settlement.discarderWasListening ?? this.state.players[settlement.payingSeat]?.isListening ?? false;

@@ -83,9 +83,9 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode, intera
   const listenTileIds = new Set(snapshot.private.listenTileIds ?? []);
   const postDiscardListenWaits = snapshot.private.postDiscardListenWaits ?? [];
   const listenPreview = snapshot.private.isListening
-    ? { waits: snapshot.private.listenWaits ?? [] }
+    ? { waits: snapshot.private.listenWaits ?? [], winPreviews: [] }
     : postDiscardListenWaits.length > 0
-      ? { waits: postDiscardListenWaits }
+      ? { waits: postDiscardListenWaits, winPreviews: [] }
       : snapshot.private.listenOptions?.find((option) => option.discardTileId === effectiveSelectedTileId);
   const drawnTileId = snapshot.private.drawnTileId;
   const ownHand = snapshot.private.hand.filter((tile) => tile.id !== drawnTileId);
@@ -297,7 +297,7 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode, intera
             {!isOwnSeat && !visibleHand && player.handCount > 0 ? <div className="mahjong-concealed-hand" aria-label={`${player.nickname}的未公开手牌`}>{Array.from({ length: player.handCount }, (_, index) => <TileEdge key={`${seat}-hand-${index}`} />)}</div> : null}
             {isOwnSeat ? <>
               <div className="mahjong-own-hand" aria-label="我的手牌">{displayHand.map((tile) => <TileFace key={tile.id} tile={tile} drawn={tile.id === drawnTileId} selected={tile.id === selectedTileId} listenOption={listenTileIds.has(tile.id)} pending={tile.id === draggingTileId} onClick={isMyTurn && !snapshot.private.isListening ? () => handleTileClick(tile.id) : undefined} onPointerDown={isMyTurn && !snapshot.private.isListening ? (event) => handleTilePointerDown(tile.id, event) : undefined} onPointerMove={isMyTurn && !snapshot.private.isListening ? handleTilePointerMove : undefined} onPointerUp={isMyTurn && !snapshot.private.isListening ? handleTilePointerUp : undefined} onPointerCancel={isMyTurn && !snapshot.private.isListening ? handleTilePointerCancel : undefined} />)}</div>
-              {listenPreview ? <div className="mahjong-listen-preview" role="status"><strong>{snapshot.private.isListening ? '已听牌' : showPostDiscardListenDock ? '已出牌，可选择听牌' : '打出此牌可听'}</strong><span>胡：</span>{listenPreview.waits.map((tile) => <TileFace key={tile.id} tile={tile} />)}{snapshot.private.isListening && snapshot.private.baoTile ? <span className="mahjong-bao-preview"><b>宝</b><TileFace tile={snapshot.private.baoTile} /></span> : null}</div> : null}
+              {listenPreview ? <div className="mahjong-listen-preview" role="status"><strong>{snapshot.private.isListening ? '已听牌' : showPostDiscardListenDock ? '已出牌，可选择听牌' : '打出此牌自动听'}</strong><span>胡：</span>{listenPreview.waits.map((tile) => <span className="mahjong-wait-fan" key={tile.id}><TileFace tile={tile} />{listenPreview.winPreviews?.find((entry) => entry.tileId === tile.id)?.methods.map((method) => <small key={method.label} title={method.condition}>{method.label} {method.minFan === method.maxFan ? method.minFan : `${method.minFan}–${method.maxFan}`}番{method.condition === '此牌为宝且自摸' ? '*' : ''}</small>)}</span>)}{listenPreview.winPreviews?.length ? <small className="mahjong-fan-note">每家番数；*此牌为宝且自摸；点炮需非宝；黑炮包付另算</small> : null}{snapshot.private.isListening && snapshot.private.baoTile ? <span className="mahjong-bao-preview"><b>宝</b><TileFace tile={snapshot.private.baoTile} /></span> : null}</div> : null}
             </> : null}
           </article>;
         })}

@@ -298,15 +298,21 @@ describe('MahjongGameView listen information privacy', () => {
       },
       private: {
         seat: 'A', hand, availableActions: ['discard', 'listen'], drawnTileId: hand[13]!.id, spectator: false,
-        listenTileIds: [hand[0]!.id], listenOptions: [{ discardTileId: hand[0]!.id, waits: [waitTile] }],
+        listenTileIds: [hand[0]!.id], listenOptions: [{ discardTileId: hand[0]!.id, waits: [waitTile], winPreviews: [{ tileId: waitTile.id, methods: [
+          { label: '平和点炮', minFan: 1, maxFan: 3 },
+          { label: '自摸', minFan: 2, maxFan: 3 },
+          { label: '对宝', minFan: 6, maxFan: 6, condition: '此牌为宝且自摸' },
+        ] }] }],
       },
     };
     const props = { onCommand: vi.fn(), onLeave: vi.fn(), testMode: false };
     const { container, rerender } = render(<MahjongGameView snapshot={snapshot} {...props} />);
 
     fireEvent.click(container.querySelector('.mahjong-own-hand button')!);
-    expect(container.querySelector('.mahjong-listen-preview strong')?.textContent).toBe('打出此牌可听');
+    expect(container.querySelector('.mahjong-listen-preview strong')?.textContent).toBe('打出此牌自动听');
     expect(container.querySelector('.mahjong-bao-preview')).toBeNull();
+    expect(container.querySelector('.mahjong-listen-preview')?.textContent).toContain('平和点炮 1–3番');
+    expect(container.querySelector('.mahjong-listen-preview')?.textContent).toContain('对宝 6番*');
 
     const postDiscardSnapshot: MahjongSnapshot = {
       ...snapshot,

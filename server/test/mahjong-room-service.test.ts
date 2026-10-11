@@ -65,6 +65,73 @@ function readyBaoScenario(baoKind: 'red' | 'structural') {
 }
 
 describe('MahjongRoomService', () => {
+  it('听口预览逐牌识别普通胡、卡当和条件宝胡，番数与实际自摸结算一致且不透露宝牌', () => {
+    for (const scenario of ['standard', 'cardang', 'bao-zhong-bao', 'dui-bao'] as const) {
+      const { room, players, tile, internals } = readyBaoScenario('red');
+      const player = internals.state.players.B!;
+      const cardang = scenario === 'cardang' || scenario === 'bao-zhong-bao';
+      const winningRank = cardang ? 5 : 3;
+      const winning = tile('characters', winningRank, 1);
+      const junk = tile('dots', 9);
+      player.hand = [tile('dots', 2), tile('dots', 2, 1), tile('characters', cardang ? 4 : 1), tile('characters', cardang ? 6 : 2), junk];
+      player.melds = [
+        { kind: 'chi', tiles: [1, 2, 3].map((rank) => tile('bamboo', rank)) },
+        { kind: 'peng', tiles: [0, 1, 2].map((copy) => tile('dots', 5, copy)) },
+        { kind: 'peng', tiles: [0, 1, 2].map((copy) => tile('dragons', 'red', copy)) },
+      ];
+      player.isListening = false;
+      player.lastDrawnTileId = junk.id;
+      internals.state.players.A!.melds = [{ kind: 'chi', tiles: [4, 5, 6].map((rank) => tile('bamboo', rank)) }];
+      internals.state.currentTurn = 'B';
+      const before = room.getSnapshot(players[1].sessionToken);
+      const preview = before.private.listenOptions!.find((option) => option.discardTileId === junk.id)!;
+      const methods = preview.winPreviews!.find((entry) => preview.waits.find((wait) => wait.id === entry.tileId)?.rank === winningRank)!.methods;
+      expect(before.private.baoTile).toBeUndefined();
+      expect(preview).not.toHaveProperty('baoTile');
+      expect(methods).toEqual(expect.arrayContaining([
+        expect.objectContaining({ label: cardang ? '卡当点炮' : '平和点炮', minFan: cardang ? 2 : 1, maxFan: cardang ? 6 : 3 }),
+        expect.objectContaining({ label: cardang ? '卡当自摸' : '自摸', minFan: cardang ? 4 : 2, maxFan: cardang ? 6 : 3 }),
+        expect.objectContaining({ label: cardang ? '宝中宝' : '对宝', minFan: cardang ? 12 : 6, maxFan: cardang ? 12 : 6, condition: '此牌为宝且自摸' }),
+      ]));
+      const listened = room.dispatch(players[1].sessionToken, command('discard', before.public.handNumber, before.public.version, { tileId: junk.id })).snapshot;
+      expect(listened.private.isListening).toBe(true);
+      // Simulate the later draw; ordinary reactions to the discarded junk have finished.
+      internals.state.pending = null;
+      internals.state.currentTurn = 'B';
+      internals.state.awaitingDiscard = true;
+      player.hand.push(winning);
+      player.lastDrawnTileId = winning.id;
+      const conditionalBao = scenario === 'bao-zhong-bao' || scenario === 'dui-bao';
+      player.listenBao = conditionalBao ? tile('characters', winningRank, 3) : tile('bamboo', 9);
+      const drawn = room.getSnapshot(players[1].sessionToken);
+      room.dispatch(players[1].sessionToken, command('hu', drawn.public.handNumber, drawn.public.version));
+      const actual = finishWin(room, players[1].sessionToken).public.settlement!;
+      const predicted = methods.find((method) => method.label === (conditionalBao ? cardang ? '宝中宝' : '对宝' : cardang ? '卡当自摸' : '自摸'))!;
+      const fans = actual.transfers!.map((transfer) => transfer.fan!);
+      expect(Math.min(...fans)).toBe(predicted.minFan);
+      expect(Math.max(...fans)).toBe(predicted.maxFan);
+    }
+  });
+
+  it('大风听口只预览自摸大风，不误报点炮或卡当倍数', () => {
+    const { room, players, tile, internals } = readyBaoScenario('red');
+    const player = internals.state.players.B!;
+    const junk = tile('dots', 9);
+    player.hand = [tile('characters', 1), tile('characters', 2), tile('characters', 3), tile('characters', 5), junk];
+    player.melds = [
+      { kind: 'peng', tiles: [0, 1, 2].map((copy) => tile('dots', 2, copy)) },
+      { kind: 'peng', tiles: [0, 1, 2].map((copy) => tile('bamboo', 3, copy)) },
+      { kind: 'peng', tiles: [0, 1, 2].map((copy) => tile('dots', 6, copy)) },
+    ];
+    player.isListening = false;
+    player.lastDrawnTileId = junk.id;
+    internals.state.currentTurn = 'B';
+    const snapshot = room.getSnapshot(players[1].sessionToken);
+    const preview = snapshot.private.listenOptions!.find((option) => option.discardTileId === junk.id)!;
+    const windWait = preview.waits.find((wait) => wait.suit === 'dots' && wait.rank === 2)!;
+    expect(preview.winPreviews!.find((entry) => entry.tileId === windWait.id)?.methods).toEqual([{ label: '大风', minFan: 3, maxFan: 3 }]);
+  });
+
   it('按截图逐家计算番数、5分底分、黑炮包付和特殊胡法', () => {
     const scenarios: Array<{ settlement: MahjongSettlement; closed: MahjongSeat[]; expected: Partial<Record<MahjongSeat, number>>; fans: number[] }> = [
       { settlement: { winnerSeat: 'B', type: 'discard-win', payingSeat: 'A', discarderWasListening: true }, closed: ['D'], expected: { A: -5, B: 25, C: -5, D: -15 }, fans: [1, 1, 3] },
@@ -525,7 +592,7 @@ describe('MahjongRoomService', () => {
     expect(room.getSnapshot(players[1].sessionToken).private).not.toHaveProperty('baoTile');
   });
 
-  it('普通出牌后可确认听牌或暂不听；确认前冻结其他响应，暂不听后下回合仍可再听', () => {
+  it('普通出牌形成合法听口时原子地自动听牌，并立即开放其他玩家响应', () => {
     const room = new MahjongRoomService({ inviteCode: 'inner-414', random: () => 0.42 });
     const players = ['甲', '乙', '丙', '丁'].map((nickname) => {
       const auth = room.login('inner-414');
@@ -557,22 +624,15 @@ describe('MahjongRoomService', () => {
     const before = room.getSnapshot(players[0].sessionToken);
     room.dispatch(players[0].sessionToken, command('discard', before.public.handNumber, before.public.version, { tileId: discard.id }));
     const decision = room.getSnapshot(players[0].sessionToken);
-    expect(decision.private.availableActions).toEqual(['listen', 'pass']);
-    expect(decision.private.postDiscardListenWaits?.map((wait) => wait.label)).toContain('4万');
-    expect(decision.private.baoTile).toBeUndefined();
+    expect(decision.private.isListening).toBe(true);
+    expect(decision.private.postDiscardListenWaits).toBeUndefined();
+    expect(decision.private.listenWaits?.map((wait) => wait.label)).toContain('4万');
+    expect(decision.private.baoTile).toBeDefined();
     expect(decision.public.pendingDiscard?.tile.id).toBe(discard.id);
-    expect(decision.public.responseSeats).toEqual([]);
+    expect(decision.public.responseSeats).toContain('B');
     const responder = room.getSnapshot(players[1].sessionToken);
-    expect(responder.private.availableActions).toEqual([]);
+    expect(responder.private.availableActions).toContain('chi');
     expect(responder.private.postDiscardListenWaits).toBeUndefined();
-    expect(() => room.dispatch(players[1].sessionToken, command('chi', responder.public.handNumber, responder.public.version, { tileIds: internals.state.players.B!.hand.map((tile) => tile.id) })))
-      .toThrow('等待出牌玩家确认是否听牌');
-
-    room.dispatch(players[0].sessionToken, command('pass', decision.public.handNumber, decision.public.version));
-    const skipped = room.getSnapshot(players[0].sessionToken);
-    expect(skipped.private.isListening).toBe(false);
-    expect(skipped.private.postDiscardListenWaits).toBeUndefined();
-    expect(room.getSnapshot(players[1].sessionToken).private.availableActions).toContain('chi');
     const response = room.getSnapshot(players[1].sessionToken);
     room.dispatch(players[1].sessionToken, command('pass', response.public.handNumber, response.public.version));
 
@@ -582,16 +642,14 @@ describe('MahjongRoomService', () => {
     internals.state.players.A!.hand.push(nextDraw);
     internals.state.players.A!.lastDrawnTileId = nextDraw.id;
     const nextTurn = room.getSnapshot(players[0].sessionToken);
-    expect(nextTurn.private.availableActions).toContain('listen');
-    expect(nextTurn.private.listenOptions?.find((option) => option.discardTileId === nextDraw.id)?.waits.map((wait) => wait.label))
-      .toContain('4万');
+    expect(nextTurn.private.availableActions).not.toContain('listen');
+    expect(nextTurn.private.listenOptions).toBeUndefined();
+    expect(() => room.dispatch(players[0].sessionToken, command('discard', nextTurn.public.handNumber, nextTurn.public.version, { tileId: internals.state.players.A!.hand[0]!.id })))
+      .toThrow('听牌后只能打出刚摸到的牌');
     room.dispatch(players[0].sessionToken, command('discard', nextTurn.public.handNumber, nextTurn.public.version, { tileId: nextDraw.id }));
     const again = room.getSnapshot(players[0].sessionToken);
-    expect(again.private.availableActions).toEqual(['listen', 'pass']);
-    room.dispatch(players[0].sessionToken, command('listen', again.public.handNumber, again.public.version));
-    const confirmed = room.getSnapshot(players[0].sessionToken);
-    expect(confirmed.private.isListening).toBe(true);
-    expect(confirmed.private.baoTile).toBeDefined();
+    expect(again.private.isListening).toBe(true);
+    expect(again.private.baoTile).toBeDefined();
   });
 
   it('已吃出的幺牌满足听牌条件，暗手有两对时摸牌后可选择听牌', () => {
@@ -1227,10 +1285,14 @@ describe('MahjongRoomService', () => {
 
     const claimed = room.dispatch(players[2].sessionToken, command('chi', jump.public.handNumber, jump.public.version, { tileIds: jump.private.chiOptions![0] })).snapshot;
     expect(claimed.public.currentTurn).toBe('C');
-    expect(claimed.private.availableActions).toEqual(['listen']);
+    expect(claimed.private.availableActions).toEqual(['discard', 'listen']);
     expect(claimed.private.listenTileIds).toContain(east.id);
-    expect(() => room.dispatch(players[2].sessionToken, command('discard', claimed.public.handNumber, claimed.public.version, { tileId: east.id })))
+    const invalid = claimed.private.hand.find((tile) => !claimed.private.listenTileIds?.includes(tile.id))!;
+    expect(() => room.dispatch(players[2].sessionToken, command('discard', claimed.public.handNumber, claimed.public.version, { tileId: invalid.id })))
       .toThrow('这次隔位吃牌后必须听牌');
+    const auto = room.dispatch(players[2].sessionToken, command('discard', claimed.public.handNumber, claimed.public.version, { tileId: east.id })).snapshot;
+    expect(auto.private.isListening).toBe(true);
+    expect(auto.private.postDiscardListenWaits).toBeUndefined();
   });
 
   it('听牌玩家可以自摸由三组碰完成的大风牌', () => {

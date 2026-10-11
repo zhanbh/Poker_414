@@ -609,6 +609,41 @@ class MahjongRenderer {
   }
 
   draw(state) {
+    if (!state.draggedTile) {
+      this.invalidateDragCache();
+      this.drawScene(state);
+      return;
+    }
+    const cached = this.dragCache;
+    if (!cached || cached.snapshot !== state.snapshot || cached.tileId !== state.draggedTile.tileId
+      || cached.selected !== state.selectedTileId || cached.error !== state.error
+      || cached.width !== this.canvas.width || cached.height !== this.canvas.height) {
+      this.hideFloatingTile = true;
+      try { this.drawScene(state); } finally { this.hideFloatingTile = false; }
+      this.invalidateDragCache();
+      try {
+        if (this.createCacheCanvas) {
+          const surface = this.dragSurface || this.createCacheCanvas();
+          surface.width = this.canvas.width;
+          surface.height = this.canvas.height;
+          surface.getContext('2d').drawImage(this.canvas, 0, 0);
+          this.dragSurface = surface;
+          this.dragCache = { snapshot: state.snapshot, tileId: state.draggedTile.tileId, selected: state.selectedTileId,
+            error: state.error, width: this.canvas.width, height: this.canvas.height, surface };
+        }
+      } catch { /* Older runtimes still coalesce touch events to one scene draw per frame. */ }
+    } else {
+      this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+      this.ctx.drawImage(cached.surface, 0, 0);
+      const { scale, x, y } = this.viewport;
+      this.ctx.setTransform(scale, 0, 0, scale, x, y);
+    }
+    this.drawFloatingHandTile(state);
+  }
+
+  invalidateDragCache() { this.dragCache = null; }
+
+  drawScene(state) {
     const ctx = this.ctx;
     const width = this.canvas.width || 960;
     const height = this.canvas.height || 540;
@@ -1665,6 +1700,8 @@ class MahjongRenderer {
     this.drawActionCallouts(state);
     if (state.selectedTarget) this.drawInteractionPicker(state);
     this.drawChat(state);
+    if (state.chiPickerOpen) this.drawChiPicker(state);
+    if (snapshot.public.winAnnouncement) this.drawWinAnnouncement(state);
     if (snapshot.public.phase === 'settled' && snapshot.public.settlement) this.drawSettlement(state);
   }
 
@@ -1898,13 +1935,19 @@ class MahjongRenderer {
       }
       this.targets.push({ x: tx, y: ty, width: tileWidth, height: tileHeight + 4, type: 'select-tile', data: { tileId: tile.id } });
     });
-    if (state.draggedTile) {
-      const draggedTile = hand.find((tile) => tile.id === state.draggedTile.tileId);
-      if (draggedTile) {
-        this.drawTile(draggedTile, state.draggedTile.x - tileWidth / 2, state.draggedTile.y - tileHeight / 2,
-          tileWidth, tileHeight, true, 0, 7);
-      }
-    }
+    if (state.draggedTile && !this.hideFloatingTile) this.drawFloatingHandTile(state);
+  }
+
+  drawFloatingHandTile(state) {
+    const priv = state.snapshot?.private;
+    const tile = priv?.hand?.find((candidate) => candidate.id === state.draggedTile?.tileId);
+    if (!tile) return;
+    const { width, leftInset, rightInset } = this.roomLayout();
+    const handX = Math.max(leftInset + 102, width * 0.13);
+    const gap = priv.drawnTileId && priv.hand.length > 1 ? 10 : 0;
+    const tileWidth = Math.min(64, (width - handX - rightInset - 66 - gap) / priv.hand.length);
+    const tileHeight = Math.min(104, tileWidth * 1.58);
+    this.drawTile(tile, state.draggedTile.x - tileWidth / 2, state.draggedTile.y - tileHeight / 2, tileWidth, tileHeight, true, 0, 7);
   }
 
   drawListenPreview(state) {
@@ -1946,6 +1989,7 @@ class MahjongRenderer {
             badgeBg: '#0f766e',
             badgeBorder: '#5eead4',
             waits: option.waits,
+            winPreviews: option.winPreviews,
             baoTile: null,
           };
         }
@@ -1964,6 +2008,11 @@ class MahjongRenderer {
     const tileWidth = Math.min(64, (handW - drawnGap) / Math.max(1, handCount));
     const tileHeight = Math.min(104, tileWidth * 1.58);
     const handY = contentBottom - 6 - tileHeight;
+
+    if (preview.winPreviews?.length) {
+      this.drawFanPreview(preview, handY, roomWidth, leftInset, rightInset);
+      return;
+    }
 
     const barH = 36;
     const barY = handY - barH - 8;
@@ -1988,6 +2037,7 @@ class MahjongRenderer {
     const barW = Math.max(100, titlePartW + labelW + waitsW + baoW + paddingX * 2);
     const barX = Math.max(handX, Math.min(roomWidth - rightInset - barW, (roomWidth - barW) / 2));
 
+    ctx.save();
     ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
     ctx.shadowBlur = 12;
     ctx.shadowOffsetY = 3;
@@ -2063,58 +2113,152 @@ class MahjongRenderer {
     const callouts = state.actionCallouts;
     if (!callouts || !callouts.length) return;
     const now = Date.now();
-    const activeCallouts = callouts.filter((c) => now - c.startTime >= 0 && now - c.startTime < (c.duration || 1500));
+    const activeCallouts = callouts.filter((c) => now - c.startTime >= 0 && (c.untilDiscard || now - c.startTime < (c.duration || 1500)));
     if (!activeCallouts.length) return;
 
     const ctx = this.ctx;
-    const { cards, center } = this.roomLayout();
+    const { table } = this.roomLayout();
     const order = relativeSeats(state.snapshot?.private?.seat || 'A');
 
     activeCallouts.forEach((callout) => {
       const seatIndex = order.indexOf(callout.seat);
       if (seatIndex === -1) return;
-      const card = cards[seatIndex];
-      if (!card) return;
-
-      const avatarSize = 64;
-      const avatarX = card.x + (card.width - avatarSize) / 2;
-      const avatarY = card.y;
-      const avatarCenterX = avatarX + avatarSize / 2;
-      const avatarCenterY = avatarY + avatarSize / 2;
-      const dx = center.x - avatarCenterX;
-      const dy = center.y - avatarCenterY;
-      const dist = Math.hypot(dx, dy) || 1;
-      const posX = avatarCenterX + (dx / dist) * 68;
-      const posY = avatarCenterY + (dy / dist) * 68;
+      const [u, v] = [[0.5, 0.64], [0.21, 0.5], [0.5, 0.23], [0.79, 0.5]][seatIndex];
+      const [posX, posY] = this.project(table, u, v);
 
       const elapsed = now - callout.startTime;
       const duration = callout.duration || 1500;
-      const pop = Math.max(0, 1 - elapsed / 260);
-      const scale = 1 + 0.65 * pop * pop;
-      const alpha = Math.min(1, Math.max(0, (duration - elapsed) / 320));
-      const avatarFlash = Math.max(0, 1 - elapsed / 420);
+      const pop = Math.max(0, 1 - elapsed / 400);
+      const scale = 1 + 0.8 * pop * pop;
+      const alpha = callout.untilDiscard ? 1 : Math.min(1, Math.max(0, (duration - elapsed) / 320));
       const character = callout.text || ({ chi: '吃', peng: '碰', gang: '杠', listen: '听', hu: '胡' }[
         (callout.kind || '').includes('kong') ? 'gang' : callout.kind
       ] || '碰');
-
-      // Flash the player's avatar once, then show only a brief text cue toward the table.
-      ctx.save();
-      ctx.globalAlpha = avatarFlash * 0.9;
-      this.roundRect(avatarX - 5, avatarY - 5, avatarSize + 10, avatarSize + 10, 12,
-        `rgba(255, 239, 190, ${avatarFlash * 0.14})`, `rgba(255, 238, 176, ${avatarFlash})`, 3);
-      ctx.restore();
 
       ctx.save();
       ctx.globalAlpha = alpha;
       ctx.translate(posX, posY);
       ctx.scale(scale, scale);
-      ctx.shadowColor = 'rgba(12, 31, 22, 0.72)';
-      ctx.shadowBlur = 4;
-      ctx.shadowOffsetY = 1;
-      this.text(character, 0, 0, 21, '#fff2c9', 'center', '700');
+      this.drawArtText(character, 0, 0, 42);
 
       ctx.restore();
     });
+  }
+
+  drawArtText(character, x, y, size) {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.font = `900 ${size}px "STKaiti", "KaiTi", "Kaiti SC", serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.shadowColor = 'rgba(18, 21, 12, 0.8)';
+    ctx.shadowBlur = 5;
+    ctx.shadowOffsetY = 3;
+    ctx.strokeStyle = '#362113';
+    ctx.lineWidth = 6;
+    ctx.strokeText(character, x, y + 2);
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.strokeStyle = '#fff0b0';
+    ctx.lineWidth = 2.5;
+    ctx.strokeText(character, x, y);
+    ctx.fillStyle = this.linearFill(x, y - size / 2, x, y + size / 2,
+      [[0, '#fff8da'], [0.42, '#ffeaa0'], [0.48, '#f9bd44'], [1, '#d48224']], '#ffd878');
+    ctx.fillText(character, x, y);
+    ctx.restore();
+  }
+
+  drawChiPicker(state) {
+    const snapshot = state.snapshot;
+    const claimed = snapshot.public.pendingDiscard?.tile;
+    const options = snapshot.private.chiOptions || [];
+    if (!claimed || !options.length) return;
+    const { width, height } = this.roomLayout();
+    const columns = Math.min(3, options.length);
+    const panelW = columns * 154 + 32;
+    const panelH = 86 + Math.ceil(options.length / columns) * 92;
+    const x = (width - panelW) / 2;
+    const y = Math.max(76, (height - panelH) / 2);
+    this.ctx.fillStyle = 'rgba(3, 15, 16, 0.5)';
+    this.ctx.fillRect(0, 0, width, height);
+    // Modal targets replace the table targets, so covered cards cannot be played.
+    this.targets = [{ x: 0, y: 0, width, height, type: 'close-chi', data: {} }];
+    this.roundRect(x, y, panelW, panelH, 14, '#102e2b', '#d8b56c', 2);
+    this.targets.push({ x, y, width: panelW, height: panelH, type: 'chi-panel', data: {} });
+    this.text('选择吃牌组合', width / 2, y + 23, 18, '#ffe7a8', 'center', '700');
+    this.text('金框为吃入牌', width / 2, y + 46, 11, '#a8c7bb', 'center');
+    options.forEach((tileIds, index) => {
+      const handTiles = tileIds.map((id) => snapshot.private.hand.find((tile) => tile.id === id));
+      if (handTiles.some((tile) => !tile)) return;
+      const bx = x + 16 + index % columns * 154;
+      const by = y + 63 + Math.floor(index / columns) * 92;
+      this.roundRect(bx, by, 144, 82, 8, '#25463b', '#6a8a6b');
+      [claimed, ...handTiles].forEach((tile, tileIndex) => this.drawTile(tile, bx + 12 + tileIndex * 40, by + 10, 36, 58, tileIndex === 0));
+      this.targets.push({ x: bx, y: by, width: 144, height: 82, type: 'chi-choice', data: { tileIds } });
+    });
+    this.text('取消', x + panelW - 25, y + 23, 12, '#e0ccb0', 'right');
+    this.targets.push({ x: x + panelW - 62, y: y + 5, width: 57, height: 36, type: 'close-chi', data: {} });
+  }
+
+  drawWinAnnouncement(state) {
+    const win = state.snapshot.public.winAnnouncement;
+    if (!win) return;
+    const { width, height } = this.roomLayout();
+    const elapsed = Math.max(0, Date.now() - (state.winAnnouncementAt || 0));
+    const scale = 1 + 0.3 * Math.max(0, 1 - elapsed / 450) ** 2;
+    const title = win.isBaoZhongBao ? '宝中宝' : win.isDuiBao ? '对宝' : win.winPattern === 'big-wind' ? '大风'
+      : win.winPattern === 'bao' ? (win.isCardang ? '卡当宝' : '宝牌胡') : win.isCardang ? '卡当胡' : win.type === 'self-draw' ? '自摸' : '平和';
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.fillStyle = 'rgba(3, 15, 16, 0.45)';
+    ctx.fillRect(0, 0, width, height);
+    const y = height / 2;
+    const banner = this.linearFill(0, y, width, y, [[0, 'rgba(5, 23, 22, 0)'], [0.22, 'rgba(5, 23, 22, 0.94)'], [0.78, 'rgba(5, 23, 22, 0.94)'], [1, 'rgba(5, 23, 22, 0)']], '#102e2b');
+    ctx.fillStyle = banner;
+    ctx.fillRect(0, y - 108, width, 216);
+    ctx.fillStyle = '#cfab66';
+    ctx.fillRect(width * 0.25, y - 100, width * 0.5, 1);
+    ctx.fillRect(width * 0.25, y + 100, width * 0.5, 1);
+    this.text('本 局 胡 牌', width / 2, y - 74, 13, '#e9d3a0', 'center');
+    ctx.save();
+    ctx.translate(width / 2, y - 18);
+    ctx.scale(scale, scale);
+    this.drawArtText(title, 0, 0, 58);
+    ctx.restore();
+    this.text(`${win.winnerNickname || playerForSeat(state.snapshot, win.winnerSeat)?.nickname || win.winnerSeat} 胡牌`, width / 2, y + 43, 23, '#fff2ca', 'center', '700');
+    if (win.type === 'discard-win') {
+      const payer = playerForSeat(state.snapshot, win.payingSeat);
+      this.text(`${payer?.nickname || win.payingSeat || ''} 点炮`, width / 2, y + 75, 14, '#f6afa2', 'center');
+    } else this.text('自摸获胜', width / 2, y + 75, 14, '#a9d3b5', 'center');
+    ctx.restore();
+    this.targets = [{ x: 0, y: 0, width, height, type: 'win-announcement', data: {} }];
+  }
+
+  drawFanPreview(preview, handY, width, leftInset, rightInset) {
+    const availableWidth = width - leftInset - rightInset - 130;
+    const cellW = 132;
+    const columns = Math.max(1, Math.min(preview.waits.length, Math.floor((availableWidth - 24) / cellW)));
+    const rows = Math.ceil(preview.waits.length / columns);
+    const panelW = columns * cellW + 24;
+    const panelH = 42 + rows * 65;
+    const x = leftInset + (width - leftInset - rightInset - panelW) / 2;
+    const y = Math.max(76, handY - panelH - 12);
+    this.roundRect(x, y, panelW, panelH, 9, 'rgba(6, 26, 28, 0.96)', '#5f9a79', 1.5);
+    this.text('打出此牌自动听 · 可胡：', x + 12, y + 15, 12, '#ffe2a0', 'left', '700');
+    preview.waits.forEach((tile, index) => {
+      const bx = x + 12 + index % columns * cellW;
+      const by = y + 29 + Math.floor(index / columns) * 65;
+      this.drawTile(tile, bx, by, 26, 38, false, 0, 2);
+      const methods = preview.winPreviews.find((entry) => entry.tileId === tile.id)?.methods || [];
+      methods.forEach((method, line) => {
+        const fan = method.minFan === method.maxFan ? method.minFan : `${method.minFan}–${method.maxFan}`;
+        const conditional = method.condition === '此牌为宝且自摸';
+        this.text(`${method.label}${fan}番${conditional ? '*' : ''}`, bx + 33, by + 7 + line * 15, 10.5,
+          conditional ? '#a9ccad' : '#ffe8aa');
+      });
+    });
+    this.text('每家番数 · *此牌为宝且自摸 · 点炮需非宝 · 黑炮包付另算', x + panelW / 2, y + panelH - 10, 9, '#a7bfb1', 'center');
   }
 
   wrapText(value, maxWidth, size, maxLines = 2) {

@@ -370,7 +370,15 @@ export interface MahjongPrivateSnapshot {
   readonly chiOptions?: string[][];
   readonly chiDiscardIds?: string[];
   readonly listenTileIds?: string[];
-  readonly listenOptions?: Array<{ readonly discardTileId: string; readonly waits: MahjongTile[] }>;
+  readonly listenOptions?: Array<{
+    readonly discardTileId: string;
+    readonly waits: MahjongTile[];
+    /** Per-payer fan, using current exposed/closed hands; black-cannon coverage is separate. */
+    readonly winPreviews?: Array<{
+      readonly tileId: string;
+      readonly methods: Array<{ readonly label: string; readonly minFan: number; readonly maxFan: number; readonly condition?: string }>;
+    }>;
+  }>;
   readonly postDiscardListenWaits?: MahjongTile[];
   readonly drawnTileId?: string;
   readonly discardableTileId?: string;

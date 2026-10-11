@@ -1249,6 +1249,10 @@ body.force-mobile-landscape:has(.mahjong-lobby) .mahjong-lobby-felt small { disp
 .mahjong-face.drawn { margin-left: 10px; }
 .mahjong-seat-bottom .mahjong-listen-preview { position: absolute; z-index: 4; right: 1.5%; bottom: 17%; left: 21%; display: flex; min-height: 32px; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px 7px; color: #dceff0; background: rgba(9, 43, 48, .94); border: 1px solid rgba(89, 215, 193, .7); border-radius: 7px; font-size: .68rem; }
 .mahjong-listen-preview > strong { color: #8ce7d9; }
+.mahjong-wait-fan { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 2px 5px; padding: 3px 5px; border-left: 1px solid rgba(89, 215, 193, .25); }
+.mahjong-wait-fan .mahjong-face { grid-row: 1 / span 3; }
+.mahjong-wait-fan small { color: #f8dea0; font-size: .62rem; white-space: nowrap; }
+.mahjong-fan-note { flex-basis: 100%; color: #afc9bc; font-size: .6rem; }
 .mahjong-listen-preview .mahjong-face { width: 22px; height: 32px; padding: 1px; border-radius: 3px; }
 .mahjong-listen-preview .mahjong-face-top, .mahjong-listen-preview .mahjong-face-bottom { display: none; }
 .mahjong-listen-preview .mahjong-dot-art, .mahjong-listen-preview .mahjong-bamboo-art { width: 14px; height: 20px; }

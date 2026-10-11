@@ -2,7 +2,7 @@ const config = require('./config');
 const { GameTransport } = require('./transport');
 const { createCommand } = require('./protocol');
 const { MahjongRenderer } = require('./renderer');
-const { gameScreen, isValidNickname, tileLabel } = require('./model');
+const { gameScreen, isValidNickname } = require('./model');
 
 const INTERACTION_LABELS = { tomato: '🍅', water: '💦', heart: '💖', kiss: '💋' };
 const isLegacyGeneratedNickname = (nickname) => /^雀友_\d{4}$/.test(String(nickname || ''));
@@ -45,6 +45,7 @@ class MahjongGameApp {
     this.pixelRatio = 1;
     this.resizeCanvas();
     this.renderer = new MahjongRenderer(this.canvas, this.context);
+    this.renderer.createCacheCanvas = () => this.wx.createCanvas();
     this.transport = new GameTransport(wxApi);
     this.state = {
       screen: 'loading', loadingProgress: 0, loadingTip: '正在载入牌桌高清纹理与音效…',
@@ -72,7 +73,7 @@ class MahjongGameApp {
       }
     }
     this.userInfoBtn = null;
-    this.renderer.onAssetLoaded = () => this.draw();
+    this.renderer.onAssetLoaded = () => { this.renderer.invalidateDragCache(); this.draw(); };
     this.loadingDuration = 2000 + Math.random() * 1000;
     this.loadingStartTime = Date.now();
     this.animationRunning = false;
@@ -120,7 +121,7 @@ class MahjongGameApp {
     this.wx.onShow(() => {
       this.visible = true;
       this.transport.activity();
-      if (this.state.screen === 'loading' || this.state.screen === 'entry') {
+      if (this.state.screen === 'loading' || this.state.screen === 'entry' || this.hasActiveRoomAnimation()) {
         this.startAnimationLoop();
       }
       this.updateUserInfoButton();
@@ -193,7 +194,7 @@ class MahjongGameApp {
         this.renderer.updateParticles();
         this.draw();
         this.scheduleNextFrame(tick);
-      } else if (this.state.screen === 'room' && this.hasActiveRoomAnimation()) {
+      } else if (this.state.screen === 'game' && this.hasActiveRoomAnimation()) {
         this.draw();
         this.scheduleNextFrame(tick);
       } else {
@@ -240,8 +241,8 @@ class MahjongGameApp {
     const pub = this.state.snapshot?.public;
     if (!pub || pub.phase !== 'playing') return false;
     const now = Date.now();
-    const hasCallouts = (this.state.actionCallouts || []).some((c) => now - c.startTime < (c.duration || 1500));
-    return hasCallouts || (pub.players || []).some((p) => p.isListening);
+    const hasCallouts = (this.state.actionCallouts || []).some((c) => now - c.startTime < (c.untilDiscard ? 400 : (c.duration || 1500)));
+    return hasCallouts || Boolean(pub.winAnnouncement);
   }
 
   finishLoading() {
@@ -566,8 +567,17 @@ class MahjongGameApp {
     const enteringRoom = this.state.screen === 'entry';
     const prevSnapshot = this.state.snapshot;
     const now = Date.now();
+    if (this.tileGesture && (!snapshot.private.hand?.some((tile) => tile.id === this.tileGesture.tileId)
+      || !snapshot.private.availableActions?.includes('discard') || snapshot.public.handNumber !== prevSnapshot?.public.handNumber)) {
+      this.tileGesture = null;
+      this.state.draggedTile = null;
+    }
+    if (this.renderer?.invalidateDragCache) this.renderer.invalidateDragCache();
+    if (!snapshot.private.availableActions?.includes('chi')
+      || snapshot.public.pendingDiscard?.tile.id !== prevSnapshot?.public.pendingDiscard?.tile.id) this.state.chiPickerOpen = false;
+    if (snapshot.public.winAnnouncement && !prevSnapshot?.public.winAnnouncement) this.state.winAnnouncementAt = now;
     if (!this.state.actionCallouts) this.state.actionCallouts = [];
-    this.state.actionCallouts = this.state.actionCallouts.filter((c) => now - c.startTime < (c.duration || 1500));
+    this.state.actionCallouts = this.state.actionCallouts.filter((c) => c.untilDiscard || now - c.startTime < (c.duration || 1500));
 
     if (
       !enteringRoom &&
@@ -583,11 +593,16 @@ class MahjongGameApp {
       nextPlayers.forEach((np) => {
         const pp = prevPlayers.find((p) => p.seat === np.seat);
         if (!pp) return;
+        const oldDiscards = new Set((pp.discards || []).map((tile) => tile.id));
+        const discarded = (np.discards || []).some((tile) => !oldDiscards.has(tile.id))
+          || snapshot.public.lastDiscard?.seat === np.seat && snapshot.public.lastDiscard?.tile.id !== prevSnapshot.public.lastDiscard?.tile.id;
+        if (discarded) this.state.actionCallouts = this.state.actionCallouts.filter((c) => c.seat !== np.seat || !c.untilDiscard);
         const prevMelds = pp.melds || [];
         const nextMelds = np.melds || [];
 
         // 1. Meld added (chi, peng, exposed-kong, concealed-kong)
         if (nextMelds.length > prevMelds.length) {
+          this.state.actionCallouts = this.state.actionCallouts.filter((c) => c.seat !== np.seat || !c.untilDiscard);
           const newMeld = nextMelds[nextMelds.length - 1];
           const kind = newMeld?.kind || 'peng';
           let text = '碰';
@@ -600,18 +615,21 @@ class MahjongGameApp {
             text,
             startTime: now,
             duration: 1500,
+            untilDiscard: !discarded,
           });
         } else if (nextMelds.length === prevMelds.length && nextMelds.length > 0) {
           // Check for added-kong
           const prevAdded = prevMelds.filter((m) => m.kind === 'added-kong').length;
           const nextAdded = nextMelds.filter((m) => m.kind === 'added-kong').length;
           if (nextAdded > prevAdded) {
+            this.state.actionCallouts = this.state.actionCallouts.filter((c) => c.seat !== np.seat || !c.untilDiscard);
             this.state.actionCallouts.push({
               seat: np.seat,
               kind: 'added-kong',
               text: '杠',
               startTime: now,
               duration: 1500,
+              untilDiscard: !discarded,
             });
           }
         }
@@ -641,7 +659,7 @@ class MahjongGameApp {
           });
         }
       }
-    } else if (enteringRoom || snapshot.public.phase !== 'playing') {
+    } else {
       this.state.actionCallouts = [];
     }
 
@@ -656,7 +674,7 @@ class MahjongGameApp {
     const ids = (snapshot.private.hand || []).map((tile) => tile.id);
     if (!ids.includes(this.state.selectedTileId)) this.state.selectedTileId = '';
     this.draw();
-    if (this.state.screen === 'room' && this.hasActiveRoomAnimation() && !this.animationRunning) {
+    if (this.state.screen === 'game' && this.hasActiveRoomAnimation() && !this.animationRunning) {
       this.startAnimationLoop();
     }
     this.updateUserInfoButton(true);
@@ -796,7 +814,7 @@ class MahjongGameApp {
       this.startVoiceRecording();
       return;
     }
-    if (this.state.screen === 'game' && !this.state.chatOpen && !this.state.keyboardOpen
+    if (this.state.screen === 'game' && !this.state.chiPickerOpen && !this.state.chatOpen && !this.state.keyboardOpen
       && target?.type === 'select-tile') {
       this.tileGesture = {
         tileId: target.data.tileId,
@@ -816,7 +834,16 @@ class MahjongGameApp {
     if (!gesture.moved && Math.hypot(point.clientX - gesture.startX, point.clientY - gesture.startY) < 10) return;
     gesture.moved = true;
     this.state.draggedTile = { tileId: gesture.tileId, x: point.x, y: point.y };
-    this.draw();
+    // Many touch events may arrive between frames; only draw the latest position.
+    if (this.dragFramePending) return;
+    this.dragFramePending = true;
+    const request = typeof requestAnimationFrame === 'function' ? requestAnimationFrame
+      : this.wx?.requestAnimationFrame ? this.wx.requestAnimationFrame.bind(this.wx)
+        : this.canvas?.requestAnimationFrame ? this.canvas.requestAnimationFrame.bind(this.canvas) : (cb) => setTimeout(cb, 16);
+    request(() => {
+      this.dragFramePending = false;
+      if (this.tileGesture === gesture && this.state.draggedTile) this.draw();
+    });
   }
 
   onTouchEnd(event) {
@@ -894,6 +921,15 @@ class MahjongGameApp {
   async handleTarget(target) {
     if (this.state.screen === 'loading') return;
     const { type, data = {} } = target;
+    if (this.state.chiPickerOpen) {
+      if (type === 'chi-choice') {
+        const options = this.state.snapshot?.private.chiOptions || [];
+        if (!options.some((ids) => ids.length === data.tileIds?.length && ids.every((id, index) => id === data.tileIds[index]))) return;
+        this.state.chiPickerOpen = false;
+        await this.runCommand('chi', { tileIds: data.tileIds });
+      } else if (type === 'close-chi') { this.state.chiPickerOpen = false; this.draw(); }
+      return;
+    }
     if (type === 'input') { this.showKeyboard(data.field); return; }
     if (type === 'chat-panel') return;
     if (type === 'close-chat') { this.closeChat(); return; }
@@ -1062,15 +1098,12 @@ class MahjongGameApp {
     if (action === 'chi') {
       const options = data.chiOptions || [];
       if (!options.length) return;
-      if (options.length === 1 || typeof this.wx.showActionSheet !== 'function') {
+      if (options.length === 1) {
         await this.runCommand('chi', { tileIds: options[0] });
         return;
       }
-      const hand = this.state.snapshot.private.hand;
-      this.wx.showActionSheet({
-        itemList: options.map((ids) => ids.map((id) => tileLabel(hand.find((tile) => tile.id === id))).join(' + ')),
-        success: (result) => void this.runCommand('chi', { tileIds: options[result.tapIndex] }),
-      });
+      this.state.chiPickerOpen = true;
+      this.draw();
       return;
     }
     if (action === 'discard') {

@@ -1145,11 +1145,11 @@ describe('native mini-game Canvas renderer', () => {
     expect(labels).toContain('碰');
   });
 
-  it('shows a short plain-text action cue and flashes the acting player avatar without a giant seal', () => {
+  it('keeps an outlined artistic claim cue in front of the player hand after the pop animation, without a giant seal', () => {
     const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext());
     const textCalls = [];
     const roundedRects = [];
-    renderer.text = (...args) => textCalls.push(args);
+    renderer.drawArtText = (...args) => textCalls.push(args);
     renderer.roundRect = (...args) => roundedRects.push(args);
     renderer.circle = () => { throw new Error('action cue should not draw a giant circular badge'); };
 
@@ -1158,13 +1158,12 @@ describe('native mini-game Canvas renderer', () => {
         private: { seat: 'A' },
         public: { players: [{ seat: 'B', nickname: '碰牌玩家' }] },
       },
-      actionCallouts: [{ seat: 'B', kind: 'peng', text: '碰', startTime: Date.now(), duration: 1500 }],
+      actionCallouts: [{ seat: 'B', kind: 'peng', text: '碰', startTime: Date.now() - 4000, duration: 1500, untilDiscard: true }],
     });
 
     expect(textCalls).toHaveLength(1);
-    expect(textCalls[0]).toEqual(['碰', 0, 0, 21, '#fff2c9', 'center', '700']);
-    expect(roundedRects).toHaveLength(1);
-    expect(roundedRects[0].slice(2, 5)).toEqual([74, 74, 12]);
+    expect(textCalls[0]).toEqual(['碰', 0, 0, 42]);
+    expect(roundedRects).toHaveLength(0);
   });
 
   it('MahjongGameApp diffs snapshots to create action callouts on meld and ting transitions', () => {
@@ -1224,6 +1223,123 @@ describe('native mini-game Canvas renderer', () => {
     };
     app.updateSnapshot(tingSnapshot);
     expect(app.state.actionCallouts.some((c) => c.seat === 'A' && c.text === '听')).toBe(true);
+    expect(app.state.actionCallouts.find((c) => c.seat === 'B')).toHaveProperty('untilDiscard', true);
+    const discard = { id: 'discard-1', suit: 'dots', rank: 5 };
+    app.updateSnapshot({
+      public: { ...tingSnapshot.public, lastDiscard: { seat: 'B', tile: discard },
+        players: [tingSnapshot.public.players[0], { ...tingSnapshot.public.players[1], discards: [discard] }] },
+      private: baseSnapshot.private,
+    });
+    expect(app.state.actionCallouts.some((c) => c.seat === 'B' && c.untilDiscard)).toBe(false);
+  });
+
+  it('renders chi options as three real tile faces and dispatches exactly the chosen two hand tiles', async () => {
+    const labels = [];
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels.push(String(value)) }));
+    const tiles = [4, 6, 7].map((rank) => ({ id: `dots-${rank}`, suit: 'dots', rank }));
+    const snapshot = { public: { gameId: 'mahjong', phase: 'playing', players: [], chat: [], pendingDiscard: { seat: 'D', tile: { id: 'dots-5', suit: 'dots', rank: 5 } } },
+      private: { seat: 'A', hand: tiles, availableActions: ['chi', 'pass'], chiOptions: [[tiles[0].id, tiles[1].id], [tiles[1].id, tiles[2].id]] } };
+    const state = { screen: 'game', snapshot };
+    const commands = [];
+    const app = { state, draw: () => renderer.draw(state), runCommand: (...args) => commands.push(args), wx: { showActionSheet: () => { throw new Error('text action sheet must not open'); } } };
+    await MahjongGameApp.prototype.handleAction.call(app, { action: 'chi', chiOptions: snapshot.private.chiOptions });
+    expect(state.chiPickerOpen).toBe(true);
+    const choices = renderer.targets.filter((target) => target.type === 'chi-choice');
+    expect(choices).toHaveLength(2);
+    expect(renderer.targets.some((target) => target.type === 'select-tile')).toBe(false);
+    expect(labels).toContain('选择吃牌组合');
+    await MahjongGameApp.prototype.handleTarget.call(app, choices[1]);
+    expect(commands).toEqual([['chi', { tileIds: [tiles[1].id, tiles[2].id] }]]);
+    expect(state.chiPickerOpen).toBe(false);
+  });
+
+  it('draws the win method, winner and discarder before settlement and consumes table touches', () => {
+    const labels = [];
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels.push(String(value)) }));
+    renderer.draw({ screen: 'game', winAnnouncementAt: Date.now() - 600, snapshot: {
+      public: { gameId: 'mahjong', phase: 'playing', players: [{ seat: 'A', nickname: '我' }, { seat: 'B', nickname: '赢家' }], chat: [],
+        winAnnouncement: { winnerSeat: 'B', winnerNickname: '赢家', type: 'discard-win', payingSeat: 'A', isCardang: true } },
+      private: { seat: 'A', hand: [], availableActions: [] },
+    } });
+    expect(labels).toEqual(expect.arrayContaining(['卡当胡', '赢家 胡牌', '我 点炮']));
+    expect(labels).not.toContain('本局结算');
+    expect(renderer.hit(480, 250)?.type).toBe('win-announcement');
+    expect(MahjongGameApp.prototype.hasActiveRoomAnimation.call({ state: { snapshot: { public: { phase: 'playing', winAnnouncement: { winnerSeat: 'B' } } } } })).toBe(true);
+    expect(MahjongGameApp.prototype.hasActiveRoomAnimation.call({ state: { snapshot: { public: { phase: 'playing', players: [{ isListening: true }] } } } })).toBe(false);
+  });
+
+  it('continues room animation frames on the actual game screen, then stops after settlement', () => {
+    const frames = [];
+    let draws = 0;
+    const app = { animationRunning: false, animationId: null,
+      state: { screen: 'game', snapshot: { public: { phase: 'playing', winAnnouncement: { winnerSeat: 'B' } } } },
+      hasActiveRoomAnimation: MahjongGameApp.prototype.hasActiveRoomAnimation,
+      scheduleNextFrame: (cb) => frames.push(cb), draw: () => { draws += 1; } };
+    MahjongGameApp.prototype.startAnimationLoop.call(app);
+    frames.shift()();
+    frames.shift()();
+    expect(draws).toBe(2);
+    app.state.snapshot.public.phase = 'settled';
+    app.state.snapshot.public.winAnnouncement = null;
+    frames.shift()();
+    expect(app.animationRunning).toBe(false);
+    expect(frames).toHaveLength(0);
+  });
+
+  it('coalesces a burst of touch events into one frame at the latest drag position', () => {
+    const frames = [];
+    let draws = 0;
+    const app = { wx: { requestAnimationFrame: (cb) => frames.push(cb) }, state: {},
+      tileGesture: { tileId: 't-1', startX: 0, startY: 0, moved: false },
+      getTouchPoint: (touch) => ({ ...touch, x: touch.clientX, y: touch.clientY }), draw: () => { draws += 1; } };
+    for (let x = 20; x < 40; x++) MahjongGameApp.prototype.onTouchMove.call(app, { touches: [{ clientX: x, clientY: 100 }] });
+    expect(frames).toHaveLength(1);
+    expect(draws).toBe(0);
+    frames[0]();
+    expect(draws).toBe(1);
+    expect(app.state.draggedTile).toMatchObject({ tileId: 't-1', x: 39, y: 100 });
+    MahjongGameApp.prototype.onTouchMove.call(app, { touches: [{ clientX: 50, clientY: 100 }] });
+    app.tileGesture = null;
+    app.state.draggedTile = null;
+    frames[1]();
+    expect(draws).toBe(1);
+  });
+
+  it('caches the static scene while dragging and rebuilds it after snapshot or asset invalidation', () => {
+    const renderer = new MahjongRenderer({ width: 1688, height: 780 }, createContext());
+    renderer.createCacheCanvas = () => ({ getContext: () => createContext() });
+    let scenes = 0;
+    let floating = 0;
+    renderer.drawScene = () => { scenes += 1; };
+    renderer.drawFloatingHandTile = () => { floating += 1; };
+    const state = { snapshot: {}, draggedTile: { tileId: 't-1', x: 40, y: 30 } };
+    for (let frame = 0; frame < 20; frame++) { state.draggedTile.x += 1; renderer.draw(state); }
+    expect(scenes).toBe(1);
+    expect(floating).toBe(20);
+    state.snapshot = {};
+    renderer.draw(state);
+    expect(scenes).toBe(2);
+    renderer.invalidateDragCache();
+    renderer.draw(state);
+    expect(scenes).toBe(3);
+    state.draggedTile = null;
+    renderer.draw(state);
+    expect(scenes).toBe(4);
+  });
+
+  it('shows real per-method fan ranges next to waiting tiles, with conditional bao labels', () => {
+    const labels = [];
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels.push(String(value)) }));
+    const wait = { id: 'wait-1', suit: 'characters', rank: 5 };
+    renderer.drawListenPreview({ selectedTileId: 'discard-1', snapshot: { private: {
+      hand: [{ id: 'discard-1', suit: 'dots', rank: 9 }], listenTileIds: ['discard-1'],
+      listenOptions: [{ discardTileId: 'discard-1', waits: [wait], winPreviews: [{ tileId: wait.id, methods: [
+        { label: '卡当点炮', minFan: 2, maxFan: 6 }, { label: '卡当自摸', minFan: 4, maxFan: 6 },
+        { label: '宝中宝', minFan: 12, maxFan: 12, condition: '此牌为宝且自摸' },
+      ] }] }],
+    } } });
+    expect(labels).toEqual(expect.arrayContaining(['打出此牌自动听 · 可胡：', '卡当点炮2–6番', '卡当自摸4–6番', '宝中宝12番*']));
+    expect(labels.some((label) => label.includes('黑炮包付另算'))).toBe(true);
   });
 
   it('根据玩家各自视角动态旋转罗盘并展示准确的门风角标与空位方向', () => {

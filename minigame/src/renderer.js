@@ -1,4 +1,5 @@
 const { relativeSeats, playerForSeat, tileLabel, actionLabel, chatText, CLASSIC_CHAT_PHRASES } = require('./model');
+const INTERACTION_GLYPHS = require('./interaction-glyphs');
 
 const INTERACTIONS = [
   { id: 'tomato', label: '🍅 番茄' }, { id: 'water', label: '💦 泼水' },
@@ -421,15 +422,17 @@ class MahjongRenderer {
     const rightInset = Math.max(16, (this.safeInsets?.right || 0) / scale + 10);
     const bottomInset = Math.min(48, (this.safeInsets?.bottom || 0) / scale);
     const contentBottom = 540 - bottomInset;
+    const table = { width, topY: -48, bottomY: 606, topLeft: width * 0.235, topRight: width * 0.765,
+      bottomLeft: width * 0.075, bottomRight: width * 0.925 };
+    const topHandRight = this.project(table, 0.5 + 14 * 0.019 + 0.037, 0.133)[0];
     return {
       width, height: 540, leftInset, rightInset, bottomInset, contentBottom,
-      table: { width, topY: -48, bottomY: 606, topLeft: width * 0.235, topRight: width * 0.765,
-        bottomLeft: width * 0.075, bottomRight: width * 0.925 },
+      table,
       cards: [
         { x: leftInset, y: contentBottom - 211, width: 94, height: 114 },
-        { x: leftInset, y: 144, width: 94, height: 114 },
-        { x: width * (width < 880 ? 0.65 : 0.69) - 47, y: 58, width: 94, height: 114 },
-        { x: width - rightInset - 94, y: 136, width: 94, height: 114 },
+        { x: Math.max(leftInset, this.project(table, 0.01, 0.4)[0] - 108), y: 154, width: 94, height: 114 },
+        { x: Math.min(width - rightInset - 114, topHandRight + 10), y: 8, width: 114, height: 46 },
+        { x: Math.min(width - rightInset - 94, this.project(table, 0.99, 0.4)[0] + 14), y: 154, width: 94, height: 114 },
       ],
       chat: { x: width - rightInset - 404, y: 178, width: 300, height: 240 - bottomInset },
       chatIcon: { x: width - rightInset - 32, y: 315, radius: 26 },
@@ -810,8 +813,9 @@ class MahjongRenderer {
     const isMe = seat && seat === state.snapshot?.private?.seat;
     const selected = state.selectedTarget && state.selectedTarget.seat === seat;
     const active = state.snapshot.public.phase === 'playing' && state.snapshot.public.currentTurn === seat;
-    const avatarSize = 64;
-    const avatarX = x + (width - avatarSize) / 2;
+    const compact = height < 70;
+    const avatarSize = compact ? 40 : 64;
+    const avatarX = compact ? x : x + (width - avatarSize) / 2;
     const directions = { A: '东', B: '南', C: '西', D: '北' };
     const seatDirection = directions[seat] || '东';
     if (player) {
@@ -819,38 +823,39 @@ class MahjongRenderer {
       ctx.save(); ctx.shadowColor = active || selected ? '#f4c75e' : 'rgba(20, 14, 6, 0.65)';
       ctx.shadowBlur = active || selected ? 12 : 5; ctx.shadowOffsetY = 3;
       this.roundRect(avatarX - 3, y - 3, avatarSize + 6, avatarSize + 6, 9,
-        this.linearFill(avatarX, y, avatarX + 64, y + 64,
+        this.linearFill(avatarX, y, avatarX + avatarSize, y + avatarSize,
           [[0, '#fff0b3'], [0.28, '#d5a04b'], [0.65, '#8b5b2c'], [1, '#edc879']], '#c29452'), '#f8dfa0');
       ctx.restore();
       this.drawAvatar(player.avatarUrl, avatarX, y, avatarSize, true);
       if (selected) {
         this.roundRect(avatarX - 5, y - 5, avatarSize + 10, avatarSize + 10, 11, null, '#ffd700', 2.5);
       }
-      this.roundRect(x, y + 72, width, 19, 3, 'rgba(24, 34, 23, 0.68)');
-      this.text(this.fitText(player.nickname, width - 8, 12, '600'), x + width / 2, y + 82, 12, '#fff2d4', 'center', '600');
-      this.roundRect(x, y + 93, width, 20, 3, 'rgba(24, 34, 23, 0.78)');
-      this.text(`${player.score} 分`, x + width / 2, y + 104, 14, '#ffdf79', 'center', '700');
+      const labelX = compact ? x + avatarSize + 8 : x;
+      const labelW = compact ? width - avatarSize - 8 : width;
+      const nicknameY = compact ? y + 2 : y + 72;
+      const scoreY = compact ? y + 23 : y + 93;
+      this.roundRect(labelX, nicknameY, labelW, 19, 3, 'rgba(24, 34, 23, 0.68)');
+      this.text(this.fitText(player.nickname, labelW - 8, 12, '600'), labelX + labelW / 2, nicknameY + 10, 12, '#fff2d4', 'center', '600');
+      this.roundRect(labelX, scoreY, labelW, 20, 3, 'rgba(24, 34, 23, 0.78)');
+      this.text(`${player.score} 分`, labelX + labelW / 2, scoreY + 11, compact ? 12 : 14, '#ffdf79', 'center', '700');
       if (!isMe) {
-        this.circle(avatarX + 54, y + 10, 9, selected ? '#eab308' : 'rgba(32, 54, 30, 0.9)', selected ? '#ffffff' : 'rgba(255, 215, 120, 0.7)');
-        this.text('🎁', avatarX + 54, y + 13, 8.5, selected ? '#1f2937' : '#ffd875', 'center');
+        this.circle(avatarX + avatarSize - 10, y + 10, 9, selected ? '#eab308' : 'rgba(32, 54, 30, 0.9)', selected ? '#ffffff' : 'rgba(255, 215, 120, 0.7)');
+        this.text('🎁', avatarX + avatarSize - 10, y + 13, 8.5, selected ? '#1f2937' : '#ffd875', 'center');
         this.targets.push({ x, y, width, height, type: 'select-player', data: { seat, nickname: player.nickname } });
       }
       this.roundRect(avatarX - 2, y - 2, 20, 18, 4, '#1b3b27', '#86a877');
       this.text(seatDirection, avatarX + 8, y + 7, 11, '#e3f2d2', 'center', '700');
       if (state.snapshot.public.dealer === seat || state.snapshot.public.dealerSeat === seat) {
-        this.roundRect(avatarX + 44, y + 46, 25, 24, 4, '#c38c2e', '#f3d78e');
-        this.text('庄', avatarX + 56, y + 58, 17, '#fff2bc', 'center', '700');
+        this.roundRect(avatarX + avatarSize - 20, y + avatarSize - 18, 25, 24, 4, '#c38c2e', '#f3d78e');
+        this.text('庄', avatarX + avatarSize - 8, y + avatarSize - 6, 17, '#fff2bc', 'center', '700');
       }
-      if (state.snapshot.public.winAnnouncement?.winnerSeat === seat) this.text('胡', avatarX + 61, y - 8, 26, '#ffe08c', 'center', '700');
-      if (player.isListening) {
-        this.drawListeningFlameBadge(avatarX, y, avatarSize);
-      }
+      if (state.snapshot.public.winAnnouncement?.winnerSeat === seat) this.drawArtText('胡', avatarX + avatarSize - 3, y + (compact ? avatarSize : 0) - 8, 28);
     } else {
       this.roundRect(avatarX, y, avatarSize, avatarSize, 9, 'rgba(15, 42, 30, 0.35)', 'rgba(238, 214, 158, 0.4)');
       this.roundRect(avatarX - 2, y - 2, 20, 18, 4, 'rgba(22, 53, 34, 0.7)', 'rgba(180, 212, 160, 0.35)');
       this.text(seatDirection, avatarX + 8, y + 7, 11, '#c9d9be', 'center', '700');
-      this.text('+', x + width / 2, y + 29, 29, 'rgba(245, 229, 183, 0.58)', 'center');
-      this.text(`${seatDirection}位 等待入座`, x + width / 2, y + 81, 11, '#e2d8b8', 'center');
+      this.text('+', avatarX + avatarSize / 2, y + avatarSize / 2, 29, 'rgba(245, 229, 183, 0.58)', 'center');
+      this.text(`${seatDirection}位 等待入座`, compact ? x + avatarSize + 5 : x + width / 2, compact ? y + 20 : y + 81, 11, '#e2d8b8', compact ? 'left' : 'center');
     }
 
     const latestInteraction = [...(state.snapshot.public.chat || [])].reverse().find((message) =>
@@ -866,88 +871,6 @@ class MahjongRenderer {
     if (latestPhrase && latestPhrase.text) {
       this.drawSpeechBubble(latestPhrase.text, x, y, width, height, latestPhrase);
     }
-  }
-
-  drawListeningFlameBadge(avatarX, y, avatarSize) {
-    const ctx = this.ctx;
-    if (!ctx) return;
-    const time = Date.now();
-    const phase = time / 160;
-
-    // 1. Avatar crisis warning aura (全头像危机红光呼吸光环)
-    const dangerPulse = (Math.sin(time / 200) + 1) / 2;
-    ctx.save();
-    ctx.shadowColor = '#ff2200';
-    ctx.shadowBlur = 8 + dangerPulse * 12;
-    this.roundRect(avatarX - 2, y - 2, avatarSize + 4, avatarSize + 4, 10, null, `rgba(255, 68, 0, ${0.4 + dangerPulse * 0.45})`, 2);
-    ctx.restore();
-
-    // 2. Fiery flames leaping up from badge (徽章顶部跳动的烈焰火舌与飞火)
-    const bx = avatarX + 1;
-    const by = y + 1;
-    const badgeW = 32;
-    const badgeH = 22;
-
-    const tip1X = bx + 7 + Math.sin(phase) * 2;
-    const tip1Y = by - 6 - Math.abs(Math.sin(phase * 1.3)) * 6;
-    const tip2X = bx + 16 + Math.cos(phase * 1.1) * 2.5;
-    const tip2Y = by - 12 - Math.abs(Math.sin(phase * 1.5)) * 9;
-    const tip3X = bx + 25 + Math.sin(phase * 1.4) * 2;
-    const tip3Y = by - 6 - Math.abs(Math.cos(phase * 1.2)) * 6;
-
-    // Outer crimson flame
-    this.polygon([
-      [bx + 3, by + 4],
-      [tip1X, tip1Y],
-      [bx + 11, by + 2],
-      [tip2X, tip2Y],
-      [bx + 21, by + 2],
-      [tip3X, tip3Y],
-      [bx + 29, by + 4],
-    ], '#dc2626');
-
-    // Inner bright orange-gold flame
-    this.polygon([
-      [bx + 5, by + 4],
-      [tip1X, tip1Y + 3],
-      [bx + 12, by + 3],
-      [tip2X, tip2Y + 4],
-      [bx + 20, by + 3],
-      [tip3X, tip3Y + 3],
-      [bx + 27, by + 4],
-    ], '#f59e0b');
-
-    // Core yellow flame
-    this.polygon([
-      [bx + 8, by + 4],
-      [tip2X, tip2Y + 7],
-      [bx + 24, by + 4],
-    ], '#fef08a');
-
-    // Rising spark embers
-    const spark1X = bx + 10 + Math.sin(time / 110) * 4;
-    const spark1Y = by - 13 - ((time / 12) % 10);
-    const spark2X = bx + 22 + Math.cos(time / 130) * 4;
-    const spark2Y = by - 11 - (((time + 80) / 12) % 10);
-    this.circle(spark1X, spark1Y, 1.6, '#fef08a');
-    this.circle(spark2X, spark2Y, 1.4, '#ffedd5');
-
-    // Peak flash sparkle (闪光星芒)
-    const flashScale = 0.5 + Math.abs(Math.sin(time / 150)) * 0.6;
-    this.drawSparkle(tip2X, tip2Y, 5 * flashScale, '#ffffff');
-
-    // 3. The "听" badge body (烈焰战意徽章)
-    ctx.save();
-    ctx.shadowColor = '#ff3300';
-    ctx.shadowBlur = 10;
-    ctx.shadowOffsetY = 1;
-    const badgeBg = this.linearFill(bx, by, bx, by + badgeH,
-      [[0, '#ff4d00'], [0.45, '#dc2626'], [1, '#7f1d1d']], '#dc2626');
-    this.roundRect(bx, by, badgeW, badgeH, 6, badgeBg, '#ffe58f', 1.8);
-    ctx.restore();
-
-    this.roundRect(bx + 1.5, by + 1.5, badgeW - 3, badgeH - 3, 4.5, null, 'rgba(255, 235, 130, 0.4)', 1);
-    this.text('听', bx + badgeW / 2, by + badgeH / 2 + 0.5, 13.5, '#ffffff', 'center', '900');
   }
 
   drawSpeechBubble(text, cardX, cardY, cardWidth, cardHeight, phraseMessage = null) {
@@ -1070,7 +993,7 @@ class MahjongRenderer {
     ctx.restore();
   }
 
-  drawInteractionEffect(state, message, targetSeat, cardX, cardY, cardWidth) {
+  drawInteractionEffect(state, message, targetSeat, cardX, cardY, cardWidth, cardHeight = 114) {
     const age = Math.max(0, Date.now() - message.createdAt);
     const duration = 2200;
     if (age >= duration) return;
@@ -1079,8 +1002,8 @@ class MahjongRenderer {
     const flyRatio = type === 'heart' ? 0.48 : 0.35;
     const ctx = this.ctx;
 
-    const targetX = cardX + cardWidth / 2;
-    const targetY = cardY + 32;
+    const targetX = cardX + (cardHeight < 70 ? 20 : cardWidth / 2);
+    const targetY = cardY + (cardHeight < 70 ? 20 : 32);
 
     let startX = this.roomLayout().center.x;
     let startY = this.roomLayout().center.y;
@@ -1094,8 +1017,8 @@ class MahjongRenderer {
       const senderIdx = relativeSeats(state.snapshot.private.seat || 'A').indexOf(sender?.seat);
       if (senderIdx >= 0 && this.roomLayout().cards[senderIdx]) {
         const sCard = this.roomLayout().cards[senderIdx];
-        startX = sCard.x + sCard.width / 2;
-        startY = sCard.y + 32;
+        startX = sCard.x + (sCard.height < 70 ? 20 : sCard.width / 2);
+        startY = sCard.y + (sCard.height < 70 ? 20 : 32);
       }
     }
 
@@ -1852,6 +1775,13 @@ class MahjongRenderer {
         }
 
         const tile = revealedHand?.[index];
+        if (tile && (position === 1 || position === 3)) {
+          // Revealed faces need a real tile aspect ratio, not the narrow foot of a standing back.
+          dv = sideStep * 0.92;
+          const rowWidth = this.project(table, 1, v)[0] - this.project(table, 0, v)[0];
+          du = (table.bottomY - table.topY) * dv * 1.5 / rowWidth;
+          u = position === 1 ? 0.075 : 0.925 - du;
+        }
         if (tile) this.drawProjectedTile(table, tile, u, v, du, dv, rotation);
         else this.drawStandingBack(table, u, v, du, dv, 24, side);
       }
@@ -2104,16 +2034,21 @@ class MahjongRenderer {
           action === 'pass' ? [[0, '#6a785d'], [1, '#354a37']] : [[0, '#fff1a0'], [0.3, '#e5b742'], [1, '#ae701b']], '#dca936'),
         action === 'pass' ? '#9da98b' : '#ffe9a1', 2);
       this.circle(x, y, 23, null, 'rgba(255, 247, 203, 0.45)');
-      this.text(label, x, y, label.length > 1 ? 14 : 27, action === 'pass' ? '#e4e6d6' : '#fff6ce', 'center', '700');
+      if (label.length === 1) this.drawArtText(label, x, y, 29);
+      else this.text(label, x, y, 14, '#fff6ce', 'center', '700');
       this.targets.push({ x: x - 28, y: y - 28, width: 56, height: 56, type: action === 'start-hand' ? 'command' : 'action', data });
     });
   }
 
   drawActionCallouts(state) {
-    const callouts = state.actionCallouts;
-    if (!callouts || !callouts.length) return;
+    const callouts = state.actionCallouts || [];
     const now = Date.now();
-    const activeCallouts = callouts.filter((c) => now - c.startTime >= 0 && (c.untilDiscard || now - c.startTime < (c.duration || 1500)));
+    const listeners = (state.snapshot?.public.players || []).filter((player) => player.isListening).map((player) => ({
+      seat: player.seat, kind: 'listen', text: '听', permanent: true,
+      startTime: callouts.find((cue) => cue.seat === player.seat && cue.kind === 'listen')?.startTime ?? now - 400,
+    }));
+    const activeCallouts = [...callouts.filter((c) => c.kind !== 'listen' && now - c.startTime >= 0
+      && (c.untilDiscard || now - c.startTime < (c.duration || 1500))), ...listeners];
     if (!activeCallouts.length) return;
 
     const ctx = this.ctx;
@@ -2123,14 +2058,22 @@ class MahjongRenderer {
     activeCallouts.forEach((callout) => {
       const seatIndex = order.indexOf(callout.seat);
       if (seatIndex === -1) return;
-      const [u, v] = [[0.5, 0.64], [0.21, 0.5], [0.5, 0.23], [0.79, 0.5]][seatIndex];
-      const [posX, posY] = this.project(table, u, v);
+      const count = playerForSeat(state.snapshot, callout.seat)?.handCount || 13;
+      const [u, v] = [[0.5, 0.64], [0.21, 0.21], [0.5 - count * 0.019 - 0.055, 0.133], [0.79, 0.21]][seatIndex];
+      let [posX, posY] = this.project(table, u, v);
+      if (seatIndex === 0) {
+        const { width, leftInset, rightInset, contentBottom } = this.roomLayout();
+        const hand = state.snapshot?.private.hand || [];
+        const handX = Math.max(leftInset + 102, width * 0.13);
+        const tileWidth = Math.min(64, (width - handX - rightInset - 66 - (state.snapshot?.private.drawnTileId ? 10 : 0)) / Math.max(1, hand.length));
+        posY = contentBottom - 6 - Math.min(104, tileWidth * 1.58) - (callout.permanent ? 72 : 42);
+      }
 
       const elapsed = now - callout.startTime;
       const duration = callout.duration || 1500;
       const pop = Math.max(0, 1 - elapsed / 400);
       const scale = 1 + 0.8 * pop * pop;
-      const alpha = callout.untilDiscard ? 1 : Math.min(1, Math.max(0, (duration - elapsed) / 320));
+      const alpha = callout.untilDiscard || callout.permanent ? 1 : Math.min(1, Math.max(0, (duration - elapsed) / 320));
       const character = callout.text || ({ chi: '吃', peng: '碰', gang: '杠', listen: '听', hu: '胡' }[
         (callout.kind || '').includes('kong') ? 'gang' : callout.kind
       ] || '碰');
@@ -2139,7 +2082,7 @@ class MahjongRenderer {
       ctx.globalAlpha = alpha;
       ctx.translate(posX, posY);
       ctx.scale(scale, scale);
-      this.drawArtText(character, 0, 0, 42);
+      this.drawArtText(character, 0, 0, 46);
 
       ctx.restore();
     });
@@ -2148,24 +2091,39 @@ class MahjongRenderer {
   drawArtText(character, x, y, size) {
     const ctx = this.ctx;
     ctx.save();
-    ctx.font = `900 ${size}px "STKaiti", "KaiTi", "Kaiti SC", serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
     ctx.lineJoin = 'round';
-    ctx.shadowColor = 'rgba(18, 21, 12, 0.8)';
-    ctx.shadowBlur = 5;
-    ctx.shadowOffsetY = 3;
-    ctx.strokeStyle = '#362113';
-    ctx.lineWidth = 6;
-    ctx.strokeText(character, x, y + 2);
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetY = 0;
-    ctx.strokeStyle = '#fff0b0';
-    ctx.lineWidth = 2.5;
-    ctx.strokeText(character, x, y);
-    ctx.fillStyle = this.linearFill(x, y - size / 2, x, y + size / 2,
-      [[0, '#fff8da'], [0.42, '#ffeaa0'], [0.48, '#f9bd44'], [1, '#d48224']], '#ffd878');
-    ctx.fillText(character, x, y);
+    const characters = Array.from(character);
+    const glyphs = characters.map((char) => INTERACTION_GLYPHS.glyphs[char]);
+    if (glyphs.every(Boolean)) {
+      const scale = size / INTERACTION_GLYPHS.unitsPerEm;
+      const totalWidth = glyphs.reduce((sum, glyph) => sum + glyph.advance, 0) * scale;
+      let offsetX = x - totalWidth / 2;
+      glyphs.forEach((glyph) => {
+        const centerY = (glyph.bounds[1] + glyph.bounds[3]) / 2;
+        ctx.beginPath();
+        glyph.commands.forEach(([op, ...points]) => {
+          const args = points.flatMap(([px, py]) => [offsetX + px * scale, y - (py - centerY) * scale]);
+          if (op === 'moveTo') ctx.moveTo(...args);
+          else if (op === 'lineTo') ctx.lineTo(...args);
+          else if (op === 'qCurveTo') ctx.quadraticCurveTo(...args);
+          else if (op === 'curveTo') ctx.bezierCurveTo(...args);
+          else ctx.closePath();
+        });
+        // Solid path fill avoids gradient-text rendering defects on Android's Canvas runtime.
+        ctx.strokeStyle = '#ae7b25';
+        ctx.lineWidth = size * 0.055;
+        ctx.stroke();
+        ctx.fillStyle = '#ffda72';
+        ctx.fill();
+        offsetX += glyph.advance * scale;
+      });
+    } else {
+      ctx.font = `${size}px "STKaiti", "KaiTi", "Kaiti SC", serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#ffda72';
+      ctx.fillText(character, x, y);
+    }
     ctx.restore();
   }
 

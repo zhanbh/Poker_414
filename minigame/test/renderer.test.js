@@ -151,7 +151,7 @@ describe('native mini-game Canvas renderer', () => {
     expect(renderer.hit(620, 388)).toMatchObject({ type: 'input', data: { field: 'chatDraft' } });
   });
 
-  it('marks every publicly listening player on their player card', () => {
+  it('preserves the avatar when listening and marks the hand instead', () => {
     const labels = [];
     const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels.push(String(value)) }));
     const state = {
@@ -168,7 +168,11 @@ describe('native mini-game Canvas renderer', () => {
 
     renderer.drawPlayerCard(state, 'B', 120, 120, 94, 114);
 
-    expect(labels).toContain('听');
+    expect(labels).not.toContain('听');
+    const cues = [];
+    renderer.drawArtText = (...args) => cues.push(args);
+    renderer.drawActionCallouts(state);
+    expect(cues).toEqual([['听', 0, 0, 46]]);
   });
 
   it('shows opponents’ faces to a listening player when their hands are included in the private snapshot', () => {
@@ -191,7 +195,7 @@ describe('native mini-game Canvas renderer', () => {
       },
     };
 
-    renderer.drawOpponentHands(state, { topY: 80, bottomY: 460, width: 900 });
+    renderer.drawOpponentHands(state, renderer.roomLayout().table);
 
     expect(backs).toHaveLength(0);
     expect(faces).toHaveLength(2);
@@ -214,10 +218,102 @@ describe('native mini-game Canvas renderer', () => {
       },
     };
 
-    renderer.drawOpponentHands(state, { topY: 80, bottomY: 460, width: 900 });
+    renderer.drawOpponentHands(state, renderer.roomLayout().table);
 
     expect(backs).toHaveLength(2);
     expect(faces).toHaveLength(0);
+  });
+
+  it.each([720, 960, 1169])('uses readable vertical face columns and clear nearby avatars at width %s', (width) => {
+    const renderer = new MahjongRenderer({ width, height: 540 }, createContext());
+    renderer.viewport.width = width;
+    const tiles = Array.from({ length: 14 }, (_, i) => ({ id: `tile-${i}`, suit: 'dots', rank: i % 9 + 1 }));
+    const faces = [];
+    renderer.drawProjectedTile = (...args) => faces.push(args);
+    const state = { snapshot: {
+      public: { players: ['B', 'C', 'D'].map((seat) => ({ seat, handCount: 14 })) },
+      private: { seat: 'A', isListening: true, opponentHands: ['B', 'C', 'D'].map((seat) => ({ seat, hand: tiles })) },
+    } };
+    const { table, cards } = renderer.roomLayout();
+    renderer.drawOpponentHands(state, table);
+    expect(faces).toHaveLength(42);
+    faces.forEach(([, , u, v, du, dv, rotation], index) => {
+      const corners = renderer.planeRect(table, u, v, du, dv);
+      const faceLeft = Math.min(...corners.map((p) => p[0]));
+      const faceRight = Math.max(...corners.map((p) => p[0]));
+      const faceTop = Math.min(...corners.map((p) => p[1]));
+      const faceBottom = Math.max(...corners.map((p) => p[1]));
+      if (index < 14 || index >= 28) {
+        expect(Math.abs(rotation)).toBe(Math.PI / 2);
+        const faceWidth = renderer.project(table, u + du, v)[0] - renderer.project(table, u, v)[0];
+        expect(faceWidth / (faceBottom - faceTop)).toBeCloseTo(1.5);
+        expect(faceWidth).toBeGreaterThan(20);
+      }
+      const card = cards[index < 14 ? 1 : index < 28 ? 2 : 3];
+      const overlaps = card.x < faceRight && card.x + card.width > faceLeft
+        && card.y < faceBottom && card.y + card.height > faceTop;
+      expect(overlaps).toBe(false);
+    });
+    const topHandEnd = renderer.project(table, 0.5 - 14 * 0.019 + 13 * 0.038 + 0.037, 0.133)[0];
+    expect(cards[2].x).toBeGreaterThan(topHandEnd);
+    expect(cards[2].x + cards[2].width).toBeLessThanOrEqual(width - renderer.roomLayout().rightInset);
+  });
+
+  it('restores permanent listening cues from the snapshot without transition events and clears them next hand', () => {
+    const cues = [];
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext());
+    renderer.drawArtText = (...args) => cues.push(args);
+    const state = { snapshot: { public: { players: ['A', 'B', 'C', 'D'].map((seat) => ({ seat, handCount: 13, isListening: true })) },
+      private: { seat: 'A', hand: [] } }, actionCallouts: [] };
+    renderer.drawActionCallouts(state);
+    expect(cues).toHaveLength(4);
+    expect(cues.every((cue) => cue[0] === '听')).toBe(true);
+    cues.length = 0;
+    state.actionCallouts = [{ seat: 'B', kind: 'listen', text: '听', startTime: Date.now() - 10000, duration: 1500 }];
+    renderer.drawActionCallouts(state);
+    expect(cues).toHaveLength(4); // No expired transition, flicker or duplicate marker.
+    cues.length = 0;
+    state.snapshot.public.players.forEach((player) => { player.isListening = false; });
+    renderer.drawActionCallouts(state);
+    expect(cues).toHaveLength(0);
+  });
+
+  it('keeps the listening avatar image identical and does not draw a red flame badge', () => {
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext());
+    const avatars = [];
+    const labels = [];
+    renderer.drawAvatar = (...args) => avatars.push(args);
+    renderer.text = (...args) => labels.push(args[0]);
+    const player = { seat: 'D', nickname: '玩家四', score: 1000, avatarUrl: 'https://example.test/avatar.png', isListening: false };
+    const state = { snapshot: { public: { players: [player], chat: [], phase: 'playing' }, private: { seat: 'A' } } };
+    const card = renderer.roomLayout().cards[3];
+    renderer.drawPlayerCard(state, 'D', card.x, card.y, card.width, card.height);
+    player.isListening = true;
+    renderer.drawPlayerCard(state, 'D', card.x, card.y, card.width, card.height);
+    expect(avatars[1]).toEqual(avatars[0]);
+    expect(labels).not.toContain('听');
+  });
+
+  it('draws bundled proportional Kaiti outlines with solid gold instead of platform-dependent text gradients', () => {
+    const points = [];
+    const colors = [];
+    const ctx = createContext({
+      fillText: () => { throw new Error('interaction glyphs must not depend on system fonts'); },
+      createLinearGradient: () => { throw new Error('do not use gradient text'); },
+      moveTo: (...args) => points.push(args),
+      fill: () => colors.push(ctx.fillStyle),
+    });
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, ctx);
+    renderer.drawArtText('听', 0, 0, 46);
+    const original = points.splice(0);
+    renderer.drawArtText('听', 0, 0, 92);
+    expect(points).toHaveLength(original.length);
+    points.forEach((point, i) => {
+      expect(point[0]).toBeCloseTo(original[i][0] * 2);
+      expect(point[1]).toBeCloseTo(original[i][1] * 2);
+    });
+    ['吃', '碰', '杠', '胡', '过', '出', '平和', '自摸', '卡当胡', '宝中宝', '大风', '对宝'].forEach((text) => renderer.drawArtText(text, 0, 0, 46));
+    expect(colors.every((color) => color === '#ffda72')).toBe(true);
   });
 
   it('shows a detailed Mahjong settlement ledger and lets the host advance', () => {
@@ -1122,6 +1218,8 @@ describe('native mini-game Canvas renderer', () => {
   it('renders animated action callouts (peng, chi, gang, listen, hu) in front of players', () => {
     const labels = [];
     const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels.push(String(value)) }));
+    const drawArtText = renderer.drawArtText.bind(renderer);
+    renderer.drawArtText = (...args) => { labels.push(args[0]); drawArtText(...args); };
     const now = Date.now();
     const snapshot = {
       public: {
@@ -1162,7 +1260,7 @@ describe('native mini-game Canvas renderer', () => {
     });
 
     expect(textCalls).toHaveLength(1);
-    expect(textCalls[0]).toEqual(['碰', 0, 0, 42]);
+    expect(textCalls[0]).toEqual(['碰', 0, 0, 46]);
     expect(roundedRects).toHaveLength(0);
   });
 
@@ -1256,6 +1354,8 @@ describe('native mini-game Canvas renderer', () => {
   it('draws the win method, winner and discarder before settlement and consumes table touches', () => {
     const labels = [];
     const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels.push(String(value)) }));
+    const drawArtText = renderer.drawArtText.bind(renderer);
+    renderer.drawArtText = (...args) => { labels.push(args[0]); drawArtText(...args); };
     renderer.draw({ screen: 'game', winAnnouncementAt: Date.now() - 600, snapshot: {
       public: { gameId: 'mahjong', phase: 'playing', players: [{ seat: 'A', nickname: '我' }, { seat: 'B', nickname: '赢家' }], chat: [],
         winAnnouncement: { winnerSeat: 'B', winnerNickname: '赢家', type: 'discard-win', payingSeat: 'A', isCardang: true } },

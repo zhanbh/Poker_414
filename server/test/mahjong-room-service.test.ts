@@ -89,9 +89,9 @@ describe('MahjongRoomService', () => {
       expect(before.private.baoTile).toBeUndefined();
       expect(preview).not.toHaveProperty('baoTile');
       expect(methods).toEqual(expect.arrayContaining([
-        expect.objectContaining({ label: cardang ? '卡当点炮' : '平和点炮', minFan: cardang ? 2 : 1, maxFan: cardang ? 6 : 3 }),
-        expect.objectContaining({ label: cardang ? '卡当自摸' : '自摸', minFan: cardang ? 4 : 2, maxFan: cardang ? 6 : 3 }),
-        expect.objectContaining({ label: cardang ? '宝中宝' : '对宝', minFan: cardang ? 12 : 6, maxFan: cardang ? 12 : 6, condition: '此牌为宝且自摸' }),
+        expect.objectContaining({ label: cardang ? '卡当点炮' : '平和点炮', minFan: cardang ? 2 : 1, maxFan: cardang ? 4 : 2 }),
+        expect.objectContaining({ label: cardang ? '卡当自摸' : '自摸', minFan: cardang ? 4 : 2, maxFan: cardang ? 8 : 4 }),
+        expect.objectContaining({ label: cardang ? '宝中宝' : '对宝', minFan: cardang ? 16 : 6, maxFan: cardang ? 16 : 6, condition: '此牌为宝且自摸' }),
       ]));
       const listened = room.dispatch(players[1].sessionToken, command('discard', before.public.handNumber, before.public.version, { tileId: junk.id })).snapshot;
       expect(listened.private.isListening).toBe(true);
@@ -129,19 +129,20 @@ describe('MahjongRoomService', () => {
     const snapshot = room.getSnapshot(players[1].sessionToken);
     const preview = snapshot.private.listenOptions!.find((option) => option.discardTileId === junk.id)!;
     const windWait = preview.waits.find((wait) => wait.suit === 'dots' && wait.rank === 2)!;
-    expect(preview.winPreviews!.find((entry) => entry.tileId === windWait.id)?.methods).toEqual([{ label: '大风', minFan: 3, maxFan: 3 }]);
+    expect(preview.winPreviews!.find((entry) => entry.tileId === windWait.id)?.methods).toEqual([{ label: '大风', minFan: 4, maxFan: 4 }]);
   });
 
   it('按截图逐家计算番数、5分底分、黑炮包付和特殊胡法', () => {
     const scenarios: Array<{ settlement: MahjongSettlement; closed: MahjongSeat[]; expected: Partial<Record<MahjongSeat, number>>; fans: number[] }> = [
-      { settlement: { winnerSeat: 'B', type: 'discard-win', payingSeat: 'A', discarderWasListening: true }, closed: ['D'], expected: { A: -5, B: 25, C: -5, D: -15 }, fans: [1, 1, 3] },
-      { settlement: { winnerSeat: 'B', type: 'discard-win', payingSeat: 'A', discarderWasListening: false }, closed: ['D'], expected: { A: -35, B: 35 }, fans: [7] },
-      { settlement: { winnerSeat: 'B', type: 'discard-win', payingSeat: 'A', discarderWasListening: false, isCardang: true }, closed: ['D'], expected: { A: -70, B: 70 }, fans: [14] },
-      { settlement: { winnerSeat: 'B', type: 'self-draw' }, closed: ['C'], expected: { A: -10, B: 35, C: -15, D: -10 }, fans: [2, 3, 2] },
-      { settlement: { winnerSeat: 'B', type: 'self-draw', isCardang: true }, closed: ['C'], expected: { A: -20, B: 70, C: -30, D: -20 }, fans: [4, 6, 4] },
-      { settlement: { winnerSeat: 'B', type: 'self-draw', winPattern: 'bao' }, closed: ['A', 'C', 'D'], expected: { A: -15, B: 45, C: -15, D: -15 }, fans: [3, 3, 3] },
-      { settlement: { winnerSeat: 'B', type: 'self-draw', winPattern: 'big-wind' }, closed: ['A', 'C', 'D'], expected: { A: -15, B: 45, C: -15, D: -15 }, fans: [3, 3, 3] },
-      { settlement: { winnerSeat: 'B', type: 'self-draw', winPattern: 'bao', isCardang: true, isBaoZhongBao: true }, closed: [], expected: { A: -60, B: 180, C: -60, D: -60 }, fans: [12, 12, 12] },
+      { settlement: { winnerSeat: 'B', type: 'discard-win', payingSeat: 'A', discarderWasListening: true }, closed: ['D'], expected: { A: -5, B: 20, C: -5, D: -10 }, fans: [1, 1, 2] },
+      { settlement: { winnerSeat: 'B', type: 'discard-win', payingSeat: 'A', discarderWasListening: false }, closed: ['D'], expected: { A: -15, B: 15 }, fans: [3] },
+      { settlement: { winnerSeat: 'B', type: 'discard-win', payingSeat: 'A', discarderWasListening: false, isCardang: true }, closed: ['D'], expected: { A: -30, B: 30 }, fans: [6] },
+      { settlement: { winnerSeat: 'B', type: 'self-draw' }, closed: ['C'], expected: { A: -10, B: 40, C: -20, D: -10 }, fans: [2, 4, 2] },
+      { settlement: { winnerSeat: 'B', type: 'self-draw', isCardang: true }, closed: ['C'], expected: { A: -20, B: 80, C: -40, D: -20 }, fans: [4, 8, 4] },
+      { settlement: { winnerSeat: 'B', type: 'self-draw', winPattern: 'bao' }, closed: ['A', 'C', 'D'], expected: { A: -20, B: 60, C: -20, D: -20 }, fans: [4, 4, 4] },
+      { settlement: { winnerSeat: 'B', type: 'self-draw', winPattern: 'bao', isCardang: true }, closed: [], expected: { A: -40, B: 120, C: -40, D: -40 }, fans: [8, 8, 8] },
+      { settlement: { winnerSeat: 'B', type: 'self-draw', winPattern: 'big-wind' }, closed: ['A', 'C', 'D'], expected: { A: -20, B: 60, C: -20, D: -20 }, fans: [4, 4, 4] },
+      { settlement: { winnerSeat: 'B', type: 'self-draw', winPattern: 'bao', isCardang: true, isBaoZhongBao: true }, closed: [], expected: { A: -80, B: 240, C: -80, D: -80 }, fans: [16, 16, 16] },
       { settlement: { winnerSeat: 'B', type: 'self-draw', winPattern: 'bao', isDuiBao: true }, closed: [], expected: { A: -30, B: 90, C: -30, D: -30 }, fans: [6, 6, 6] },
     ];
     for (const scenario of scenarios) {
@@ -201,8 +202,8 @@ describe('MahjongRoomService', () => {
     const pointWin = point.room.getSnapshot(point.players[1].sessionToken);
     expect(pointWin.public.settlement?.type).toBe('discard-win');
     expect(pointWin.public.settlement?.winPattern).toBe('standard');
-    expect(pointWin.public.settlement?.transfers).toEqual([{ from: 'A', to: 'B', fan: 9, amount: 45 }]);
-    expect(pointWin.public.players.map((player) => player.score)).toEqual([955, 1045, 1000, 1000]);
+    expect(pointWin.public.settlement?.transfers).toEqual([{ from: 'A', to: 'B', fan: 6, amount: 30 }]);
+    expect(pointWin.public.players.map((player) => player.score)).toEqual([970, 1030, 1000, 1000]);
 
     const selfDraw = readyBaoScenario('red');
     const drawnBao = selfDraw.tile('dragons', 'red', 1);
@@ -216,18 +217,18 @@ describe('MahjongRoomService', () => {
     expect(baoWin.public.settlement?.type).toBe('self-draw');
     expect(baoWin.public.settlement?.winPattern).toBe('bao');
     expect(baoWin.public.settlement?.transfers).toEqual([
-      { from: 'A', to: 'B', fan: 3, amount: 15 },
-      { from: 'C', to: 'B', fan: 3, amount: 15 },
-      { from: 'D', to: 'B', fan: 3, amount: 15 },
+      { from: 'A', to: 'B', fan: 4, amount: 20 },
+      { from: 'C', to: 'B', fan: 4, amount: 20 },
+      { from: 'D', to: 'B', fan: 4, amount: 20 },
     ]);
-    expect(baoWin.public.players.map((player) => player.score)).toEqual([985, 1045, 985, 985]);
+    expect(baoWin.public.players.map((player) => player.score)).toEqual([980, 1060, 980, 980]);
     const settledHost = selfDraw.room.getSnapshot(selfDraw.players[0].sessionToken);
     const nextLobby = selfDraw.room.dispatch(selfDraw.players[0].sessionToken,
       command('next-hand', settledHost.public.handNumber, settledHost.public.version)).snapshot;
-    expect(nextLobby.public.players.map((player) => player.score)).toEqual([985, 1045, 985, 985]);
+    expect(nextLobby.public.players.map((player) => player.score)).toEqual([980, 1060, 980, 980]);
     const nextHand = selfDraw.room.dispatch(selfDraw.players[0].sessionToken,
       command('start-hand', nextLobby.public.handNumber, nextLobby.public.version)).snapshot;
-    expect(nextHand.public.players.map((player) => player.score)).toEqual([985, 1045, 985, 985]);
+    expect(nextHand.public.players.map((player) => player.score)).toEqual([980, 1060, 980, 980]);
   });
 
   it('实际胡牌时识别卡当与宝中宝，并按截图番数结算', () => {
@@ -264,7 +265,7 @@ describe('MahjongRoomService', () => {
       const result = room.getSnapshot(players[1]!.sessionToken).public.settlement!;
       expect(result.isCardang).toBe(true);
       expect(result.isBaoZhongBao).toBe(baoZhongBao);
-      expect(result.payments?.B).toBe(baoZhongBao ? 180 : 90);
+      expect(result.payments?.B).toBe(baoZhongBao ? 240 : 60);
     }
   });
 
@@ -332,8 +333,8 @@ describe('MahjongRoomService', () => {
     const settled = room.getSnapshot(players[2].sessionToken);
     expect(settled.public.winAnnouncement).toBeNull();
     expect(settled.public.phase).toBe('settled');
-    expect(settled.public.players.map((player) => player.score)).toEqual([985, 1045, 985, 985]);
-    expect(settled.public.settlement?.payments).toEqual({ A: -15, B: 45, C: -15, D: -15 });
+    expect(settled.public.players.map((player) => player.score)).toEqual([980, 1060, 980, 980]);
+    expect(settled.public.settlement?.payments).toEqual({ A: -20, B: 60, C: -20, D: -20 });
   });
 
   it('昵称只允许中文、字母、数字和下划线，且不能为空或超长', () => {
@@ -1372,7 +1373,7 @@ describe('MahjongRoomService', () => {
     room.dispatch(players[1].sessionToken, command('hu', ready.public.handNumber, ready.public.version));
     const result = finishWin(room, players[1].sessionToken).public.settlement!;
     expect(result.winPattern).toBe('standard');
-    expect(result.payments).toEqual({ A: -10, B: 40, C: -15, D: -15 });
+    expect(result.payments).toEqual({ A: -10, B: 50, C: -20, D: -20 });
   });
 
   it('点炮结算公开所有手牌，并将胡牌放入赢家明牌而不是弃牌区', () => {

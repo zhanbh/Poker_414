@@ -1144,12 +1144,17 @@ export class MahjongRoomService {
 
   /** Shared by real settlement and ready-hand previews: fan is charged per payer. */
   private winFan(settlement: MahjongSettlement, seat: MahjongSeat, onDiscard: boolean): number {
-    if (settlement.isBaoZhongBao) return 12;
+    if (settlement.isBaoZhongBao) return 16;
     if (settlement.isDuiBao) return 6;
-    const special = settlement.winPattern === 'bao' || settlement.winPattern === 'big-wind';
+    if (settlement.winPattern === 'bao') {
+      return settlement.isCardang ? 8 : 4;
+    }
+    if (settlement.winPattern === 'big-wind') return 4;
     const closed = this.state?.players[seat]?.melds.every((meld) => meld.kind === 'concealed-kong') ?? false;
-    const fan = special ? 3 : closed ? 3 : onDiscard ? 1 : 2;
-    return fan * (settlement.isCardang ? 2 : 1);
+    let fan = onDiscard ? 1 : 2;
+    if (settlement.isCardang) fan *= 2;
+    if (closed) fan *= 2;
+    return fan;
   }
 
   private settle(settlement: MahjongSettlement): void {
@@ -1170,8 +1175,8 @@ export class MahjongRoomService {
       if (discarderListening) {
         for (const seat of losers) transfer(seat, settlement.winnerSeat, fanFor(seat, true));
       } else {
-        const fan = losers.reduce((sum, seat) => sum + (seat === settlement.payingSeat ? 3 * (settlement.isCardang ? 2 : 1) : fanFor(seat, true)), 0);
-        transfer(settlement.payingSeat, settlement.winnerSeat, fan);
+        const singleFan = fanFor(settlement.payingSeat, true);
+        transfer(settlement.payingSeat, settlement.winnerSeat, singleFan * 3);
       }
     } else if (settlement.winnerSeat && settlement.type === 'self-draw') {
       for (const seat of MAHJONG_SEATS) {

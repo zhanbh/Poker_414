@@ -2105,10 +2105,10 @@ class MahjongRenderer {
       const pattern = settlement.isBaoZhongBao ? '宝中宝'
         : settlement.isDuiBao ? '兑宝'
         : settlement.winPattern === 'big-wind' ? '大风'
-          : settlement.winPattern === 'bao' ? '搂宝'
+          : settlement.winPattern === 'bao' ? (settlement.isCardang ? '宝夹' : '摸宝')
             : settlement.type === 'self-draw' ? '自摸' : '平和';
       resultLabel = `${settlement.winnerNickname || playerBySeat.get(settlement.winnerSeat)?.nickname || settlement.winnerSeat} 胡牌 · ${pattern}`;
-      if (settlement.isCardang && !settlement.isBaoZhongBao) resultLabel += ' · 卡当';
+      if (settlement.isCardang && !settlement.isBaoZhongBao && settlement.winPattern !== 'bao') resultLabel += ' · 卡当';
       if (settlement.type === 'discard-win' && settlement.payingSeat) {
         const payer = playerBySeat.get(settlement.payingSeat);
         resultLabel += ` · ${payer?.nickname || settlement.payingSeat} 点炮`;
@@ -2751,7 +2751,7 @@ class MahjongRenderer {
     const elapsed = Math.max(0, Date.now() - (state.winAnnouncementAt || 0));
     const scale = 1 + 0.3 * Math.max(0, 1 - elapsed / 450) ** 2;
     const title = win.isBaoZhongBao ? '宝中宝' : win.isDuiBao ? '对宝' : win.winPattern === 'big-wind' ? '大风'
-      : win.winPattern === 'bao' ? (win.isCardang ? '卡当宝' : '宝牌胡') : win.isCardang ? '卡当胡' : win.type === 'self-draw' ? '自摸' : '平和';
+      : win.winPattern === 'bao' ? (win.isCardang ? '宝夹' : '摸宝') : win.isCardang ? '卡当胡' : win.type === 'self-draw' ? '自摸' : '平和';
     const ctx = this.ctx;
     ctx.save();
     ctx.fillStyle = 'rgba(3, 15, 16, 0.45)';

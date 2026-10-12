@@ -1592,6 +1592,21 @@ describe('native mini-game Canvas renderer', () => {
     expect(renderer.targets.some((t) => t.type === 'close-scoreboard-help')).toBe(true);
   });
 
+  it('keeps the scoreboard button below the left header instead of under the WeChat capsule', () => {
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({
+      fillText: () => {},
+      fillRect: () => {},
+      stroke: () => {},
+      fill: () => {},
+    }));
+
+    renderer.drawScoreboardIcon({ scoreboardOpen: false });
+
+    const target = renderer.targets.find((item) => item.type === 'toggle-scoreboard');
+    expect(target).toMatchObject({ x: 12, y: 56, width: 94, height: 40 });
+    expect(target.x + target.width).toBeLessThan(200);
+  });
+
   it('implements dealing animation with 6-tile batches, flip, and sorting glide', () => {
     const labels = [];
     const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({

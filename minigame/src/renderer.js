@@ -794,11 +794,12 @@ class MahjongRenderer {
   }
 
   drawScoreboardIcon(state) {
-    const { width, rightInset } = this.roomLayout();
+    const { leftInset } = this.roomLayout();
     const btnW = 86;
     const btnH = 32;
-    const x = width - rightInset - btnW;
-    const y = 14;
+    // Keep the control below the header on the left, away from WeChat's top-right capsule.
+    const x = leftInset;
+    const y = 60;
     this.roundRect(x, y, btnW, btnH, 16,
       state.scoreboardOpen ? '#c28c2e' : 'rgba(28, 48, 52, 0.88)',
       state.scoreboardOpen ? '#fef08a' : 'rgba(255, 224, 150, 0.75)', 1.2);

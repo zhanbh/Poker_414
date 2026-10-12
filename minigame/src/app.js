@@ -276,7 +276,7 @@ class MahjongGameApp {
       const vy = this.renderer.viewport.y || 0;
       const pr = this.pixelRatio || 1;
       const left = Math.round((vx + 110 * scale) / pr);
-      const top = Math.round((vy + 560 * scale) / pr);
+      const top = Math.round((vy + 520 * scale) / pr);
       const width = Math.round((320 * scale) / pr);
       const height = Math.round((58 * scale) / pr);
 

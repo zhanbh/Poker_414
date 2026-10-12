@@ -746,30 +746,19 @@ class MahjongRenderer {
     this.text('与网页版、小程序实时同步同一房间', 270, 180, 14, COLORS.muted, 'center');
 
     // Compact translucent frosted glass card
-    this.roundRect(75, 345, 390, 310, 20, 'rgba(10, 26, 34, 0.62)', 'rgba(224, 180, 80, 0.45)');
-    this.roundRect(81, 351, 378, 298, 16, null, 'rgba(255, 220, 140, 0.15)');
+    this.roundRect(75, 390, 390, 220, 20, 'rgba(10, 26, 34, 0.62)', 'rgba(224, 180, 80, 0.45)');
+    this.roundRect(81, 396, 378, 208, 16, null, 'rgba(255, 220, 140, 0.15)');
 
-    this.text('加入牌局', 270, 380, 20, COLORS.gold, 'center', '700');
-
-    // Experience version tag
-    this.roundRect(165, 404, 210, 24, 12, 'rgba(16, 185, 129, 0.18)', '#34d399', 1.2);
-    this.text('🛡️ 体验版 · 体验成员专属通道', 270, 416, 11, '#6ee7b7', 'center', '600');
-
-    // Feature highlights box
-    this.roundRect(95, 442, 350, 64, 8, 'rgba(6, 18, 24, 0.72)', 'rgba(56, 116, 134, 0.4)');
-    this.text('🀄 5 10 20（520）底番制 · 夹张/摸宝/宝中宝', 112, 463, 11.5, '#f5f1dc', 'left');
-    this.text('⚡ 已配置体验名单，无需输入邀请码直接入局', 112, 487, 11.5, '#ffd275', 'left');
-
-    const authAvailable = state.canRequestUserInfo && !state.profileAuthorized;
-    this.text(authAvailable ? '首次进入需确认微信昵称头像授权' : '点击下方按钮即可一键进入对局', 270, 532, 12, '#8ba4ae', 'center');
+    this.text('加入牌局', 270, 435, 22, COLORS.gold, 'center', '700');
+    this.text('四人大众麻将 · 跨端实时互通', 270, 472, 13, '#8ba4ae', 'center');
 
     // Enter Button
     const btnLabel = state.busy ? '正在连接…' : '进入房间';
-    this.button(btnLabel, 110, 560, 320, 58, 'enter', {}, 'primary', state.busy);
+    this.button(btnLabel, 110, 520, 320, 58, 'enter', {}, 'primary', state.busy);
 
     // Compliance & status footer
-    this.text(state.statusMessage || state.error || '游戏仅供测试、学习和交流', 270, 680, 12, state.error ? '#f87171' : COLORS.muted, 'center');
-    this.text('虚拟积分无现实价值，不涉及充值或兑现。', 270, 703, 11, '#537480', 'center');
+    this.text(state.statusMessage || state.error || '游戏仅供测试、学习和交流', 270, 650, 12, state.error ? '#f87171' : COLORS.muted, 'center');
+    this.text('虚拟积分无现实价值，不涉及充值或兑现。', 270, 674, 11, '#537480', 'center');
 
     this.text('308娱乐 出品', 270, 890, 13, '#537480', 'center');
   }

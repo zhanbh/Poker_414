@@ -13,12 +13,12 @@ describe('native mini-game Canvas renderer', () => {
     const labels = [];
     const renderer = new MahjongRenderer({ width: 540, height: 960 }, createContext({ fillText: (value) => labels.push(String(value)) }));
     renderer.draw({ screen: 'entry', inviteCode: '', statusMessage: '', canRequestUserInfo: true });
-    expect(renderer.hit(270, 589)).toMatchObject({ type: 'enter' });
+    expect(renderer.hit(270, 549)).toMatchObject({ type: 'enter' });
     expect(renderer.targets.some((target) => target.type === 'input')).toBe(false);
     expect(labels).toContain('进入房间');
+    expect(labels).toContain('加入牌局');
     expect(labels).toContain('308娱乐 · 微信小游戏');
-    expect(labels).toContain('🛡️ 体验版 · 体验成员专属通道');
-    expect(labels).toContain('⚡ 已配置体验名单，无需输入邀请码直接入局');
+    expect(labels).toContain('四人大众麻将 · 跨端实时互通');
     expect(labels).not.toContain('414 麻将');
     expect(labels).not.toContain('授权昵称头像并进入');
     expect(labels).not.toContain('点击填写昵称（可授权微信资料）');
@@ -110,7 +110,7 @@ describe('native mini-game Canvas renderer', () => {
     };
     MahjongGameApp.prototype.updateUserInfoButton.call(app);
     expect(buttonOptions.text).toBe('进入房间');
-    expect(buttonOptions.style).toMatchObject({ left: 110, top: 610, width: 320, height: 58 });
+    expect(buttonOptions.style).toMatchObject({ left: 110, top: 570, width: 320, height: 58 });
     const result = { userInfo: { nickName: '测试用户', avatarUrl: 'avatar' } };
     onTap(result);
     expect(app.result).toBe(result);

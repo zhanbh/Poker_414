@@ -34,11 +34,15 @@ describe('MahjongLobbyView player cards', () => {
     expect(onReady).toHaveBeenCalledOnce();
   });
 
-  it('room is not full yet, so preparation is visible but disabled', () => {
+  it('allows seated players to prepare before the room is full', () => {
     const snapshot = createLobbySnapshot();
-    render(<MahjongLobbyView snapshot={{ ...snapshot, players: snapshot.players.slice(0, 2) }} ownSeat="A" onReady={vi.fn()} onRemove={vi.fn()} onLeave={vi.fn()} testMode={false} />);
+    const onReady = vi.fn();
+    render(<MahjongLobbyView snapshot={{ ...snapshot, players: snapshot.players.slice(0, 3) }} ownSeat="B" onReady={onReady} onRemove={vi.fn()} onLeave={vi.fn()} testMode={false} />);
 
-    expect(screen.getByText('2/4 人已入座 · 已准备 1/4')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '已准备（点击取消）' })).toBeDisabled();
+    expect(screen.getByText('3/4 人已入座 · 已准备 1/4')).toBeInTheDocument();
+    const readyButton = screen.getByRole('button', { name: '准备开局' });
+    expect(readyButton).toBeEnabled();
+    fireEvent.click(readyButton);
+    expect(onReady).toHaveBeenCalledOnce();
   });
 });

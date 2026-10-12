@@ -27,7 +27,7 @@ export function MahjongLobbyView({ snapshot, ownSeat, spectator = false, onReady
           <span>{snapshot.players.length}/4 人已入座 · 已准备 {readyCount}/4</span>
           <small>所有玩家准备后自动开局</small>
           {ownPlayer && !spectator ? (
-            <button type="button" onClick={onReady} disabled={snapshot.players.length !== 4}>
+            <button type="button" onClick={onReady}>
               {ownPlayer.ready ? '已准备（点击取消）' : '准备开局'}
             </button>
           ) : null}

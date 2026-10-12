@@ -312,7 +312,7 @@ describe('native mini-game Canvas renderer', () => {
       expect(point[0]).toBeCloseTo(original[i][0] * 2);
       expect(point[1]).toBeCloseTo(original[i][1] * 2);
     });
-    ['吃', '碰', '杠', '胡', '过', '出', '平和', '自摸', '卡当胡', '宝中宝', '大风', '对宝'].forEach((text) => renderer.drawArtText(text, 0, 0, 46));
+    ['吃', '碰', '杠', '胡', '过', '出', '平和', '自摸', '宝中宝', '大风', '对宝'].forEach((text) => renderer.drawArtText(text, 0, 0, 46));
     expect(colors.every((color) => color === '#ffda72')).toBe(true);
   });
 
@@ -355,8 +355,23 @@ describe('native mini-game Canvas renderer', () => {
     expect(renderer.targets.some((target) => target.type === 'review-table')).toBe(true);
     expect(renderer.targets.some((target) => target.type === 'command' && target.data.action === 'ready')).toBe(true);
     expect(renderer.targets.some((target) => target.type === 'leave')).toBe(true);
+    expect(renderer.targets.some((target) => target.type === 'toggle-settlement-help')).toBe(true);
     expect(renderer.hit(100, 10)).toMatchObject({ type: 'settlement-block' });
     expect(renderer.hit(24, 31)).toMatchObject({ type: 'leave' });
+
+    // When settlement help is open, scoring rules modal is rendered
+    labels.length = 0;
+    renderer.targets = [];
+    renderer.drawSettlement({ ...state, settlementHelpOpen: true });
+    expect(labels).toContain('📖 5 10 20（520）计分规则说明');
+    expect(labels).toContain('底分 5 分 · 阶梯翻番制');
+    expect(labels).toContain('平和点炮 · 1番');
+    expect(labels).toContain('自摸/夹 · 2番');
+    expect(labels).toContain('摸宝/夹自摸 · 4番');
+    expect(labels).toContain('对宝/宝夹 · 6/8番');
+    expect(labels).toContain('宝中宝 · 16番');
+    expect(labels).toContain('我知道了');
+    expect(renderer.targets.some((target) => target.type === 'close-settlement-help')).toBe(true);
 
     // When reviewing table, settlement dialog is hidden and returns floating banner
     renderer.targets = [];
@@ -1392,7 +1407,7 @@ describe('native mini-game Canvas renderer', () => {
         winAnnouncement: { winnerSeat: 'B', winnerNickname: '赢家', type: 'discard-win', payingSeat: 'A', isCardang: true } },
       private: { seat: 'A', hand: [], availableActions: [] },
     } });
-    expect(labels).toEqual(expect.arrayContaining(['卡当胡', '赢家 胡牌', '我 点炮']));
+    expect(labels).toEqual(expect.arrayContaining(['夹', '赢家 胡牌', '我 点炮']));
     expect(labels).not.toContain('本局结算');
     expect(renderer.hit(480, 250)?.type).toBe('win-announcement');
     expect(MahjongGameApp.prototype.hasActiveRoomAnimation.call({ state: { snapshot: { public: { phase: 'playing', winAnnouncement: { winnerSeat: 'B' } } } } })).toBe(true);
@@ -1465,11 +1480,11 @@ describe('native mini-game Canvas renderer', () => {
     renderer.drawListenPreview({ selectedTileId: 'discard-1', snapshot: { private: {
       hand: [{ id: 'discard-1', suit: 'dots', rank: 9 }], listenTileIds: ['discard-1'],
       listenOptions: [{ discardTileId: 'discard-1', waits: [wait], winPreviews: [{ tileId: wait.id, methods: [
-        { label: '卡当点炮', minFan: 2, maxFan: 6 }, { label: '卡当自摸', minFan: 4, maxFan: 6 },
+        { label: '夹点炮', minFan: 2, maxFan: 6 }, { label: '夹自摸', minFan: 4, maxFan: 6 },
         { label: '宝中宝', minFan: 12, maxFan: 12, condition: '此牌为宝且自摸' },
       ] }] }],
     } } });
-    expect(labels).toEqual(expect.arrayContaining(['打出此牌自动听 · 可胡：', '卡当点炮2–6番', '卡当自摸4–6番', '宝中宝12番*']));
+    expect(labels).toEqual(expect.arrayContaining(['打出此牌自动听 · 可胡：', '夹点炮2–6番', '夹自摸4–6番', '宝中宝12番*']));
     expect(labels.some((label) => label.includes('黑炮包付另算'))).toBe(true);
   });
 

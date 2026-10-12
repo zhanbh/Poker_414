@@ -53,7 +53,7 @@ def main():
         "unitsPerEm": font["head"].unitsPerEm,
         "glyphs": {},
     }
-    for char in "吃碰杠听胡平和自摸宝中大风卡当对过出":
+    for char in "吃碰杠听胡平和自摸宝中大风夹对过出":
         name = cmap[ord(char)]
         bounds = BoundsPen(glyph_set)
         pen = CanvasPen(glyph_set)

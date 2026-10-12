@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createMahjongDeck, hasMahjongListenYao, hasMahjongPairStructure, hasMahjongSequence, isBigWindWin, isMahjongCardangWait, isWinningMahjongHand, mahjongTileKinds, mahjongWaits, MahjongMeld, sortMahjongTiles } from '../src/mahjong';
 
 describe('Mahjong shared rules', () => {
-  it('only counts a genuine single middle wait as 卡当', () => {
+  it('only counts a genuine single middle wait as 夹', () => {
     const deck = createMahjongDeck();
     const tile = (suit: string, rank: number | string, copy = 0) => deck.find((candidate) => candidate.suit === suit && candidate.rank === rank && candidate.id.endsWith('-' + copy))!;
     const gap = [tile('dots', 2), tile('dots', 2, 1), tile('characters', 4), tile('characters', 6)];

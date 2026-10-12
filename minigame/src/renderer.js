@@ -2108,7 +2108,7 @@ class MahjongRenderer {
           : settlement.winPattern === 'bao' ? (settlement.isCardang ? '宝夹' : '摸宝')
             : settlement.type === 'self-draw' ? '自摸' : '平和';
       resultLabel = `${settlement.winnerNickname || playerBySeat.get(settlement.winnerSeat)?.nickname || settlement.winnerSeat} 胡牌 · ${pattern}`;
-      if (settlement.isCardang && !settlement.isBaoZhongBao && settlement.winPattern !== 'bao') resultLabel += ' · 卡当';
+      if (settlement.isCardang && !settlement.isBaoZhongBao && settlement.winPattern !== 'bao') resultLabel += ' · 夹';
       if (settlement.type === 'discard-win' && settlement.payingSeat) {
         const payer = playerBySeat.get(settlement.payingSeat);
         resultLabel += ` · ${payer?.nickname || settlement.payingSeat} 点炮`;
@@ -2128,6 +2128,22 @@ class MahjongRenderer {
     this.roundRect(x + 5, y + 5, panelWidth - 10, panelHeight - 10, 12, null, 'rgba(255, 224, 154, 0.35)');
 
     this.text(`第 ${snapshot.public.handNumber || 1} 局 · 本局结算`, width / 2, y + 30, 21, '#ffd878', 'center', '700');
+
+    // Help Button '?' at top right of settlement panel
+    const helpR = 13;
+    const helpX = x + panelWidth - 28;
+    const helpY = y + 28;
+    this.circle(helpX, helpY, helpR,
+      state.settlementHelpOpen ? '#b7894b' : 'rgba(245, 158, 11, 0.25)', 'rgba(251, 191, 36, 0.75)', 1.2);
+    this.text('?', helpX, helpY + 0.5, 13, '#fef3c7', 'center', '700');
+    this.targets.push({
+      x: helpX - helpR - 4,
+      y: helpY - helpR - 4,
+      width: (helpR + 4) * 2,
+      height: (helpR + 4) * 2,
+      type: 'toggle-settlement-help',
+      data: {},
+    });
     this.text(this.fitText(resultLabel, panelWidth - 44, 14, '600'), width / 2, y + 60, 14, '#f5f1dc', 'center', '600');
     if (settlement.baseScore) this.text(`基础分 ${settlement.baseScore} 分`, width / 2, y + 84, 11, '#afc6bf', 'center');
     ctx.beginPath();
@@ -2194,6 +2210,117 @@ class MahjongRenderer {
     // Keep the room exit available while the settlement overlay blocks the table.
     const leaveX = this.roomLayout().leftInset - 8;
     this.targets.push({ x: leaveX, y: 7, width: 48, height: 48, type: 'leave', data: {} });
+
+    if (state.settlementHelpOpen) {
+      this.drawSettlementHelp(state);
+    }
+  }
+
+  drawSettlementHelp(state) {
+    const { width, height } = this.roomLayout();
+    const ctx = this.ctx;
+
+    // Dark backdrop overlay for settlement help modal
+    this.roundRect(0, 0, width, height, 0, 'rgba(0, 0, 0, 0.65)');
+    this.targets.push({ x: 0, y: 0, width, height, type: 'close-settlement-help', data: {} });
+
+    const modalW = Math.min(680, width - 28);
+    const modalH = 370;
+    const modalX = (width - modalW) / 2;
+    const modalY = (height - modalH) / 2;
+
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
+    ctx.shadowBlur = 28;
+    ctx.shadowOffsetY = 6;
+    this.roundRect(modalX, modalY, modalW, modalH, 14,
+      this.linearFill(modalX, modalY, modalX, modalY + modalH,
+        [[0, '#132832'], [1, '#09161c']], '#0f2027'),
+      '#eab308', 1.5);
+    ctx.restore();
+
+    this.roundRect(modalX + 2, modalY + 2, modalW - 4, modalH - 4, 12, null, 'rgba(255, 230, 160, 0.2)', 1);
+
+    // Title & Subtitle
+    this.text('📖 5 10 20（520）计分规则说明', modalX + 22, modalY + 26, 16, '#fef3c7', 'left', '700');
+    this.text('底分 5 分 · 阶梯翻番制', modalX + 268, modalY + 27, 11, '#94a3b8', 'left');
+
+    // Close button
+    const closeX = modalX + modalW - 24;
+    const closeY = modalY + 26;
+    this.text('✕', closeX, closeY, 13, '#94a3b8', 'center', '700');
+    this.targets.push({ x: closeX - 14, y: closeY - 14, width: 28, height: 28, type: 'close-settlement-help', data: {} });
+
+    // Divider
+    ctx.beginPath();
+    ctx.moveTo(modalX + 16, modalY + 44);
+    ctx.lineTo(modalX + modalW - 16, modalY + 44);
+    ctx.strokeStyle = 'rgba(255, 222, 151, 0.25)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    const rules = [
+      {
+        tag: '平和点炮 · 1番',
+        tagBg: 'rgba(59, 130, 246, 0.2)',
+        tagBorder: '#60a5fa',
+        tagColor: '#93c5fd',
+        score: '5 分',
+        desc: '已听牌放炮三家各出 5分；未听牌放黑炮由出牌者包三家全付 15分。',
+      },
+      {
+        tag: '自摸/夹 · 2番',
+        tagBg: 'rgba(34, 197, 94, 0.2)',
+        tagBorder: '#4ade80',
+        tagColor: '#86efac',
+        score: '10 分',
+        desc: '自摸三家各付 10分(得30分)；夹张点炮基础10分，点黑炮包三家付 30分。',
+      },
+      {
+        tag: '摸宝/夹自摸 · 4番',
+        tagBg: 'rgba(245, 158, 11, 0.2)',
+        tagBorder: '#fbbf24',
+        tagColor: '#fde68a',
+        score: '20 分',
+        desc: '听牌后自摸摸到宝牌，或夹张自摸，翻倍跳档，三家各付 20分(得60分)。',
+      },
+      {
+        tag: '对宝/宝夹 · 6/8番',
+        tagBg: 'rgba(236, 72, 153, 0.2)',
+        tagBorder: '#f472b6',
+        tagColor: '#fbcfe8',
+        score: '30 / 40 分',
+        desc: '对宝三家各付 30分(得90分)；宝夹(听夹张摸宝自摸)三家各付 40分(得120分)。',
+      },
+      {
+        tag: '宝中宝 · 16番',
+        tagBg: 'rgba(239, 68, 68, 0.25)',
+        tagBorder: '#f87171',
+        tagColor: '#fca5a5',
+        score: '80 分',
+        desc: '所听夹张恰为宝牌并亲手自摸，至尊顶格满贯，三家各付 80分(得240分)。',
+      },
+    ];
+
+    let rowY = modalY + 54;
+    const tagW = 120;
+    const tagH = 26;
+    rules.forEach((item) => {
+      this.roundRect(modalX + 18, rowY, tagW, tagH, 5, item.tagBg, item.tagBorder, 1);
+      this.text(item.tag, modalX + 18 + tagW / 2, rowY + 13.5, 11, item.tagColor, 'center', '700');
+      this.text(item.score, modalX + 18 + tagW + 16, rowY + 13.5, 13, '#fde047', 'left', '700');
+      const maxDescW = modalW - tagW - 140;
+      this.text(this.fitText(item.desc, maxDescW, 11), modalX + 18 + tagW + 90, rowY + 13.5, 11, '#e2e8f0', 'left');
+      rowY += 46;
+    });
+
+    // Footnote
+    this.text('💡 特殊规则：大风 4番(20分) ｜ 输家门清未开门输分翻倍(×2) ｜ 未听牌点黑炮包三家。',
+      modalX + 22, modalY + modalH - 58, 10.5, '#94a3b8');
+
+    // Confirm button
+    this.button('我知道了', modalX + (modalW - 130) / 2, modalY + modalH - 40, 130, 32,
+      'close-settlement-help', {}, 'primary');
   }
 
   drawOpponentHands(state, table) {
@@ -2751,7 +2878,7 @@ class MahjongRenderer {
     const elapsed = Math.max(0, Date.now() - (state.winAnnouncementAt || 0));
     const scale = 1 + 0.3 * Math.max(0, 1 - elapsed / 450) ** 2;
     const title = win.isBaoZhongBao ? '宝中宝' : win.isDuiBao ? '对宝' : win.winPattern === 'big-wind' ? '大风'
-      : win.winPattern === 'bao' ? (win.isCardang ? '宝夹' : '摸宝') : win.isCardang ? '卡当胡' : win.type === 'self-draw' ? '自摸' : '平和';
+      : win.winPattern === 'bao' ? (win.isCardang ? '宝夹' : '摸宝') : win.isCardang ? '夹' : win.type === 'self-draw' ? '自摸' : '平和';
     const ctx = this.ctx;
     ctx.save();
     ctx.fillStyle = 'rgba(3, 15, 16, 0.45)';

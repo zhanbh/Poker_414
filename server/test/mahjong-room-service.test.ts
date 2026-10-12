@@ -65,7 +65,7 @@ function readyBaoScenario(baoKind: 'red' | 'structural') {
 }
 
 describe('MahjongRoomService', () => {
-  it('听口预览逐牌识别普通胡、卡当和条件宝胡，番数与实际自摸结算一致且不透露宝牌', () => {
+  it('听口预览逐牌识别普通胡、夹和条件宝胡，番数与实际自摸结算一致且不透露宝牌', () => {
     for (const scenario of ['standard', 'cardang', 'bao-zhong-bao', 'dui-bao'] as const) {
       const { room, players, tile, internals } = readyBaoScenario('red');
       const player = internals.state.players.B!;
@@ -89,8 +89,8 @@ describe('MahjongRoomService', () => {
       expect(before.private.baoTile).toBeUndefined();
       expect(preview).not.toHaveProperty('baoTile');
       expect(methods).toEqual(expect.arrayContaining([
-        expect.objectContaining({ label: cardang ? '卡当点炮' : '平和点炮', minFan: cardang ? 2 : 1, maxFan: cardang ? 4 : 2 }),
-        expect.objectContaining({ label: cardang ? '卡当自摸' : '自摸', minFan: cardang ? 4 : 2, maxFan: cardang ? 8 : 4 }),
+        expect.objectContaining({ label: cardang ? '夹点炮' : '平和点炮', minFan: cardang ? 2 : 1, maxFan: cardang ? 4 : 2 }),
+        expect.objectContaining({ label: cardang ? '夹自摸' : '自摸', minFan: cardang ? 4 : 2, maxFan: cardang ? 8 : 4 }),
         expect.objectContaining({ label: cardang ? '宝中宝' : '对宝', minFan: cardang ? 16 : 6, maxFan: cardang ? 16 : 6, condition: '此牌为宝且自摸' }),
       ]));
       const listened = room.dispatch(players[1].sessionToken, command('discard', before.public.handNumber, before.public.version, { tileId: junk.id })).snapshot;
@@ -106,14 +106,14 @@ describe('MahjongRoomService', () => {
       const drawn = room.getSnapshot(players[1].sessionToken);
       room.dispatch(players[1].sessionToken, command('hu', drawn.public.handNumber, drawn.public.version));
       const actual = finishWin(room, players[1].sessionToken).public.settlement!;
-      const predicted = methods.find((method) => method.label === (conditionalBao ? cardang ? '宝中宝' : '对宝' : cardang ? '卡当自摸' : '自摸'))!;
+      const predicted = methods.find((method) => method.label === (conditionalBao ? cardang ? '宝中宝' : '对宝' : cardang ? '夹自摸' : '自摸'))!;
       const fans = actual.transfers!.map((transfer) => transfer.fan!);
       expect(Math.min(...fans)).toBe(predicted.minFan);
       expect(Math.max(...fans)).toBe(predicted.maxFan);
     }
   });
 
-  it('大风听口只预览自摸大风，不误报点炮或卡当倍数', () => {
+  it('大风听口只预览自摸大风，不误报点炮或夹倍数', () => {
     const { room, players, tile, internals } = readyBaoScenario('red');
     const player = internals.state.players.B!;
     const junk = tile('dots', 9);
@@ -231,7 +231,7 @@ describe('MahjongRoomService', () => {
     expect(nextHand.public.players.map((player) => player.score)).toEqual([980, 1060, 980, 980]);
   });
 
-  it('实际胡牌时识别卡当与宝中宝，并按截图番数结算', () => {
+  it('实际胡牌时识别夹与宝中宝，并按截图番数结算', () => {
     for (const baoZhongBao of [false, true]) {
       const { room, players, tile, internals } = readyBaoScenario('red');
       const listener = internals.state.players.B!;
@@ -269,10 +269,10 @@ describe('MahjongRoomService', () => {
     }
   });
 
-  it('实际胡牌时识别非卡当的兑宝（如边张），并按6番结算', () => {
+  it('实际胡牌时识别非夹的兑宝（如边张），并按6番结算', () => {
     const { room, players, tile, internals } = readyBaoScenario('red');
     const listener = internals.state.players.B!;
-    // 手牌为 1万 2万 2筒 2筒，听边张 3万（非卡当）
+    // 手牌为 1万 2万 2筒 2筒，听边张 3万（非夹）
     listener.hand = [tile('characters', 1), tile('characters', 2), tile('dots', 2), tile('dots', 2, 1)];
     listener.melds = [
       { kind: 'chi', tiles: [4, 5, 6].map((rank) => tile('characters', rank)) },

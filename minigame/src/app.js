@@ -55,7 +55,7 @@ class MahjongGameApp {
       busy: false, chatOpen: false, chatReadId: '', chatMode: 'text', chatTab: 'messages',
       recordingVoice: false, playingVoiceId: '', selectedTileId: '', selectedTarget: null,
       draggedTile: null, focus: '', keyboardOpen: false, snapshot: null, actionCallouts: [],
-      reviewingTable: false, scoreboardOpen: false, scoreboardHelpOpen: false, dealingAnimation: null,
+      reviewingTable: false, scoreboardOpen: false, scoreboardHelpOpen: false, settlementHelpOpen: false, dealingAnimation: null,
     };
     if (this.wx.getStorageSync) {
       const savedNickname = this.wx.getStorageSync(config.nicknameStorageKey) || '';
@@ -574,6 +574,7 @@ class MahjongGameApp {
       && (prevSnapshot?.public?.phase !== 'playing' || snapshot.public.handNumber !== prevSnapshot?.public?.handNumber);
     if (isNewHand) {
       this.state.reviewingTable = false;
+      this.state.settlementHelpOpen = false;
       if ((snapshot.public.discardRiver || []).length === 0) {
         this.state.dealingAnimation = { startTime: now, duration: 2000 };
       } else {
@@ -582,6 +583,7 @@ class MahjongGameApp {
     } else if (snapshot.public.phase !== 'playing') {
       this.state.dealingAnimation = null;
       if (snapshot.public.phase === 'lobby') this.state.reviewingTable = false;
+      if (snapshot.public.phase !== 'settled') this.state.settlementHelpOpen = false;
     }
     if (this.tileGesture && (!snapshot.private.hand?.some((tile) => tile.id === this.tileGesture.tileId)
       || !snapshot.private.availableActions?.includes('discard') || snapshot.public.handNumber !== prevSnapshot?.public.handNumber)) {
@@ -1057,11 +1059,23 @@ class MahjongGameApp {
     }
     if (type === 'review-table') {
       this.state.reviewingTable = true;
+      this.state.settlementHelpOpen = false;
       this.draw();
       return;
     }
     if (type === 'return-settlement') {
       this.state.reviewingTable = false;
+      this.state.settlementHelpOpen = false;
+      this.draw();
+      return;
+    }
+    if (type === 'toggle-settlement-help') {
+      this.state.settlementHelpOpen = !this.state.settlementHelpOpen;
+      this.draw();
+      return;
+    }
+    if (type === 'close-settlement-help') {
+      this.state.settlementHelpOpen = false;
       this.draw();
       return;
     }

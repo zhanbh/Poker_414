@@ -1062,10 +1062,10 @@ export class MahjongRoomService {
           const fans = MAHJONG_SEATS.filter((seat) => seat !== player.seat).map((seat) => this.winFan(settlement, seat, type === 'discard-win'));
           methods.push({ label, minFan: Math.min(...fans), maxFan: Math.max(...fans), ...(condition ? { condition } : {}) });
         };
-        if (standard) add(isCardang ? '卡当点炮' : '平和点炮', 'discard-win', 'standard', { isCardang }, '非宝牌');
+        if (standard) add(isCardang ? '夹点炮' : '平和点炮', 'discard-win', 'standard', { isCardang }, '非宝牌');
         if (bigWind) add('大风', 'self-draw', 'big-wind');
         else if (standard) {
-          add(isCardang ? '卡当自摸' : '自摸', 'self-draw', 'standard', { isCardang });
+          add(isCardang ? '夹自摸' : '自摸', 'self-draw', 'standard', { isCardang });
           add(isCardang ? '宝中宝' : '对宝', 'self-draw', 'bao', { isCardang, isBaoZhongBao: isCardang, isDuiBao: !isCardang }, '此牌为宝且自摸');
         }
         return { tileId: wait.id, methods };

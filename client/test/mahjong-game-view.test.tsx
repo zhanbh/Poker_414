@@ -66,7 +66,7 @@ describe('MahjongGameView settlement', () => {
       winAnnouncement: { winnerSeat: 'B', winnerNickname: '乙', type: 'discard-win', winPattern: 'standard', payingSeat: 'A', isCardang: true },
     } }} {...props} />);
     expect(container.querySelector('.mahjong-seat-bottom.discarder-announced .mahjong-discarder-badge')?.textContent).toBe('点炮');
-    expect(container.querySelector('.mahjong-win-announcement')?.textContent).toContain('卡当');
+    expect(container.querySelector('.mahjong-win-announcement')?.textContent).toContain('夹');
     expect(container.querySelector('.mahjong-win-announcement')?.textContent).toContain('甲 点炮');
 
     rerender(<MahjongGameView snapshot={{ ...announcing, public: {

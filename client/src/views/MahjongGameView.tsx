@@ -77,7 +77,6 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode, intera
   const isResponsePhase = Boolean(snapshot.public.pendingDiscard);
   const isMyTurn = Boolean(ownSeat && snapshot.public.currentTurn === ownSeat && snapshot.public.awaitingDiscard && !isResponsePhase);
   const effectiveSelectedTileId = snapshot.private.isListening ? snapshot.private.discardableTileId ?? null : selectedTileId;
-  const selectedTile = snapshot.private.hand.find((tile) => tile.id === effectiveSelectedTileId);
   const availableActions = snapshot.private.availableActions;
   const responseActions = availableActions.filter((candidate) => ['hu', 'peng', 'chi', 'exposed-kong'].includes(candidate));
   const listenTileIds = new Set(snapshot.private.listenTileIds ?? []);
@@ -220,7 +219,7 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode, intera
   const showPostDiscardListenDock = !isSpectator && snapshot.public.phase === 'playing' && postDiscardListenWaits.length > 0;
   const showResponseDock = !showPostDiscardListenDock && !isSpectator && snapshot.public.phase === 'playing' && isResponsePhase && (responseActions.length > 0 || availableActions.includes('pass'));
   const showTurnDock = !isSpectator && snapshot.public.phase === 'playing' && isMyTurn && !snapshot.private.isListening
-    && (availableActions.includes('listen') || availableActions.includes('concealed-kong') || availableActions.includes('added-kong'));
+    && (availableActions.includes('listen') || availableActions.includes('concealed-kong'));
   const showSelfDrawDock = !isSpectator && snapshot.public.phase === 'playing' && isMyTurn && snapshot.private.isListening && availableActions.includes('hu');
   const actionDock = showPostDiscardListenDock || showResponseDock || showTurnDock || showSelfDrawDock ? <div className="mahjong-action-dock" aria-label="可选操作">
     {showPostDiscardListenDock ? <><button type="button" className="mahjong-action-circle" aria-label="听" onClick={() => respond('listen')}>听</button><button type="button" className="mahjong-action-circle secondary" aria-label="暂不听" onClick={() => respond('pass')}>不听</button></> : null}
@@ -239,7 +238,6 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode, intera
     {showTurnDock ? <>
       {availableActions.includes('listen') ? <button type="button" className="mahjong-action-circle" aria-label="听" disabled={!effectiveSelectedTileId || !listenTileIds.has(effectiveSelectedTileId)} onClick={() => effectiveSelectedTileId && action('listen', { tileId: effectiveSelectedTileId })}>听</button> : null}
       {availableActions.includes('concealed-kong') ? <button type="button" className="mahjong-action-circle" aria-label="暗杠" onClick={() => action('concealed-kong')}>暗杠</button> : null}
-      {availableActions.includes('added-kong') ? <button type="button" className="mahjong-action-circle" aria-label="补杠" disabled={!selectedTile} onClick={() => selectedTile && action('added-kong', { tileId: selectedTile.id })}>补杠</button> : null}
     </> : null}
     {showSelfDrawDock ? <><button type="button" className="mahjong-action-circle" aria-label="胡" onClick={() => respond('hu')}>胡</button><button type="button" className="mahjong-action-circle secondary" aria-label="过" onClick={() => respond('pass')}>过</button></> : null}
   </div> : null;
@@ -313,7 +311,12 @@ export function MahjongGameView({ snapshot, onCommand, onLeave, testMode, intera
           <h2>本局结束</h2>
           <p>{settlementDescription}</p>
           <div className="mahjong-score-ledger" aria-label="本局积分流水">{scoreRows.map((row) => <div className={`mahjong-score-row${row.seat === ownSeat ? ' mine' : ''}`} key={row.seat}><strong>{row.nickname}{row.seat === ownSeat ? '（我）' : ''}{row.isWinner ? <span className="mahjong-score-role winner">胡牌</span> : null}{row.isDiscarder ? <span className="mahjong-score-role discarder">点炮</span> : null}</strong><span>{row.before} → {row.after}</span><b className={row.change >= 0 ? 'positive' : 'negative'}>{row.change > 0 ? '+' : ''}{row.change} 分</b><small>{row.flow}</small></div>)}</div>
-          {settlement.type !== 'draw' && snapshot.public.hostSeat === ownSeat ? <button type="button" onClick={() => action('next-hand')}>开始下一局</button> : settlement.type !== 'draw' ? <small>等待房主开始下一局</small> : <small>即将开始下一局</small>}
+          {!isSpectator && ownSeat ? (() => {
+            const ownPlayer = snapshot.public.players.find((player) => player.seat === ownSeat);
+            return ownPlayer?.ready
+              ? <button type="button" onClick={() => action('ready', { ready: false })}>取消准备</button>
+              : <button type="button" onClick={() => action('ready', { ready: true })}>准备下一局</button>;
+          })() : <small>{settlement.type === 'draw' ? '流局后即将开始下一局' : '等待玩家准备下一局'}</small>}
         </section> : null}
         {animationStage ? <div className={`mahjong-deal-overlay ${animationStage}`} role="status"><div className="mahjong-dice-cube">{snapshot.public.diceRoll?.join(' · ') ?? '掷骰'}</div><strong>{animationStage === 'dice' ? '庄家掷骰' : '正在发牌'}</strong>{animationStage === 'deal' ? <div className="dealing-tiles"><TileBack /><TileBack /><TileBack /><TileBack /></div> : null}</div> : null}
       </section>

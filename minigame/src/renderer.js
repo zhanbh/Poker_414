@@ -2183,9 +2183,9 @@ class MahjongRenderer {
 
     if (isSeated) {
       if (isReady) {
-        this.button('返回牌桌', btnX + btnW1 + 14, buttonY, btnW2, 34, 'review-table', {}, 'primary');
+        this.button('取消准备', btnX + btnW1 + 14, buttonY, btnW2, 34, 'command', { action: 'ready', payload: { ready: false } }, 'secondary');
       } else {
-        this.button('开始下一局', btnX + btnW1 + 14, buttonY, btnW2, 34, 'command', { action: 'ready', payload: { ready: true } }, 'primary');
+        this.button('准备下一局', btnX + btnW1 + 14, buttonY, btnW2, 34, 'command', { action: 'ready', payload: { ready: true } }, 'primary');
       }
     } else {
       this.text('观战中 · 等待准备', btnX + btnW1 + 14 + btnW2 / 2, buttonY + 17, 12, '#b7d0d8', 'center');
@@ -2675,23 +2675,22 @@ class MahjongRenderer {
       ? ['listen', 'pass']
       : actions.filter((action) => {
           if (action === 'discard') return false;
+          if (action === 'added-kong') return false;
           if (action === 'listen') return canListenSelected;
           return true;
         });
     if (!waitingListen && actions.includes('discard') && state.selectedTileId) visibleActions.unshift('discard');
-    if (snapshot.public.phase === 'settled' && snapshot.public.hostSeat === snapshot.private.seat) visibleActions.push('start-hand');
+    // Next-hand progression is controlled only by the settlement ready flow.
     const isSelfDraw = Boolean(
       snapshot.public.currentTurn === snapshot.private.seat
       && !snapshot.public.pendingDiscard
     );
     const huLabel = isSelfDraw ? '自摸' : '胡';
     const labels = {
-      'start-hand': '下一局',
       discard: '出',
       listen: '听',
       hu: huLabel,
       'exposed-kong': '杠',
-      'added-kong': '杠',
       'concealed-kong': '杠',
       pass: '过',
     };
@@ -2724,7 +2723,7 @@ class MahjongRenderer {
         if (label.length === 1) this.drawArtText(label, x, y, 29);
         else this.text(label, x, y, 14, '#fff6ce', 'center', '700');
       }
-      this.targets.push({ x: x - 28, y: y - 28, width: 56, height: 56, type: action === 'start-hand' ? 'command' : 'action', data });
+      this.targets.push({ x: x - 28, y: y - 28, width: 56, height: 56, type: 'action', data });
     });
   }
 

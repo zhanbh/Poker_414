@@ -1128,10 +1128,6 @@ class MahjongGameApp {
     if (type === 'leave') { this.leaveRoom(); return; }
     if (type === 'start') { await this.runCommand('ready', { ready: true }); return; }
     if (type === 'command') {
-      if (data.action === 'ready' && (data.payload?.ready ?? true) && this.state.snapshot?.public?.phase === 'settled') {
-        this.state.reviewingTable = true;
-        this.draw();
-      }
       await this.runCommand(data.action, data.payload || {});
       return;
     }

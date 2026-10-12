@@ -145,7 +145,6 @@ const FLOW_WALL_THRESHOLD = Math.ceil(TOTAL_TILE_COUNT * 0.15);
 const LISTENING_DISCARD_DELAY_MS = 1_000;
 const WIN_ANNOUNCE_DELAY_MS = 1_000;
 const WIN_EFFECT_DURATION_MS = 2_200;
-const DRAW_RESTART_DELAY_MS = 2_000;
 
 function shuffle<T>(items: readonly T[], random: () => number): T[] {
   const result = [...items];
@@ -530,12 +529,21 @@ export class MahjongRoomService {
     switch (type) {
       case 'start-hand':
         this.assertHost(session);
+        // Older mini-game clients exposed a host-only shortcut from the
+        // settlement view. Treat it as readiness so it cannot bypass the
+        // cross-client all-ready barrier.
+        if (state.phase === 'settled') {
+          this.setReady(session, true);
+          return;
+        }
         this.startHand();
         return;
       case 'next-hand':
         this.assertHost(session);
         if (state.phase !== 'settled') throw new MahjongRoomServiceError('INVALID_PHASE', '本局尚未结束');
-        this.returnToLobby();
+        // Compatibility for older web clients: next-hand now means the host
+        // is ready, not that the room should be moved into a separate lobby.
+        this.setReady(session, true);
         return;
       case 'remove-player': {
         this.assertHost(session);
@@ -564,23 +572,28 @@ export class MahjongRoomService {
         this.claim(session.mahjongSeat!, type, payload as { readonly tileIds?: readonly string[]; readonly discardTileId?: string });
         return;
       case 'added-kong':
-        this.addedKong(session.mahjongSeat!, (payload as { readonly tileId: string }).tileId);
-        return;
+        throw new MahjongRoomServiceError('INVALID_ACTION', '本玩法不支持碰后补杠');
       case 'concealed-kong':
         this.concealedKong(session.mahjongSeat!, (payload as { readonly tileIds?: readonly string[] }).tileIds);
         return;
       case 'ready': {
-        const player = this.requirePlayer(session.mahjongSeat!);
-        if (state.phase !== 'lobby' && state.phase !== 'settled') throw new MahjongRoomServiceError('INVALID_PHASE', '牌局进行中不能准备');
         const reqReady = (payload as { readonly ready?: boolean })?.ready;
-        player.ready = reqReady !== undefined ? reqReady : true;
-        state.version += 1;
-        this.checkAutoStart();
+        this.setReady(session, reqReady !== undefined ? reqReady : true);
         return;
       }
       default:
         throw new MahjongRoomServiceError('INVALID_COMMAND', '命令类型不支持');
     }
+  }
+
+  private setReady(session: Session, ready: boolean): void {
+    if (!this.state) throw new MahjongRoomServiceError('ROOM_NOT_FOUND', '房间尚未创建');
+    if (this.state.phase !== 'lobby' && this.state.phase !== 'settled') throw new MahjongRoomServiceError('INVALID_PHASE', '牌局进行中不能准备');
+    if (this.state.phase === 'settled') this.promoteSpectators();
+    const player = this.requirePlayer(session.mahjongSeat!);
+    player.ready = ready;
+    this.state.version += 1;
+    this.checkAutoStart();
   }
 
   private checkAutoStart(): void {
@@ -869,21 +882,6 @@ export class MahjongRoomService {
     state.version += 1;
   }
 
-  private addedKong(seat: MahjongSeat, tileId: string): void {
-    const state = this.requirePlaying();
-    if (state.pending || state.currentTurn !== seat || !state.awaitingDiscard) throw new MahjongRoomServiceError('INVALID_ACTION', '当前不能补杠');
-    const player = this.requirePlayer(seat);
-    if (player.isListening) throw new MahjongRoomServiceError('LISTEN_LOCKED', '听牌后不能补杠');
-    const tile = player.hand.find((candidate) => candidate.id === tileId);
-    const meldIndex = tile ? player.melds.findIndex((candidate) => candidate.kind === 'peng' && tileKey(candidate.tiles[0]!) === tileKey(tile)) : -1;
-    const meld = meldIndex >= 0 ? player.melds[meldIndex] : undefined;
-    if (!tile || !meld) throw new MahjongRoomServiceError('INVALID_ACTION', '没有可以补杠的碰牌');
-    player.hand = removeTileIds(player.hand, [tile.id]);
-    player.melds[meldIndex] = { kind: 'added-kong', tiles: sortMahjongTiles([...meld.tiles, tile]) };
-    this.drawKongReplacement(player);
-    state.version += 1;
-  }
-
   private createPending(seat: MahjongSeat, tile: MahjongTile, baoSeatsBeforeDiscard: ReadonlySet<MahjongSeat>, discarderWasListening: boolean): PendingResponses | null {
     const options: Partial<Record<MahjongSeat, MahjongAction[]>> = {};
     for (const candidate of MAHJONG_SEATS) {
@@ -985,7 +983,6 @@ export class MahjongRoomService {
           const tiles = findTilesByKey(player.hand, tileKey(tile), 4);
           return this.canReachRedSingleWait(removeTileIds(player.hand, tiles.map((used) => used.id)), [...player.melds, { kind: 'concealed-kong', tiles }]);
         })()))) actions.push('concealed-kong');
-      if (player.hand.some((tile) => player.melds.some((meld) => meld.kind === 'peng' && tileKey(meld.tiles[0]!) === tileKey(tile)))) actions.push('added-kong');
     }
     return actions;
   }
@@ -1021,13 +1018,14 @@ export class MahjongRoomService {
   }
 
   private validListenWaits(hand: MahjongTile[], meldCount: number, melds: readonly MahjongMeld[]): MahjongTile[] {
-    if ((meldCount >= 4 && !this.isRedCenterSingleWait(hand, melds)) || (meldCount < 4 && hand.length < 4)) return [];
+    if ((meldCount >= 4 && !this.isRedCenterSingleWait(hand, melds))
+      || (meldCount < 4 && hand.length < 4)
+      || !hasMahjongPairStructure(hand, melds)
+      || !hasMahjongSequence(hand, melds)) return [];
     return mahjongWaits(hand, meldCount, melds)
       .filter((tile) => {
         const standardWait = isWinningMahjongHand([...hand, tile], meldCount);
-        const bigWindWait = isBigWindWin(hand, tile, melds)
-          && hasMahjongPairStructure(hand, melds)
-          && hasMahjongSequence(hand, melds);
+        const bigWindWait = isBigWindWin(hand, tile, melds);
         return (standardWait || bigWindWait)
           && (meldCount < 4 || tile.suit === 'dragons' && tile.rank === 'red')
           && hasMahjongListenYao(hand, tile, melds);
@@ -1296,7 +1294,7 @@ export class MahjongRoomService {
   }
 
   private promoteSpectators(): void {
-    if (!this.state || this.state.phase !== 'lobby') return;
+    if (!this.state || (this.state.phase !== 'lobby' && this.state.phase !== 'settled')) return;
     const waiting = this.sessions.listSpectators().filter((session) => !session.mahjongSeat);
     for (const session of waiting) {
       const seat = MAHJONG_SEATS.find((candidate) => this.state?.players[candidate] === null);

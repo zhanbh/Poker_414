@@ -320,7 +320,7 @@ describe('native mini-game Canvas renderer', () => {
     expect(colors.every((color) => color === '#ffda72')).toBe(true);
   });
 
-  it('shows a detailed Mahjong settlement ledger and lets the host advance', () => {
+  it('shows a detailed Mahjong settlement ledger and uses readiness for the next hand', () => {
     const labels = [];
     const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({ fillText: (value) => labels.push(String(value)) }));
     const state = {
@@ -354,7 +354,7 @@ describe('native mini-game Canvas renderer', () => {
     expect(labels).toContain('玩家甲 胡牌 · 自摸');
     expect(labels).toContain('玩家甲 · 胡牌');
     expect(labels).toContain('查看牌局');
-    expect(labels).toContain('开始下一局');
+    expect(labels).toContain('准备下一局');
     expect(labels).toContain('离开');
     expect(renderer.targets.some((target) => target.type === 'review-table')).toBe(true);
     expect(renderer.targets.some((target) => target.type === 'command' && target.data.action === 'ready')).toBe(true);
@@ -391,18 +391,50 @@ describe('native mini-game Canvas renderer', () => {
     renderer.drawSettlement({ ...state, reviewingTable: true });
     expect(labels).toContain('已准备 · 等待其他玩家就绪…');
 
-    // And settlement modal offers '返回牌桌' instead of '已准备 (等待他人)'
+    // A prepared player can cancel readiness; table review remains a separate control.
     labels.length = 0;
     renderer.targets = [];
     renderer.drawSettlement(state);
-    expect(labels).toContain('返回牌桌');
-    expect(labels).not.toContain('已准备 (等待他人)');
+    expect(labels).toContain('取消准备');
     expect(renderer.targets.some((target) => target.type === 'review-table')).toBe(true);
+    expect(renderer.targets.some((target) => target.type === 'command' && target.data.action === 'ready' && target.data.payload.ready === false)).toBe(true);
 
     // On the game table, settled phase renders '已准备' badge on player card
     labels.length = 0;
     renderer.drawPlayerCard({ ...state, snapshot: { ...state.snapshot, public: { ...state.snapshot.public, phase: 'settled' } } }, 'A', 20, 200, 94, 114);
     expect(labels).toContain('已准备');
+  });
+
+  it('does not render a host-only next-hand shortcut over the settlement screen', () => {
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext());
+    const state = {
+      selectedTileId: '',
+      snapshot: {
+        public: { phase: 'settled', hostSeat: 'A', currentTurn: null, pendingDiscard: null },
+        private: { seat: 'A', availableActions: [] },
+      },
+    };
+    renderer.drawActions(state);
+    expect(renderer.targets.some((target) => target.type === 'command' && target.data.action === 'start-hand')).toBe(false);
+
+    renderer.targets = [];
+    renderer.drawActions({ ...state, snapshot: {
+      public: { phase: 'playing', hostSeat: 'A', currentTurn: 'A', pendingDiscard: null },
+      private: { seat: 'A', availableActions: ['discard', 'added-kong'] },
+    } });
+    expect(renderer.targets.some((target) => target.type === 'action' && target.data.action === 'added-kong')).toBe(false);
+  });
+
+  it('keeps the settlement screen open after preparing so the player can see who is still unready', async () => {
+    const app = {
+      state: { screen: 'game', reviewingTable: false, snapshot: { public: { phase: 'settled' } } },
+      runCommand: vi.fn(async () => {}),
+    };
+    await MahjongGameApp.prototype.handleTarget.call(app, {
+      type: 'command', data: { action: 'ready', payload: { ready: true } },
+    });
+    expect(app.state.reviewingTable).toBe(false);
+    expect(app.runCommand).toHaveBeenCalledWith('ready', { ready: true });
   });
 
   it('passes the authorized profile directly into room entry', async () => {

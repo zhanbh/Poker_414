@@ -108,6 +108,24 @@ describe('MahjongGameView settlement', () => {
     rerender(<MahjongGameView snapshot={discardWin} {...props} />);
     expect(container.querySelector('.mahjong-score-row:nth-child(1) .mahjong-score-role.discarder')?.textContent).toBe('点炮');
     expect(container.querySelector('.mahjong-score-row:nth-child(2) .mahjong-score-role.winner')?.textContent).toBe('胡牌');
+
+    const prepareButton = container.querySelector('.mahjong-table-settlement button');
+    expect(prepareButton?.textContent).toBe('准备下一局');
+    fireEvent.click(prepareButton!);
+    expect(props.onCommand).toHaveBeenCalledWith('ready', { ready: true });
+
+    const readySnapshot: MahjongSnapshot = {
+      ...snapshot,
+      public: {
+        ...snapshot.public,
+        players: snapshot.public.players.map((player) => player.seat === 'A' ? { ...player, ready: true } : player),
+      },
+    };
+    rerender(<MahjongGameView snapshot={readySnapshot} {...props} />);
+    const cancelReadyButton = container.querySelector('.mahjong-table-settlement button');
+    expect(cancelReadyButton?.textContent).toBe('取消准备');
+    fireEvent.click(cancelReadyButton!);
+    expect(props.onCommand).toHaveBeenLastCalledWith('ready', { ready: false });
   });
 });
 

@@ -116,13 +116,14 @@ describe('native mini-game Canvas renderer', () => {
     expect(app.result).toBe(result);
   });
 
-  it('joins immediately with a generated nickname when WeChat profile consent is not yet granted', async () => {
+  it('joins without an invite code instead of sending a hard-coded default', async () => {
     let joined;
+    let loginInviteCode;
     const app = {
       wx: { getStorageSync: () => '', setStorageSync: () => {} },
-      state: { inviteCode: '308', nickname: '', avatarUrl: '', profileAuthorized: false, error: '', statusMessage: '', busy: false },
+      state: { inviteCode: '', nickname: '', avatarUrl: '', profileAuthorized: false, error: '', statusMessage: '', busy: false },
       transport: {
-        login: async () => ({ sessionToken: 's-1' }),
+        login: async (inviteCode) => { loginInviteCode = inviteCode; return { sessionToken: 's-1' }; },
         join: async (nickname, avatar) => {
           joined = { nickname, avatar };
           return { public: { gameId: 'mahjong', phase: 'lobby' }, private: { seat: 'A' } };
@@ -133,6 +134,7 @@ describe('native mini-game Canvas renderer', () => {
       draw: () => {},
     };
     await MahjongGameApp.prototype.enterRoom.call(app);
+    expect(loginInviteCode).toBe('');
     expect(joined.nickname).toMatch(/^雀友[A-Z0-9]{5}$/);
     expect(joined.avatar).toBe('');
     expect(app.state.profileAuthorized).toBe(false);

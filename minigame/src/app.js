@@ -1125,7 +1125,7 @@ class MahjongGameApp {
   }
 
   async enterRoom(options = {}) {
-    const inviteCode = (this.state.inviteCode || config.defaultInviteCode || '').trim();
+    const inviteCode = String(this.state.inviteCode || '').trim();
 
     const profileAuthorized = options.profileAuthorized ?? this.state.profileAuthorized;
     let nickname = String(options.nickname ?? (profileAuthorized

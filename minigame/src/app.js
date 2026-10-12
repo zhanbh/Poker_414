@@ -55,6 +55,7 @@ class MahjongGameApp {
       busy: false, chatOpen: false, chatReadId: '', chatMode: 'text', chatTab: 'messages',
       recordingVoice: false, playingVoiceId: '', selectedTileId: '', selectedTarget: null,
       draggedTile: null, focus: '', keyboardOpen: false, snapshot: null, actionCallouts: [],
+      reviewingTable: false, scoreboardOpen: false, scoreboardHelpOpen: false, dealingAnimation: null,
     };
     if (this.wx.getStorageSync) {
       const savedNickname = this.wx.getStorageSync(config.nicknameStorageKey) || '';
@@ -241,8 +242,10 @@ class MahjongGameApp {
     const pub = this.state.snapshot?.public;
     if (!pub || pub.phase !== 'playing') return false;
     const now = Date.now();
+    const hasDealing = Boolean(this.state.dealingAnimation && now - this.state.dealingAnimation.startTime < this.state.dealingAnimation.duration);
+    const hasSelfDraw = Boolean(this.state.selfDrawAnimation && now - this.state.selfDrawAnimation.startTime < this.state.selfDrawAnimation.duration + 400);
     const hasCallouts = (this.state.actionCallouts || []).some((c) => now - c.startTime < (c.untilDiscard ? 400 : (c.duration || 1500)));
-    return hasCallouts || Boolean(pub.winAnnouncement);
+    return hasDealing || hasSelfDraw || hasCallouts || Boolean(pub.winAnnouncement);
   }
 
   finishLoading() {
@@ -567,6 +570,19 @@ class MahjongGameApp {
     const enteringRoom = this.state.screen === 'entry';
     const prevSnapshot = this.state.snapshot;
     const now = Date.now();
+    const isNewHand = snapshot.public.phase === 'playing'
+      && (prevSnapshot?.public?.phase !== 'playing' || snapshot.public.handNumber !== prevSnapshot?.public?.handNumber);
+    if (isNewHand) {
+      this.state.reviewingTable = false;
+      if ((snapshot.public.discardRiver || []).length === 0) {
+        this.state.dealingAnimation = { startTime: now, duration: 2000 };
+      } else {
+        this.state.dealingAnimation = null;
+      }
+    } else if (snapshot.public.phase !== 'playing') {
+      this.state.dealingAnimation = null;
+      if (snapshot.public.phase === 'lobby') this.state.reviewingTable = false;
+    }
     if (this.tileGesture && (!snapshot.private.hand?.some((tile) => tile.id === this.tileGesture.tileId)
       || !snapshot.private.availableActions?.includes('discard') || snapshot.public.handNumber !== prevSnapshot?.public.handNumber)) {
       this.tileGesture = null;
@@ -661,6 +677,26 @@ class MahjongGameApp {
       }
     } else {
       this.state.actionCallouts = [];
+    }
+
+    // Check for self-draw hu ritual animation
+    const isMyTurn = snapshot.public.currentTurn === snapshot.private?.seat;
+    const canHu = snapshot.private?.availableActions?.includes('hu');
+    const isSelfDraw = snapshot.public.phase === 'playing' && isMyTurn && !snapshot.public.pendingDiscard && canHu;
+    const drawnTileId = snapshot.private?.drawnTileId;
+    if (isSelfDraw && drawnTileId && drawnTileId !== this.lastSelfDrawTileId) {
+      this.lastSelfDrawTileId = drawnTileId;
+      const drawnTile = snapshot.private?.hand?.find((t) => t.id === drawnTileId)
+        || snapshot.private?.hand?.[snapshot.private.hand.length - 1];
+      this.state.selfDrawAnimation = {
+        tile: drawnTile,
+        tileId: drawnTileId,
+        startTime: now,
+        duration: 3000,
+      };
+    } else if (!isSelfDraw) {
+      this.state.selfDrawAnimation = null;
+      this.lastSelfDrawTileId = null;
     }
 
     this.state.snapshot = snapshot;
@@ -862,6 +898,11 @@ class MahjongGameApp {
     const gesture = this.tileGesture;
     this.tileGesture = null;
     const target = this.renderer.hit(point.canvasX, point.canvasY);
+    if (this.state.selfDrawAnimation && (Date.now() - this.state.selfDrawAnimation.startTime < this.state.selfDrawAnimation.duration)) {
+      this.state.selfDrawAnimation.startTime = Date.now() - this.state.selfDrawAnimation.duration;
+      this.draw();
+      return;
+    }
     const insideChat = target && (['chat-panel', 'toggle-chat', 'close-chat', 'send-chat', 'chat-tab', 'toggle-chat-mode', 'voice-bar', 'send-phrase', 'play-voice'].includes(target.type)
       || target.type === 'input' && target.data?.field === 'chatDraft');
     if (this.state.chatOpen && !insideChat) {
@@ -930,6 +971,13 @@ class MahjongGameApp {
       } else if (type === 'close-chi') { this.state.chiPickerOpen = false; this.draw(); }
       return;
     }
+    if (type === 'skip-self-draw-anim') {
+      if (this.state.selfDrawAnimation) {
+        this.state.selfDrawAnimation.startTime = Date.now() - this.state.selfDrawAnimation.duration;
+        this.draw();
+      }
+      return;
+    }
     if (type === 'input') { this.showKeyboard(data.field); return; }
     if (type === 'chat-panel') return;
     if (type === 'close-chat') { this.closeChat(); return; }
@@ -982,6 +1030,7 @@ class MahjongGameApp {
       return;
     }
     if (type === 'select-tile') {
+      if (this.state.dealingAnimation && Date.now() - this.state.dealingAnimation.startTime < this.state.dealingAnimation.duration) return;
       const sameTile = this.state.selectedTileId === data.tileId;
       const now = Date.now();
       const isDoubleTap = sameTile && this.lastTileTap?.tileId === data.tileId && now - this.lastTileTap.at <= 350;
@@ -1006,6 +1055,38 @@ class MahjongGameApp {
       this.draw();
       return;
     }
+    if (type === 'review-table') {
+      this.state.reviewingTable = true;
+      this.draw();
+      return;
+    }
+    if (type === 'return-settlement') {
+      this.state.reviewingTable = false;
+      this.draw();
+      return;
+    }
+    if (type === 'toggle-scoreboard') {
+      this.state.scoreboardOpen = !this.state.scoreboardOpen;
+      this.state.scoreboardHelpOpen = false;
+      this.draw();
+      return;
+    }
+    if (type === 'close-scoreboard') {
+      this.state.scoreboardOpen = false;
+      this.state.scoreboardHelpOpen = false;
+      this.draw();
+      return;
+    }
+    if (type === 'toggle-scoreboard-help') {
+      this.state.scoreboardHelpOpen = !this.state.scoreboardHelpOpen;
+      this.draw();
+      return;
+    }
+    if (type === 'close-scoreboard-help') {
+      this.state.scoreboardHelpOpen = false;
+      this.draw();
+      return;
+    }
     if (type === 'enter') {
       if (this.state.keyboardOpen) this.hideKeyboard();
       const fn = this.handleEntryAction || MahjongGameApp.prototype.handleEntryAction;
@@ -1020,8 +1101,15 @@ class MahjongGameApp {
       return;
     }
     if (type === 'leave') { this.leaveRoom(); return; }
-    if (type === 'start') { await this.runCommand('start-hand', {}); return; }
-    if (type === 'command') { await this.runCommand(data.action, {}); return; }
+    if (type === 'start') { await this.runCommand('ready', { ready: true }); return; }
+    if (type === 'command') {
+      if (data.action === 'ready' && (data.payload?.ready ?? true) && this.state.snapshot?.public?.phase === 'settled') {
+        this.state.reviewingTable = true;
+        this.draw();
+      }
+      await this.runCommand(data.action, data.payload || {});
+      return;
+    }
     if (type === 'action') { await this.handleAction(data); return; }
     if (type === 'send-chat') { await this.sendChat(); return; }
     if (type === 'interaction') { await this.sendInteraction(data.interaction, data.target); return; }

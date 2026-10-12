@@ -2,8 +2,10 @@ import {
   MahjongAction,
   MahjongCommandEnvelope,
   MahjongCommandType,
+  MahjongPlayerStats,
   MahjongPrivateSnapshot,
   MahjongPublicSnapshot,
+  MahjongScoreboard,
   MahjongWallLayout,
   MahjongSettlement,
   MahjongSnapshot,
@@ -69,6 +71,7 @@ interface MahjongPlayer {
   avatarUrl?: string;
   connected: boolean;
   score: number;
+  ready: boolean;
   isListening: boolean;
   mustListenAfterChi: boolean;
   listenWaits: MahjongTile[];
@@ -131,6 +134,7 @@ interface MahjongState {
   pendingWin: PendingWin | null;
   lastDiscard: { seat: MahjongSeat; tile: MahjongTile } | null;
   discardRiver: Array<{ seat: MahjongSeat; tile: MahjongTile }>;
+  scoreboard: MahjongScoreboard;
   settlement: MahjongSettlement | null;
 }
 
@@ -285,6 +289,7 @@ export class MahjongRoomService {
       connected: player.connected,
       handCount: player.hand.length,
       score: player.score,
+      ready: player.ready,
       isListening: player.isListening,
       melds: player.melds.map((meld) => ({
         kind: meld.kind,
@@ -338,6 +343,7 @@ export class MahjongRoomService {
             return { seat: player.seat, nickname: player.nickname, hand: sortMahjongTiles([...player.hand, ...(winningTile ? [winningTile] : [])]) };
           }),
       } : {}),
+      scoreboard: state.scoreboard,
       settlement: state.settlement,
     };
     const ownPlayer = session.mahjongSeat ? state.players[session.mahjongSeat] : null;
@@ -563,8 +569,28 @@ export class MahjongRoomService {
       case 'concealed-kong':
         this.concealedKong(session.mahjongSeat!, (payload as { readonly tileIds?: readonly string[] }).tileIds);
         return;
+      case 'ready': {
+        const player = this.requirePlayer(session.mahjongSeat!);
+        if (state.phase !== 'lobby' && state.phase !== 'settled') throw new MahjongRoomServiceError('INVALID_PHASE', '牌局进行中不能准备');
+        const reqReady = (payload as { readonly ready?: boolean })?.ready;
+        player.ready = reqReady !== undefined ? reqReady : true;
+        state.version += 1;
+        this.checkAutoStart();
+        return;
+      }
       default:
         throw new MahjongRoomServiceError('INVALID_COMMAND', '命令类型不支持');
+    }
+  }
+
+  private checkAutoStart(): void {
+    if (!this.state) return;
+    if (this.state.phase !== 'lobby' && this.state.phase !== 'settled') return;
+    const allSeated = MAHJONG_SEATS.every((seat) => this.state?.players[seat] !== null);
+    if (!allSeated) return;
+    const allReady = MAHJONG_SEATS.every((seat) => Boolean(this.state?.players[seat]?.ready));
+    if (allReady) {
+      this.startHand();
     }
   }
 
@@ -580,6 +606,7 @@ export class MahjongRoomService {
     const replacementWall = deck.splice(-layout.replacementPositions.length);
     const players = this.state.players;
     for (const seat of MAHJONG_SEATS) {
+      players[seat]!.ready = false;
       players[seat]!.hand = sortMahjongTiles(deck.splice(0, 13));
       players[seat]!.melds = [];
       players[seat]!.discards = [];
@@ -1156,12 +1183,27 @@ export class MahjongRoomService {
       const player = this.state.players[seat];
       if (player) player.score += delta;
     }
+    this.state.scoreboard.completedHands += 1;
+    if (settlement.winnerSeat) {
+      this.state.scoreboard.stats[settlement.winnerSeat].winCount += 1;
+    }
+    if (settlement.type === 'discard-win' && settlement.payingSeat) {
+      const discarderListening = settlement.discarderWasListening ?? this.state.players[settlement.payingSeat]?.isListening ?? false;
+      if (!discarderListening) {
+        this.state.scoreboard.stats[settlement.payingSeat].discardPaoCount += 1;
+      }
+    }
+    for (const seat of MAHJONG_SEATS) {
+      if (this.state.players[seat]?.isListening) {
+        this.state.scoreboard.stats[seat].listenCount += 1;
+      }
+    }
     this.state.phase = 'settled';
     this.state.version += 1;
     this.state.currentTurn = null;
     this.state.awaitingDiscard = false;
     this.state.autoDiscardAt = null;
-    this.state.nextHandAt = settlement.type === 'draw' ? this.now() + DRAW_RESTART_DELAY_MS : null;
+    this.state.nextHandAt = null;
     this.state.pending = null;
     this.state.pendingListen = null;
     this.state.pendingWin = null;
@@ -1194,6 +1236,7 @@ export class MahjongRoomService {
     if (!keepDealer) this.state.dealerSeat = nextMahjongSeat(this.state.dealerSeat);
     for (const player of Object.values(this.state.players)) {
       if (player) {
+        player.ready = false;
         player.hand = [];
         player.melds = [];
         player.discards = [];
@@ -1218,6 +1261,7 @@ export class MahjongRoomService {
     if (!this.state) throw new MahjongRoomServiceError('ROOM_NOT_FOUND', '麻将房间不存在');
     this.state.players[seat] = {
       id: session.playerId, seat, nickname, avatarUrl, connected: true, score: 1000,
+      ready: false,
       isListening: false, mustListenAfterChi: false, listenWaits: [], listenBao: null, lastDrawnTileId: null,
       hand: [], melds: [], discards: [],
     };
@@ -1294,6 +1338,15 @@ export class MahjongRoomService {
       pendingWin: null,
       lastDiscard: null,
       discardRiver: [],
+      scoreboard: {
+        completedHands: 0,
+        stats: {
+          A: { winCount: 0, listenCount: 0, discardPaoCount: 0 },
+          B: { winCount: 0, listenCount: 0, discardPaoCount: 0 },
+          C: { winCount: 0, listenCount: 0, discardPaoCount: 0 },
+          D: { winCount: 0, listenCount: 0, discardPaoCount: 0 },
+        },
+      },
       settlement: null,
     };
   }
@@ -1303,7 +1356,17 @@ export class MahjongRoomService {
       gameId: 'mahjong', roomId: 'mahjong', phase: 'lobby', handNumber: 0, version: 0, players: [], spectators: [], chat: [],
       hostSeat: null, dealerSeat: null, currentTurn: null, awaitingDiscard: false, pendingDiscard: null, responseSeats: [], wallCount: 0,
       wallLayout: { breakSide: null, replacementSide: null, breakStack: null, sides: MAHJONG_SEATS.map((seat) => ({ seat, liveTiles: 0, replacementTiles: 0, stacks: [] })) }, diceRoll: null,
-      lastDiscard: null, discardRiver: [], settlement: null,
+      lastDiscard: null, discardRiver: [],
+      scoreboard: {
+        completedHands: 0,
+        stats: {
+          A: { winCount: 0, listenCount: 0, discardPaoCount: 0 },
+          B: { winCount: 0, listenCount: 0, discardPaoCount: 0 },
+          C: { winCount: 0, listenCount: 0, discardPaoCount: 0 },
+          D: { winCount: 0, listenCount: 0, discardPaoCount: 0 },
+        },
+      },
+      settlement: null,
     };
   }
 

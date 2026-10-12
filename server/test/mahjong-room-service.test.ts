@@ -1525,4 +1525,109 @@ describe('MahjongRoomService', () => {
       avatarUrl: 'https://avatar.example/user.png',
     });
   });
+
+  it('大厅中全员准备后自动开局，有人未准备则不自动开始', () => {
+    const room = new MahjongRoomService({ inviteCode: 'inner-414', random: () => 0.42 });
+    const players = ['甲', '乙', '丙', '丁'].map((nickname) => {
+      const auth = room.login('inner-414');
+      room.join(auth.sessionToken, nickname, 'mahjong');
+      return auth;
+    });
+
+    let s0 = room.getSnapshot(players[0].sessionToken);
+    expect(s0.public.phase).toBe('lobby');
+
+    // 甲、乙、丙 依次准备
+    for (let i = 0; i < 3; i += 1) {
+      const snap = room.getSnapshot(players[i].sessionToken);
+      room.dispatch(players[i].sessionToken, command('ready', snap.public.handNumber, snap.public.version, { ready: true }));
+    }
+    s0 = room.getSnapshot(players[0].sessionToken);
+    expect(s0.public.phase).toBe('lobby');
+    expect(s0.public.players.filter((p) => p.ready)).toHaveLength(3);
+
+    // 丁 准备 -> 4人全满且全准备，自动开局！
+    const s3 = room.getSnapshot(players[3].sessionToken);
+    const started = room.dispatch(players[3].sessionToken, command('ready', s3.public.handNumber, s3.public.version, { ready: true })).snapshot;
+    expect(started.public.phase).toBe('playing');
+    expect(started.public.handNumber).toBe(1);
+    expect(started.public.players.every((p) => !p.ready)).toBe(true);
+  });
+
+  it('结算阶段记录胡、听、点炮与局数至计分板，且全员确认准备后自动进入下一局', () => {
+    const { room, players, tile, internals } = readyBaoScenario('red');
+    const b = internals.state.players.B!;
+    // B 听牌（在 readyBaoScenario 中已 isListening: true）
+    // 让 A 点炮给 B
+    internals.state.currentTurn = 'A';
+    internals.state.awaitingDiscard = true;
+    internals.state.wall = [tile('dots', 8)];
+    const discardTile = tile('bamboo', 2);
+    internals.state.players.A!.hand.push(discardTile);
+
+    const aSnap = room.getSnapshot(players[0].sessionToken);
+    room.dispatch(players[0].sessionToken, command('discard', aSnap.public.handNumber, aSnap.public.version, { tileId: discardTile.id }));
+
+    const bSnap = room.getSnapshot(players[1].sessionToken);
+    room.dispatch(players[1].sessionToken, command('hu', bSnap.public.handNumber, bSnap.public.version));
+    const settled = finishWin(room, players[1].sessionToken);
+
+    expect(settled.public.phase).toBe('settled');
+    expect(settled.public.scoreboard).toMatchObject({
+      completedHands: 1,
+      stats: {
+        A: { winCount: 0, listenCount: 0, discardPaoCount: 1 },
+        B: { winCount: 1, listenCount: 1, discardPaoCount: 0 },
+        C: { winCount: 0, listenCount: 0, discardPaoCount: 0 },
+        D: { winCount: 0, listenCount: 0, discardPaoCount: 0 },
+      },
+    });
+
+    // 4人分别在结算界面确认并准备
+    for (let i = 0; i < 3; i += 1) {
+      const snap = room.getSnapshot(players[i].sessionToken);
+      room.dispatch(players[i].sessionToken, command('ready', snap.public.handNumber, snap.public.version, { ready: true }));
+    }
+    const lastBefore = room.getSnapshot(players[3].sessionToken);
+    expect(lastBefore.public.phase).toBe('settled');
+
+    // 丁确认并准备后，自动开始第2局
+    const nextHand = room.dispatch(players[3].sessionToken, command('ready', lastBefore.public.handNumber, lastBefore.public.version, { ready: true })).snapshot;
+    expect(nextHand.public.phase).toBe('playing');
+    expect(nextHand.public.handNumber).toBe(2);
+    // 计分板生命周期随房间保持
+    expect(nextHand.public.scoreboard?.completedHands).toBe(1);
+    expect(nextHand.public.scoreboard?.stats.B.winCount).toBe(1);
+  });
+
+  it('已报听状态下摸打放炮不计入点炮次数（免包），未报听放黑炮才计入点炮', () => {
+    const { room, players, tile, internals } = readyBaoScenario('red');
+
+    // A 和 B 都处于报听状态
+    internals.state.players.A!.isListening = true;
+
+    // A 打出 B 要胡的牌
+    internals.state.currentTurn = 'A';
+    internals.state.awaitingDiscard = true;
+    internals.state.wall = [tile('dots', 8)];
+    const discardTile = tile('bamboo', 2);
+    internals.state.players.A!.hand.push(discardTile);
+    internals.state.players.A!.lastDrawnTileId = discardTile.id;
+
+    const aSnap = room.getSnapshot(players[0].sessionToken);
+    room.dispatch(players[0].sessionToken, command('discard', aSnap.public.handNumber, aSnap.public.version, { tileId: discardTile.id }));
+
+    const bSnap = room.getSnapshot(players[1].sessionToken);
+    room.dispatch(players[1].sessionToken, command('hu', bSnap.public.handNumber, bSnap.public.version));
+    const settled = finishWin(room, players[1].sessionToken);
+
+    expect(settled.public.phase).toBe('settled');
+    // A 已经听牌，因此虽然给 B 点炮，但不计入点炮次数（免包）
+    expect(settled.public.scoreboard?.stats.A.discardPaoCount).toBe(0);
+    // B 胡牌次数 + 1
+    expect(settled.public.scoreboard?.stats.B.winCount).toBe(1);
+    // A 和 B 都进入过报听状态，听牌次数都 + 1
+    expect(settled.public.scoreboard?.stats.A.listenCount).toBe(1);
+    expect(settled.public.scoreboard?.stats.B.listenCount).toBe(1);
+  });
 });

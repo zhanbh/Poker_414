@@ -349,10 +349,41 @@ describe('native mini-game Canvas renderer', () => {
     expect(labels).toContain('第 3 局 · 本局结算');
     expect(labels).toContain('玩家甲 胡牌 · 自摸');
     expect(labels).toContain('玩家甲 · 胡牌');
+    expect(labels).toContain('查看牌局');
     expect(labels).toContain('开始下一局');
-    expect(renderer.targets.some((target) => target.type === 'command' && target.data.action === 'next-hand')).toBe(true);
+    expect(labels).toContain('离开');
+    expect(renderer.targets.some((target) => target.type === 'review-table')).toBe(true);
+    expect(renderer.targets.some((target) => target.type === 'command' && target.data.action === 'ready')).toBe(true);
+    expect(renderer.targets.some((target) => target.type === 'leave')).toBe(true);
     expect(renderer.hit(100, 10)).toMatchObject({ type: 'settlement-block' });
     expect(renderer.hit(24, 31)).toMatchObject({ type: 'leave' });
+
+    // When reviewing table, settlement dialog is hidden and returns floating banner
+    renderer.targets = [];
+    labels.length = 0;
+    renderer.drawSettlement({ ...state, reviewingTable: true });
+    expect(labels).toContain('正在复盘牌局 · 查看玩家明牌');
+    expect(labels).toContain('返回结算');
+    expect(renderer.targets.some((target) => target.type === 'return-settlement')).toBe(true);
+
+    // When ready, reviewing table banner reflects ready status
+    labels.length = 0;
+    state.snapshot.public.players[0].ready = true;
+    renderer.drawSettlement({ ...state, reviewingTable: true });
+    expect(labels).toContain('已准备 · 等待其他玩家就绪…');
+
+    // And settlement modal offers '返回牌桌' instead of '已准备 (等待他人)'
+    labels.length = 0;
+    renderer.targets = [];
+    renderer.drawSettlement(state);
+    expect(labels).toContain('返回牌桌');
+    expect(labels).not.toContain('已准备 (等待他人)');
+    expect(renderer.targets.some((target) => target.type === 'review-table')).toBe(true);
+
+    // On the game table, settled phase renders '已准备' badge on player card
+    labels.length = 0;
+    renderer.drawPlayerCard({ ...state, snapshot: { ...state.snapshot, public: { ...state.snapshot.public, phase: 'settled' } } }, 'A', 20, 200, 94, 114);
+    expect(labels).toContain('已准备');
   });
 
   it('passes the authorized profile directly into room entry', async () => {
@@ -1474,5 +1505,246 @@ describe('native mini-game Canvas renderer', () => {
     expect(labels).toContain('南');
     expect(labels).toContain('西位 等待入座');
     expect(labels).toContain('北位 等待入座');
+  });
+
+  it('renders scoreboard with red highlights on highest metrics and provides ? help explanation', () => {
+    const labels = [];
+    const fills = [];
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({
+      fillText: (value) => labels.push(String(value)),
+      fillRect: () => {},
+      stroke: () => {},
+      fill: () => {},
+    }));
+
+    const state = {
+      scoreboardOpen: true,
+      scoreboardHelpOpen: false,
+      snapshot: {
+        public: {
+          handNumber: 4,
+          players: [
+            { seat: 'A', nickname: '玩家东', score: 1200, connected: true, melds: [], discards: [] },
+            { seat: 'B', nickname: '玩家南', score: 900, connected: true, melds: [], discards: [] },
+            { seat: 'C', nickname: '玩家西', score: 950, connected: true, melds: [], discards: [] },
+            { seat: 'D', nickname: '玩家北', score: 950, connected: true, melds: [], discards: [] },
+          ],
+          scoreboard: {
+            completedHands: 3,
+            stats: {
+              A: { winCount: 2, listenCount: 3, discardPaoCount: 0 },
+              B: { winCount: 1, listenCount: 2, discardPaoCount: 1 },
+              C: { winCount: 0, listenCount: 1, discardPaoCount: 2 },
+              D: { winCount: 0, listenCount: 0, discardPaoCount: 0 },
+            },
+          },
+        },
+        private: { seat: 'A', hand: [], spectator: false },
+      },
+    };
+
+    renderer.drawScoreboard(state);
+
+    expect(labels).toContain('📊 雀局数据计分板');
+    expect(labels).toContain('已完成 3 局 · 全局数据与房间同步');
+    expect(labels).toContain('🀄 胡牌次数');
+    expect(labels).toContain('⚡ 听牌次数');
+    expect(labels).toContain('💥 点炮次数');
+    expect(labels).toContain('🎯 听牌效率');
+    expect(labels).toContain('🏆 胡牌率');
+
+    // Player A winCount = 2, highest (67% winRate)
+    expect(labels).toContain('2 次');
+    // Player C discardPaoCount = 2, highest
+    expect(labels).toContain('2 次');
+    // Efficiency: A has 2/3 = 67%
+    expect(labels).toContain('67%');
+
+    // Targets include close and toggle help
+    expect(renderer.targets.some((t) => t.type === 'close-scoreboard')).toBe(true);
+    expect(renderer.targets.some((t) => t.type === 'toggle-scoreboard-help')).toBe(true);
+
+    // Now open help modal
+    labels.length = 0;
+    renderer.drawScoreboard({ ...state, scoreboardHelpOpen: true });
+    expect(labels).toContain('📖 计分板指标含义说明');
+    expect(labels).toContain('胡牌次数');
+    expect(labels).toContain('听牌效率');
+    expect(labels).toContain('胡牌率');
+    expect(renderer.targets.some((t) => t.type === 'close-scoreboard-help')).toBe(true);
+  });
+
+  it('implements dealing animation with 6-tile batches, flip, and sorting glide', () => {
+    const labels = [];
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({
+      fillText: (value) => labels.push(String(value)),
+    }));
+
+    const handTiles = Array.from({ length: 13 }, (_, i) => ({
+      id: `tile-${i}`,
+      suit: 'dots',
+      rank: (i % 9) + 1,
+    }));
+
+    const state = {
+      snapshot: {
+        public: { phase: 'playing', currentTurn: 'A', handNumber: 1, players: [] },
+        private: { seat: 'A', hand: handTiles, availableActions: ['discard'] },
+      },
+      dealingAnimation: {
+        startTime: Date.now() - 200, // 200ms elapsed (< 500ms)
+        duration: 2000,
+      },
+    };
+
+    // Stage 1: 0~500ms, batch of 6 tiles dealt, face down, banner displayed
+    renderer.targets = [];
+    renderer.drawHand(state);
+    expect(labels).toContain('🀄 发牌中 (6/13)…');
+    // In dealing animation, tiles cannot be clicked/selected
+    expect(renderer.targets.some((t) => t.type === 'select-tile')).toBe(false);
+
+    // Actions and listen preview should also be suppressed during dealing
+    renderer.drawActions(state);
+    expect(renderer.targets.some((t) => t.type === 'command')).toBe(false);
+
+    // Stage 2: 500~1000ms, batch of 12 tiles
+    labels.length = 0;
+    state.dealingAnimation.startTime = Date.now() - 700;
+    renderer.drawHand(state);
+    expect(labels).toContain('🀄 发牌中 (12/13)…');
+
+    // Stage 3: 1500~1750ms, card faces revealed / flip
+    labels.length = 0;
+    state.dealingAnimation.startTime = Date.now() - 1600;
+    renderer.drawHand(state);
+    expect(labels).toContain('🀄 开牌展示…');
+
+    // Stage 4: 1750~2000ms, cards sort glide
+    labels.length = 0;
+    state.dealingAnimation.startTime = Date.now() - 1850;
+    renderer.drawHand(state);
+    expect(labels).toContain('🀄 理牌排序中…');
+
+    // Stage 5: Animation finished (> 2000ms), standard interactive tiles
+    labels.length = 0;
+    delete state.dealingAnimation;
+    renderer.targets = [];
+    renderer.drawHand(state);
+    expect(renderer.targets.some((t) => t.type === 'select-tile')).toBe(true);
+    expect(renderer.targets.filter((t) => t.type === 'select-tile').length).toBe(13);
+  });
+
+  it('renders lobby ready toggles and count', () => {
+    const labels = [];
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({
+      fillText: (value) => labels.push(String(value)),
+    }));
+
+    const state = {
+      screen: 'lobby',
+      snapshot: {
+        public: {
+          phase: 'lobby',
+          roomId: 'room-1',
+          players: [
+            { seat: 'A', nickname: '玩家东', score: 1000, ready: false, connected: true, melds: [], discards: [] },
+            { seat: 'B', nickname: '玩家南', score: 1000, ready: true, connected: true, melds: [], discards: [] },
+            { seat: 'C', nickname: '玩家西', score: 1000, ready: false, connected: true, melds: [], discards: [] },
+            { seat: 'D', nickname: '玩家北', score: 1000, ready: false, connected: true, melds: [], discards: [] },
+          ],
+          chat: [],
+          dealerSeat: 'A',
+          hostSeat: 'A',
+        },
+        private: {
+          seat: 'A',
+          hand: [],
+          availableActions: [],
+        },
+      },
+    };
+
+    renderer.drawLobby(state);
+    expect(labels).toContain('准备');
+    expect(labels).toContain('已准备 1 / 4 人 · 全员准备后自动开局');
+    expect(renderer.targets.some((t) => t.type === 'command' && t.data.action === 'ready' && t.data.payload.ready === true)).toBe(true);
+
+    // If player A is ready
+    labels.length = 0;
+    renderer.targets = [];
+    state.snapshot.public.players[0].ready = true;
+    renderer.drawLobby(state);
+    expect(labels).toContain('已准备 (点击取消)');
+    expect(renderer.targets.some((t) => t.type === 'command' && t.data.action === 'ready' && t.data.payload.ready === false)).toBe(true);
+  });
+
+  it('renders self-draw thumb reveal ritual animation and turns hu button into 自摸 button', () => {
+    const labels = [];
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({
+      fillText: (value) => labels.push(String(value)),
+    }));
+
+    const drawnTile = { id: 'tile-win', suit: 'characters', rank: 8 };
+    const state = {
+      snapshot: {
+        public: {
+          phase: 'playing',
+          currentTurn: 'A',
+          pendingDiscard: null,
+          players: [],
+        },
+        private: {
+          seat: 'A',
+          hand: [drawnTile],
+          drawnTileId: 'tile-win',
+          availableActions: ['hu', 'pass'],
+        },
+      },
+      selfDrawAnimation: {
+        tile: drawnTile,
+        tileId: 'tile-win',
+        startTime: Date.now() - 500, // 500ms into the 3000ms animation
+        duration: 3000,
+      },
+    };
+
+    // Stage 1: Animation in progress (500ms)
+    renderer.targets = [];
+    renderer.drawSelfDrawAnimation(state);
+    expect(labels).not.toContain('🀄 摸牌有感 · 搓摸自摸中…');
+    expect(labels).toContain('💡 轻触屏幕可直接开牌');
+    expect(renderer.targets.some((t) => t.type === 'skip-self-draw-anim')).toBe(true);
+
+    // During ritual animation, actions should be suppressed so player is not distracted
+    renderer.drawActions(state);
+    expect(renderer.targets.some((t) => t.type === 'action')).toBe(false);
+
+    // Stage 2: Thumb has cleared tile face (> 2400ms)
+    labels.length = 0;
+    state.selfDrawAnimation.startTime = Date.now() - 2600;
+    renderer.drawSelfDrawAnimation(state);
+    expect(labels).not.toContain('✨ 绝 妙 自 摸 ！ ✨');
+
+    // Stage 3: Animation complete (3000ms+), actions appear and button says '自摸'
+    labels.length = 0;
+    delete state.selfDrawAnimation;
+    renderer.targets = [];
+    renderer.drawActions(state);
+    expect(labels).toContain('自摸');
+    expect(labels).not.toContain('胡');
+    expect(renderer.targets.some((t) => t.type === 'action' && t.data.action === 'hu')).toBe(true);
+
+    // Conversely, when it's a discard claim from another player, button says '胡' (via drawArtText)
+    labels.length = 0;
+    renderer.targets = [];
+    const artTextCalls = [];
+    renderer.drawArtText = (char) => artTextCalls.push(char);
+    state.snapshot.public.currentTurn = 'B';
+    state.snapshot.public.pendingDiscard = { seat: 'B', tile: { id: 'discard-1', suit: 'dots', rank: 1 } };
+    renderer.drawActions(state);
+    expect(artTextCalls).toContain('胡');
+    expect(labels).not.toContain('自摸');
+    expect(renderer.targets.some((t) => t.type === 'action' && t.data.action === 'hu')).toBe(true);
   });
 });

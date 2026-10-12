@@ -808,6 +808,285 @@ class MahjongRenderer {
       height: (radius + 4) * 2, type: 'toggle-chat', data: {} });
   }
 
+  drawScoreboardIcon(state) {
+    const { width, rightInset } = this.roomLayout();
+    const btnW = 86;
+    const btnH = 32;
+    const x = width - rightInset - btnW;
+    const y = 14;
+    this.roundRect(x, y, btnW, btnH, 16,
+      state.scoreboardOpen ? '#c28c2e' : 'rgba(28, 48, 52, 0.88)',
+      state.scoreboardOpen ? '#fef08a' : 'rgba(255, 224, 150, 0.75)', 1.2);
+    const barW = 3;
+    const heights = [7, 13, 10];
+    const offsets = [-6, 0, 6];
+    const iconCenterX = x + 20;
+    offsets.forEach((dx, i) => {
+      const bh = heights[i];
+      this.roundRect(iconCenterX + dx - barW / 2, y + 21 - bh, barW, bh, 1,
+        state.scoreboardOpen ? '#ffffff' : '#ffd580');
+    });
+    this.text('计分板', x + 50, y + 16.5, 12,
+      state.scoreboardOpen ? '#ffffff' : '#fef3c7', 'center', '700');
+    this.targets.push({ x: x - 4, y: y - 4, width: btnW + 8, height: btnH + 8,
+      type: 'toggle-scoreboard', data: {} });
+  }
+
+  drawScoreboard(state) {
+    const { width, height } = this.roomLayout();
+    const ctx = this.ctx;
+
+    // Dark backdrop overlay; tapping outside modal closes scoreboard
+    this.roundRect(0, 0, width, height, 0, 'rgba(0, 0, 0, 0.65)');
+    this.targets.push({ x: 0, y: 0, width, height, type: 'close-scoreboard', data: {} });
+
+    const panelW = Math.min(710, width - 40);
+    const panelH = 368;
+    const panelX = (width - panelW) / 2;
+    const panelY = (height - panelH) / 2;
+
+    // Outer glow / shadow
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.75)';
+    ctx.shadowBlur = 24;
+    ctx.shadowOffsetY = 6;
+    this.roundRect(panelX, panelY, panelW, panelH, 14,
+      this.linearFill(panelX, panelY, panelX, panelY + panelH,
+        [[0, '#16333c'], [0.4, '#0f252d'], [1, '#07151a']], '#0f252d'),
+      '#d4a24c', 1.5);
+    ctx.restore();
+
+    this.roundRect(panelX + 1.5, panelY + 1.5, panelW - 3, panelH - 3, 12.5, null, 'rgba(255, 230, 160, 0.18)', 1);
+
+    // Header Title
+    this.text('📊 雀局数据计分板', panelX + 24, panelY + 28, 17, '#fde68a', 'left', '700');
+    const scoreboard = state.snapshot?.public?.scoreboard;
+    const completedHands = scoreboard?.completedHands ?? 0;
+    this.text(`已完成 ${completedHands} 局 · 全局数据与房间同步`, panelX + 206, panelY + 29, 11, '#94a3b8');
+
+    // Help Button '?' at top right of panel
+    const helpR = 13;
+    const helpX = panelX + panelW - 58;
+    const helpY = panelY + 28;
+    this.circle(helpX, helpY, helpR,
+      state.scoreboardHelpOpen ? '#b7894b' : 'rgba(245, 158, 11, 0.25)', 'rgba(251, 191, 36, 0.75)', 1.2);
+    this.text('?', helpX, helpY + 0.5, 13, '#fef3c7', 'center', '700');
+    this.targets.push({ x: helpX - helpR - 4, y: helpY - helpR - 4, width: (helpR + 4) * 2, height: (helpR + 4) * 2,
+      type: 'toggle-scoreboard-help', data: {} });
+
+    // Close Button '✕' at top right of panel
+    const closeX = panelX + panelW - 26;
+    const closeY = panelY + 28;
+    this.circle(closeX, closeY, 13, 'rgba(255, 255, 255, 0.08)', 'rgba(255, 255, 255, 0.25)', 1);
+    this.text('✕', closeX, closeY + 0.5, 12, '#cbd5e1', 'center', '700');
+    this.targets.push({ x: closeX - 16, y: closeY - 16, width: 32, height: 32, type: 'close-scoreboard', data: {} });
+
+    // Table Data preparation
+    const seats = ['A', 'B', 'C', 'D'];
+    const directions = { A: '东', B: '南', C: '西', D: '北' };
+    const players = state.snapshot?.public?.players || [];
+    const playerBySeat = new Map(players.map((p) => [p.seat, p]));
+    const mySeat = state.snapshot?.private?.seat;
+
+    const playerData = seats.map((seat) => {
+      const p = playerBySeat.get(seat);
+      const st = scoreboard?.stats?.[seat] || { winCount: 0, listenCount: 0, discardPaoCount: 0 };
+      const winCount = st.winCount || 0;
+      const listenCount = st.listenCount || 0;
+      const discardPaoCount = st.discardPaoCount || 0;
+      const listenEff = listenCount > 0 ? (winCount / listenCount) : 0;
+      const winRate = completedHands > 0 ? (winCount / completedHands) : 0;
+      return {
+        seat,
+        nickname: p ? p.nickname : `座位 ${seat} (空闲)`,
+        isMe: seat === mySeat,
+        seated: Boolean(p),
+        winCount,
+        listenCount,
+        discardPaoCount,
+        listenEff,
+        winRate,
+      };
+    });
+
+    const metricRows = [
+      {
+        id: 'win',
+        label: '胡牌次数',
+        icon: '🀄',
+        getVal: (p) => p.winCount,
+        format: (p) => `${p.winCount} 次`,
+      },
+      {
+        id: 'listen',
+        label: '听牌次数',
+        icon: '⚡',
+        getVal: (p) => p.listenCount,
+        format: (p) => `${p.listenCount} 次`,
+      },
+      {
+        id: 'pao',
+        label: '点炮次数',
+        icon: '💥',
+        getVal: (p) => p.discardPaoCount,
+        format: (p) => `${p.discardPaoCount} 次`,
+      },
+      {
+        id: 'eff',
+        label: '听牌效率',
+        icon: '🎯',
+        getVal: (p) => p.listenEff,
+        format: (p) => (p.listenCount > 0 ? `${(p.listenEff * 100).toFixed(0)}%` : '-'),
+      },
+      {
+        id: 'rate',
+        label: '胡牌率',
+        icon: '🏆',
+        getVal: (p) => p.winRate,
+        format: (p) => (completedHands > 0 ? `${(p.winRate * 100).toFixed(0)}%` : '-'),
+      },
+    ];
+
+    const metricColW = 148;
+    const playerColW = 126;
+    const totalTableW = metricColW + playerColW * 4;
+    const tableX = panelX + (panelW - totalTableW) / 2;
+    const tableY = panelY + 54;
+    const headerH = 46;
+    const rowH = 42;
+
+    // Header Row Background
+    this.roundRect(tableX, tableY, totalTableW, headerH, 6,
+      'rgba(15, 48, 58, 0.75)', 'rgba(94, 234, 212, 0.25)', 1);
+
+    // Header Column 0: 指标
+    this.text('指标 / 玩家', tableX + 20, tableY + headerH / 2 + 0.5, 12, '#99f6e4', 'left', '700');
+
+    // Header Columns 1..4: 4 Players
+    playerData.forEach((p, idx) => {
+      const colX = tableX + metricColW + idx * playerColW;
+      const dir = directions[p.seat];
+
+      if (p.isMe) {
+        this.roundRect(colX + 2, tableY + 2, playerColW - 4, headerH - 4, 4,
+          'rgba(234, 179, 8, 0.15)', 'rgba(250, 204, 21, 0.55)', 1);
+      }
+
+      this.roundRect(colX + 10, tableY + (headerH - 22) / 2, 22, 22, 4,
+        p.seated ? '#1e3a34' : 'rgba(50, 50, 50, 0.4)', '#4ade80', 1);
+      this.text(dir, colX + 21, tableY + headerH / 2 + 0.5, 11, '#86efac', 'center', '700');
+
+      const nameStr = this.fitText(p.nickname, playerColW - 46, 11.5, p.isMe ? '700' : '400');
+      this.text(nameStr, colX + 38, tableY + headerH / 2 + (p.isMe ? -7 : 0.5), 11.5, p.isMe ? '#fde047' : '#e2e8f0');
+      if (p.isMe) {
+        this.text('(我)', colX + 38, tableY + headerH / 2 + 8, 9.5, '#fde047', 'left', '700');
+      }
+    });
+
+    // Rows
+    metricRows.forEach((m, rowIdx) => {
+      const ry = tableY + headerH + 4 + rowIdx * (rowH + 3);
+      const isAlt = rowIdx % 2 === 1;
+
+      // Row background
+      this.roundRect(tableX, ry, totalTableW, rowH, 6,
+        isAlt ? 'rgba(10, 28, 34, 0.45)' : 'rgba(15, 38, 46, 0.35)', 'rgba(255, 255, 255, 0.05)', 0.8);
+
+      // Metric title
+      this.text(`${m.icon} ${m.label}`, tableX + 16, ry + rowH / 2 + 0.5, 12, '#e2e8f0', 'left', '600');
+
+      // Max value for this metric row across 4 players
+      const maxVal = Math.max(...playerData.map((p) => m.getVal(p)));
+
+      // Render player cells
+      playerData.forEach((p, pIdx) => {
+        const colX = tableX + metricColW + pIdx * playerColW;
+        const val = m.getVal(p);
+        const displayStr = m.format(p);
+        const isHighest = maxVal > 0 && val === maxVal;
+        const cx = colX + playerColW / 2;
+        const cy = ry + rowH / 2 + 0.5;
+
+        if (isHighest) {
+          // Highlight highest player cell in bold RED
+          const pillW = playerColW - 14;
+          const pillH = rowH - 8;
+          this.roundRect(colX + 7, ry + 4, pillW, pillH, 5,
+            'rgba(239, 68, 68, 0.24)', 'rgba(248, 113, 113, 0.9)', 1.2);
+          this.text(displayStr, cx, cy, 13, '#f87171', 'center', '700');
+        } else {
+          this.text(displayStr, cx, cy, 12, val > 0 ? '#f1f5f9' : '#64748b', 'center', '400');
+        }
+      });
+    });
+
+    // Bottom tip
+    this.text('💡 单项数据最高者对应列自动标红 · 点击右上角 ? 可查看各指标详细算法说明',
+      panelX + panelW / 2, panelY + panelH - 18, 11, '#94a3b8', 'center');
+
+    // If help opened, render help dialog on top
+    if (state.scoreboardHelpOpen) {
+      this.drawScoreboardHelp(state);
+    }
+  }
+
+  drawScoreboardHelp(state) {
+    const { width, height } = this.roomLayout();
+    const ctx = this.ctx;
+
+    // Dark backdrop overlay for help modal
+    this.roundRect(0, 0, width, height, 0, 'rgba(0, 0, 0, 0.6)');
+    this.targets.push({ x: 0, y: 0, width, height, type: 'close-scoreboard-help', data: {} });
+
+    const modalW = Math.min(540, width - 40);
+    const modalH = 308;
+    const modalX = (width - modalW) / 2;
+    const modalY = (height - modalH) / 2;
+
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
+    ctx.shadowBlur = 28;
+    ctx.shadowOffsetY = 6;
+    this.roundRect(modalX, modalY, modalW, modalH, 12,
+      this.linearFill(modalX, modalY, modalX, modalY + modalH,
+        [[0, '#1a333f'], [1, '#0e2027']], '#122630'),
+      '#f59e0b', 1.5);
+    ctx.restore();
+
+    this.roundRect(modalX + 1.5, modalY + 1.5, modalW - 3, modalH - 3, 10.5, null, 'rgba(255, 230, 160, 0.2)', 1);
+
+    // Title
+    this.text('📖 计分板指标含义说明', modalX + 24, modalY + 28, 16, '#fef3c7', 'left', '700');
+    // Close button
+    const closeX = modalX + modalW - 24;
+    const closeY = modalY + 28;
+    this.text('✕', closeX, closeY, 13, '#94a3b8', 'center', '700');
+    this.targets.push({ x: closeX - 14, y: closeY - 14, width: 28, height: 28, type: 'close-scoreboard-help', data: {} });
+
+    const items = [
+      { label: '胡牌次数', desc: '本房间内成功胡牌的总局数（自摸与点炮胡均计入）。' },
+      { label: '听牌次数', desc: '本房间内实际进入报听状态的总局数。' },
+      { label: '点炮次数', desc: '未听牌时打出弃牌被胡的次数（放黑炮；已报听摸打放炮不计）。' },
+      { label: '听牌效率', desc: '胡牌次数 ÷ 听牌次数。衡量听牌后的实际胡牌转化率。' },
+      { label: '胡牌率', desc: '胡牌次数 ÷ 当前已完成局数。衡量在所有对局中的胜率。' },
+    ];
+
+    let itemY = modalY + 58;
+    items.forEach((it) => {
+      this.roundRect(modalX + 20, itemY, 78, 22, 4, 'rgba(245, 158, 11, 0.2)', '#f59e0b', 1);
+      this.text(it.label, modalX + 59, itemY + 11.5, 11, '#fde68a', 'center', '700');
+      this.text(it.desc, modalX + 108, itemY + 11.5, 11.5, '#e2e8f0');
+      itemY += 34;
+    });
+
+    this.text('💡 单项表现最高的数据将自动以红色高亮标出；数据生命周期与房间一致。',
+      modalX + 24, itemY + 8, 10.5, '#94a3b8');
+
+    // Confirm button
+    this.button('我知道了', modalX + (modalW - 120) / 2, modalY + modalH - 42, 120, 32,
+      'close-scoreboard-help', {}, 'primary');
+  }
+
   drawPlayerCard(state, seat, x, y, width, height) {
     const player = playerForSeat(state.snapshot, seat);
     const isMe = seat && seat === state.snapshot?.private?.seat;
@@ -848,6 +1127,14 @@ class MahjongRenderer {
       if (state.snapshot.public.dealer === seat || state.snapshot.public.dealerSeat === seat) {
         this.roundRect(avatarX + avatarSize - 20, y + avatarSize - 18, 25, 24, 4, '#c38c2e', '#f3d78e');
         this.text('庄', avatarX + avatarSize - 8, y + avatarSize - 6, 17, '#fff2bc', 'center', '700');
+      }
+      if ((state.snapshot.public.phase === 'lobby' || state.snapshot.public.phase === 'settled') && player.ready) {
+        const badgeW = compact ? 36 : 46;
+        const badgeH = 16;
+        const bx = compact ? x + width - badgeW - 2 : avatarX + (avatarSize - badgeW) / 2;
+        const by = compact ? y + 2 : y + avatarSize - 14;
+        this.roundRect(bx, by, badgeW, badgeH, 4, 'rgba(16, 75, 40, 0.94)', '#4ade80', 1.2);
+        this.text('已准备', bx + badgeW / 2, by + badgeH / 2 + 0.5, compact ? 9 : 10, '#bbf7d0', 'center', '700');
       }
       if (state.snapshot.public.winAnnouncement?.winnerSeat === seat) this.drawArtText('胡', avatarX + avatarSize - 3, y + (compact ? avatarSize : 0) - 8, 28);
     } else {
@@ -1438,12 +1725,45 @@ class MahjongRenderer {
       const card = cards[index];
       this.drawPlayerCard(state, seat, card.x, card.y, card.width, card.height);
     });
-    const isHost = snapshot.public.hostSeat === snapshot.private.seat && !snapshot.private.spectator;
-    this.button(snapshot.private.spectator ? '观战中' : isHost ? '开始牌局' : '等待房主开始', width / 2 - 90, 389, 180, 44, 'start', {}, 'primary', !isHost || snapshot.public.players.length < 4);
+    const ownPlayer = snapshot.private.seat ? playerForSeat(snapshot, snapshot.private.seat) : null;
+    const isSeated = Boolean(ownPlayer && !snapshot.private.spectator);
+    const readyCount = (snapshot.public.players || []).filter((p) => p.ready).length;
+    if (isSeated) {
+      if (ownPlayer?.ready) {
+        this.button('已准备 (点击取消)', width / 2 - 90, 389, 180, 44, 'command', { action: 'ready', payload: { ready: false } }, 'secondary');
+      } else {
+        this.button('准备', width / 2 - 90, 389, 180, 44, 'command', { action: 'ready', payload: { ready: true } }, 'primary');
+      }
+    } else {
+      this.button('观战中', width / 2 - 90, 389, 180, 44, '', {}, 'secondary', true);
+    }
+    const readyTip = (snapshot.public.players || []).length < 4
+      ? '等待 4 位玩家入座，全员准备后自动开局'
+      : `已准备 ${readyCount} / 4 人 · 全员准备后自动开局`;
+    this.text(readyTip, center.x, 446, 12, readyCount === 4 ? '#86efac' : '#d2dfb9', 'center');
     this.drawHeader(state, '等待开局');
+    this.drawScoreboardIcon(state);
     this.drawChatIcon(state);
     if (state.selectedTarget) this.drawInteractionPicker(state);
     this.drawChat(state);
+    if (state.scoreboardOpen) this.drawScoreboard(state);
+  }
+
+  drawTileBack(x, y, width, height, bodyDepth = 4) {
+    const ctx = this.ctx;
+    const radius = Math.min(5, width * 0.12);
+    if (bodyDepth > 0) {
+      ctx.save();
+      ctx.shadowColor = 'rgba(5, 24, 12, 0.45)';
+      ctx.shadowBlur = 4;
+      ctx.shadowOffsetY = 3;
+      this.roundRect(x, y + bodyDepth, width, height, radius, '#0d3813', '#05220a');
+      ctx.restore();
+    }
+    this.roundRect(x, y, width, height, radius,
+      this.linearFill(x, y, x + width, y + height, [[0, '#388e3c'], [0.3, '#2e7d32'], [0.8, '#1b5e20'], [1, '#0e4115']], '#1b5e20'),
+      '#66bb6a');
+    this.roundRect(x + 1.5, y + 1.5, width - 3, height - 3, Math.max(1, radius - 1), null, 'rgba(165, 214, 167, 0.35)', 1);
   }
 
   drawTile(tile, x, y, width, height, selected = false, rotation = 0, bodyDepth = 4) {
@@ -1619,13 +1939,131 @@ class MahjongRenderer {
     }
     this.drawActions(state);
     this.drawHeader(state, phase);
+    this.drawScoreboardIcon(state);
     this.drawChatIcon(state);
     this.drawActionCallouts(state);
     if (state.selectedTarget) this.drawInteractionPicker(state);
     this.drawChat(state);
     if (state.chiPickerOpen) this.drawChiPicker(state);
     if (snapshot.public.winAnnouncement) this.drawWinAnnouncement(state);
+    if (state.selfDrawAnimation) this.drawSelfDrawAnimation(state);
     if (snapshot.public.phase === 'settled' && snapshot.public.settlement) this.drawSettlement(state);
+    if (state.scoreboardOpen) this.drawScoreboard(state);
+  }
+
+  drawSelfDrawAnimation(state) {
+    const anim = state.selfDrawAnimation;
+    if (!anim || !anim.tile) return;
+    const elapsed = Date.now() - anim.startTime;
+    if (elapsed >= anim.duration) return;
+
+    const { width, height } = this.roomLayout();
+    const ctx = this.ctx;
+    const cx = width / 2;
+    const cy = height * 0.43;
+
+    // Cinematic dark backdrop; tapping anywhere skips
+    const bgAlpha = Math.min(0.72, (elapsed / 300) * 0.72);
+    this.roundRect(0, 0, width, height, 0, `rgba(0, 0, 0, ${bgAlpha.toFixed(2)})`);
+    this.targets.push({ x: 0, y: 0, width, height, type: 'skip-self-draw-anim', data: {} });
+
+    // Golden radiant aura behind the tile
+    const haloR = 120 + Math.sin(elapsed * 0.006) * 10;
+    if (typeof ctx.createRadialGradient === 'function') {
+      const grad = ctx.createRadialGradient(cx, cy, 15, cx, cy, haloR);
+      if (grad && typeof grad.addColorStop === 'function') {
+        grad.addColorStop(0, 'rgba(255, 215, 100, 0.42)');
+        grad.addColorStop(0.55, 'rgba(234, 179, 8, 0.22)');
+        grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(cx, cy, haloR, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // 3D Mahjong Tile
+    const tileW = 104;
+    const tileH = 152;
+    const tx = cx - tileW / 2;
+    const ty = cy - tileH / 2;
+
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.75)';
+    ctx.shadowBlur = 22;
+    ctx.shadowOffsetY = 8;
+    this.drawTile(anim.tile, tx, ty, tileW, tileH, false, 0, 8);
+    ctx.restore();
+
+    // Hand gripping the tile from the left
+    const fingerColor = '#dfa57f';
+    const fingerShade = '#bf7d54';
+    // Index finger tip at left upper edge
+    this.roundRect(tx - 18, ty + 24, 26, 22, 10,
+      this.linearFill(tx - 18, ty + 24, tx + 8, ty + 46, [[0, '#f2be9b'], [1, fingerShade]], fingerColor),
+      'rgba(80, 40, 20, 0.35)', 1);
+    this.roundRect(tx - 12, ty + 28, 12, 14, 5, '#fdeae0');
+    // Middle finger tip at left lower edge
+    this.roundRect(tx - 16, ty + 56, 24, 22, 10,
+      this.linearFill(tx - 16, ty + 56, tx + 8, ty + 78, [[0, '#f2be9b'], [1, fingerShade]], fingerColor),
+      'rgba(80, 40, 20, 0.35)', 1);
+    this.roundRect(tx - 10, ty + 60, 12, 14, 5, '#fdeae0');
+
+    // Suspense progression of thumb:
+    // 0 ~ 400ms: thumb firmly rests in the center, covering the tile face
+    // 400 ~ 2500ms: thumb slowly slides away diagonally downwards
+    // 2500 ~ 3000ms: thumb is completely off the tile, revealing full face + gold glow
+    const u = Math.max(0, Math.min(1, (elapsed - 400) / 2100));
+    const ease = u * u * (3 - 2 * u); // smoothstep
+    const thumbOffsetX = ease * (tileW * 0.92);
+    const thumbOffsetY = ease * (tileH * 0.88);
+    const thumbX = cx + thumbOffsetX;
+    const thumbY = cy + 4 + thumbOffsetY;
+
+    // Draw Thumb on top of the tile face
+    if (elapsed < 2700) {
+      ctx.save();
+      ctx.translate(thumbX, thumbY);
+      ctx.rotate(0.38); // Natural thumb angle (~22 deg)
+
+      // Cast shadow onto tile
+      ctx.shadowColor = 'rgba(10, 5, 5, 0.55)';
+      ctx.shadowBlur = 10;
+      ctx.shadowOffsetX = 3;
+      ctx.shadowOffsetY = 4;
+
+      // Thumb body (capsule / rounded rect)
+      const tw = 58;
+      const th = 86;
+      this.roundRect(-tw / 2, -th / 2, tw, th, 28,
+        this.linearFill(-tw / 2, -th / 2, tw / 2, th / 2,
+          [[0, '#f8cfb0'], [0.3, '#ebb089'], [0.8, '#d48d65'], [1, '#ad623d']], '#ebb089'),
+        'rgba(140, 70, 35, 0.4)', 1.2);
+      ctx.shadowColor = 'transparent';
+
+      // Thumbnail (nail plate with natural pink/ivory luster)
+      this.roundRect(-15, -th / 2 + 10, 30, 34, 12,
+        this.linearFill(-15, -th / 2 + 10, 15, -th / 2 + 44,
+          [[0, '#fff4ee'], [0.6, '#ffd7cf'], [1, '#f5b5ab']], '#fed7cf'),
+        'rgba(210, 130, 110, 0.5)', 1);
+      // Lunula (white half-moon at nail base)
+      this.roundRect(-8, -th / 2 + 34, 16, 7, 3, 'rgba(255, 255, 255, 0.7)');
+
+      // Knuckle crease lines
+      ctx.strokeStyle = 'rgba(150, 75, 40, 0.55)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(0, 18, 16, Math.PI * 0.1, Math.PI * 0.9);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, 24, 14, Math.PI * 0.15, Math.PI * 0.85);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    // Skip prompt at bottom
+    this.text('💡 轻触屏幕可直接开牌', cx, height - 32, 11, 'rgba(255, 255, 255, 0.45)', 'center');
   }
 
   drawSettlement(state) {
@@ -1634,6 +2072,21 @@ class MahjongRenderer {
     if (!settlement) return;
 
     const { width, height } = this.roomLayout();
+    if (state.reviewingTable) {
+      const { contentBottom } = this.roomLayout();
+      const ownSeat = snapshot.private.seat;
+      const ownPlayer = ownSeat ? (snapshot.public.players || []).find((p) => p.seat === ownSeat) : null;
+      const isReady = Boolean(ownPlayer?.ready);
+      const barW = 340;
+      const barH = 46;
+      const barX = (width - barW) / 2;
+      const barY = contentBottom - 58;
+      this.roundRect(barX, barY, barW, barH, 10, 'rgba(12, 34, 42, 0.94)', '#d6aa55', 1.5);
+      this.text(isReady ? '已准备 · 等待其他玩家就绪…' : '正在复盘牌局 · 查看玩家明牌', barX + 16, barY + 23, 12, '#e0d8b5');
+      this.button('返回结算', barX + barW - 110, barY + 6, 96, 34, 'return-settlement', {}, 'primary');
+      return;
+    }
+
     const panelWidth = Math.min(700, width - 28);
     const panelHeight = 450;
     const x = (width - panelWidth) / 2;
@@ -1713,15 +2166,30 @@ class MahjongRenderer {
     });
 
     const buttonY = y + panelHeight - 48;
-    const canAdvance = settlement.type !== 'draw'
-      && snapshot.public.hostSeat === snapshot.private.seat
-      && !snapshot.private.spectator;
-    if (canAdvance) {
-      this.button('开始下一局', width / 2 - 92, buttonY, 184, 34, 'command', { action: 'next-hand' }, 'primary');
+    const ownSeat = snapshot.private.seat;
+    const ownPlayer = ownSeat ? playerBySeat.get(ownSeat) : null;
+    const isSeated = Boolean(ownPlayer && !snapshot.private.spectator);
+    const isReady = Boolean(ownPlayer?.ready);
+
+    const btnW1 = 120;
+    const btnW2 = 170;
+    const btnW3 = 96;
+    const totalW = btnW1 + btnW2 + btnW3 + 28;
+    const btnX = (width - totalW) / 2;
+
+    this.button('查看牌局', btnX, buttonY, btnW1, 34, 'review-table', {}, 'secondary');
+
+    if (isSeated) {
+      if (isReady) {
+        this.button('返回牌桌', btnX + btnW1 + 14, buttonY, btnW2, 34, 'review-table', {}, 'primary');
+      } else {
+        this.button('开始下一局', btnX + btnW1 + 14, buttonY, btnW2, 34, 'command', { action: 'ready', payload: { ready: true } }, 'primary');
+      }
     } else {
-      const footer = settlement.type === 'draw' ? '即将开始下一局' : '等待房主开始下一局';
-      this.text(footer, width / 2, buttonY + 17, 12, '#b7d0d8', 'center');
+      this.text('观战中 · 等待准备', btnX + btnW1 + 14 + btnW2 / 2, buttonY + 17, 12, '#b7d0d8', 'center');
     }
+
+    this.button('离开', btnX + btnW1 + 14 + btnW2 + 14, buttonY, btnW3, 34, 'leave', {}, 'danger');
 
     // Keep the room exit available while the settlement overlay blocks the table.
     const leaveX = this.roomLayout().leftInset - 8;
@@ -1730,13 +2198,27 @@ class MahjongRenderer {
 
   drawOpponentHands(state, table) {
     const snapshot = state.snapshot;
+    let maxDealingCount = 14;
+    if (state.dealingAnimation) {
+      const elapsed = Date.now() - state.dealingAnimation.startTime;
+      if (elapsed < 500) {
+        maxDealingCount = 6;
+      } else if (elapsed < 1000) {
+        maxDealingCount = 12;
+      }
+    }
     relativeSeats(snapshot.private.seat || 'A').forEach((seat, position) => {
       if (position === 0 && !snapshot.private.spectator) return;
       const player = playerForSeat(snapshot, seat);
       const revealedHand = snapshot.private.isListening
         ? snapshot.private.opponentHands?.find((opponent) => opponent.seat === seat)?.hand
-        : undefined;
-      const count = Math.max(0, Math.min(14, Number(player?.handCount) || revealedHand?.length || 0));
+        : ((snapshot.public.phase === 'settled' || snapshot.public.phase === 'hand-end')
+          ? (snapshot.public.revealedHands?.find((r) => r.seat === seat)?.hand
+            || snapshot.private.opponentHands?.find((r) => r.seat === seat)?.hand
+            || snapshot.private.spectatorHands?.find((r) => r.seat === seat)?.hand)
+          : undefined);
+      const rawCount = Math.max(0, Math.min(14, Number(player?.handCount) || revealedHand?.length || 0));
+      const count = Math.min(maxDealingCount, rawCount);
       const lastV = (this.roomLayout().contentBottom - 116 - table.topY) / (table.bottomY - table.topY);
       const sideStep = Math.min(0.037, (lastV - 0.255) / Math.max(1, count - 1));
       for (let index = 0; index < count; index += 1) {
@@ -1840,6 +2322,72 @@ class MahjongRenderer {
     const tileHeight = Math.min(104, tileWidth * 1.58);
     const y = contentBottom - 6 - tileHeight;
     const totalWidth = hand.length * tileWidth + drawnGap;
+    const isDealing = Boolean(
+      state.dealingAnimation
+      && (Date.now() - state.dealingAnimation.startTime < state.dealingAnimation.duration)
+    );
+
+    if (isDealing) {
+      const elapsed = Date.now() - state.dealingAnimation.startTime;
+      const count = hand.length;
+      const stride = 5;
+      const scrambled = [];
+      const used = new Set();
+      for (let i = 0; scrambled.length < count; i += 1) {
+        const idx = (i * stride) % count;
+        if (!used.has(idx)) {
+          used.add(idx);
+          scrambled.push(idx);
+        }
+      }
+
+      const visibleCount = elapsed < 500 ? Math.min(6, count)
+        : elapsed < 1000 ? Math.min(12, count)
+        : count;
+
+      const bannerText = elapsed < 1500
+        ? `🀄 发牌中 (${visibleCount}/${count})…`
+        : elapsed < 1750
+          ? '🀄 开牌展示…'
+          : '🀄 理牌排序中…';
+      const badgeW = 138;
+      const badgeH = 22;
+      this.roundRect(x + (width - badgeW) / 2, y - 28, badgeW, badgeH, 11, 'rgba(6, 26, 28, 0.92)', '#4ade80', 1);
+      this.text(bannerText, x + width / 2, y - 17, 11, '#bbf7d0', 'center', '600');
+
+      for (let k = 0; k < visibleCount; k += 1) {
+        const sortedIdx = scrambled[k];
+        const tile = hand[sortedIdx];
+        const dealtSlotX = x + (width - totalWidth) / 2 + k * tileWidth;
+        const finalSortedX = x + (width - totalWidth) / 2 + sortedIdx * tileWidth + (tile === drawnTile ? drawnGap : 0);
+
+        if (elapsed < 1500) {
+          this.drawTileBack(dealtSlotX, y, tileWidth - 0.5, tileHeight);
+        } else if (elapsed < 1750) {
+          const flipT = Math.min(1, Math.max(0, (elapsed - 1500) / 250));
+          const scaleX = Math.max(0.06, Math.abs(Math.cos(flipT * Math.PI)));
+          const midX = dealtSlotX + (tileWidth - 0.5) / 2;
+          const midY = y + tileHeight / 2;
+          this.ctx.save();
+          this.ctx.translate(midX, midY);
+          this.ctx.scale(scaleX, 1);
+          if (flipT < 0.5) {
+            this.drawTileBack(-(tileWidth - 0.5) / 2, -tileHeight / 2, tileWidth - 0.5, tileHeight);
+          } else {
+            this.drawTile(tile, -(tileWidth - 0.5) / 2, -tileHeight / 2, tileWidth - 0.5, tileHeight, false);
+          }
+          this.ctx.restore();
+        } else {
+          const sortT = Math.min(1, Math.max(0, (elapsed - 1750) / 250));
+          const ease = 0.5 - 0.5 * Math.cos(sortT * Math.PI);
+          const curX = dealtSlotX + (finalSortedX - dealtSlotX) * ease;
+          const liftY = -Math.sin(sortT * Math.PI) * 12;
+          this.drawTile(tile, curX, y + liftY, tileWidth - 0.5, tileHeight, false);
+        }
+      }
+      return;
+    }
+
     const listenTileIds = new Set(state.snapshot.private.listenTileIds || []);
     hand.forEach((tile, index) => {
       const selected = state.selectedTileId === tile.id;
@@ -1881,6 +2429,9 @@ class MahjongRenderer {
   }
 
   drawListenPreview(state) {
+    if (state.dealingAnimation && (Date.now() - state.dealingAnimation.startTime < state.dealingAnimation.duration)) {
+      return;
+    }
     const snapshot = state.snapshot;
     if (!snapshot || !snapshot.private) return;
     const priv = snapshot.private;
@@ -2006,6 +2557,12 @@ class MahjongRenderer {
   }
 
   drawActions(state) {
+    if (state.dealingAnimation && (Date.now() - state.dealingAnimation.startTime < state.dealingAnimation.duration)) {
+      return;
+    }
+    if (state.selfDrawAnimation && (Date.now() - state.selfDrawAnimation.startTime < state.selfDrawAnimation.duration)) {
+      return;
+    }
     const snapshot = state.snapshot;
     const actions = snapshot.private.availableActions || [];
     const waitingListen = (snapshot.private.postDiscardListenWaits || []).length > 0;
@@ -2020,7 +2577,21 @@ class MahjongRenderer {
         });
     if (!waitingListen && actions.includes('discard') && state.selectedTileId) visibleActions.unshift('discard');
     if (snapshot.public.phase === 'settled' && snapshot.public.hostSeat === snapshot.private.seat) visibleActions.push('start-hand');
-    const labels = { 'start-hand': '下一局', discard: '出', listen: '听', 'exposed-kong': '杠', 'added-kong': '杠', 'concealed-kong': '杠', pass: '过' };
+    const isSelfDraw = Boolean(
+      snapshot.public.currentTurn === snapshot.private.seat
+      && !snapshot.public.pendingDiscard
+    );
+    const huLabel = isSelfDraw ? '自摸' : '胡';
+    const labels = {
+      'start-hand': '下一局',
+      discard: '出',
+      listen: '听',
+      hu: huLabel,
+      'exposed-kong': '杠',
+      'added-kong': '杠',
+      'concealed-kong': '杠',
+      pass: '过',
+    };
     const { width: roomWidth, rightInset, contentBottom } = this.roomLayout();
     const x0 = roomWidth - rightInset - 108 - Math.max(0, visibleActions.length - 1) * 62;
     visibleActions.forEach((action, index) => {
@@ -2028,14 +2599,28 @@ class MahjongRenderer {
       const data = action === 'chi' ? { action, chiOptions: snapshot.private.chiOptions || [] } : { action };
       const x = x0 + index * 62;
       const y = contentBottom - 160;
-      this.circle(x, y + 3, 27, 'rgba(20, 39, 15, 0.3)');
-      this.circle(x, y, 27,
-        this.linearFill(x - 18, y - 22, x + 19, y + 26,
-          action === 'pass' ? [[0, '#6a785d'], [1, '#354a37']] : [[0, '#fff1a0'], [0.3, '#e5b742'], [1, '#ae701b']], '#dca936'),
-        action === 'pass' ? '#9da98b' : '#ffe9a1', 2);
-      this.circle(x, y, 23, null, 'rgba(255, 247, 203, 0.45)');
-      if (label.length === 1) this.drawArtText(label, x, y, 29);
-      else this.text(label, x, y, 14, '#fff6ce', 'center', '700');
+      if (action === 'hu') {
+        this.circle(x, y + 3, 27, 'rgba(40, 10, 10, 0.45)');
+        this.circle(x, y, 27,
+          this.linearFill(x - 18, y - 22, x + 19, y + 26,
+            [[0, '#ff4d4f'], [0.4, '#e11d48'], [1, '#9f1239']], '#e11d48'),
+          '#fde047', 2.5);
+        this.circle(x, y, 23, null, 'rgba(254, 240, 138, 0.55)');
+        if (isSelfDraw) {
+          this.text('自摸', x, y + 0.5, 16, '#ffffff', 'center', '700');
+        } else {
+          this.drawArtText('胡', x, y, 29);
+        }
+      } else {
+        this.circle(x, y + 3, 27, 'rgba(20, 39, 15, 0.3)');
+        this.circle(x, y, 27,
+          this.linearFill(x - 18, y - 22, x + 19, y + 26,
+            action === 'pass' ? [[0, '#6a785d'], [1, '#354a37']] : [[0, '#fff1a0'], [0.3, '#e5b742'], [1, '#ae701b']], '#dca936'),
+          action === 'pass' ? '#9da98b' : '#ffe9a1', 2);
+        this.circle(x, y, 23, null, 'rgba(255, 247, 203, 0.45)');
+        if (label.length === 1) this.drawArtText(label, x, y, 29);
+        else this.text(label, x, y, 14, '#fff6ce', 'center', '700');
+      }
       this.targets.push({ x: x - 28, y: y - 28, width: 56, height: 56, type: action === 'start-hand' ? 'command' : 'action', data });
     });
   }

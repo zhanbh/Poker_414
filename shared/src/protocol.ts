@@ -258,6 +258,7 @@ export interface TexasSnapshot {
 
 export type MahjongCommandType =
   | 'start-hand'
+  | 'ready'
   | 'discard'
   | 'listen'
   | 'chi'
@@ -272,6 +273,7 @@ export type MahjongCommandType =
 
 export type MahjongCommandPayload =
   | Record<string, never>
+  | { readonly ready?: boolean }
   | { readonly tileId: string }
   | { readonly tileIds: readonly string[]; readonly discardTileId?: string }
   | { readonly seat: MahjongSeat };
@@ -286,6 +288,17 @@ export interface MahjongCommandEnvelope {
 
 export type MahjongAction = 'discard' | 'listen' | 'chi' | 'peng' | 'exposed-kong' | 'added-kong' | 'concealed-kong' | 'hu' | 'pass';
 
+export interface MahjongPlayerStats {
+  readonly winCount: number;
+  readonly listenCount: number;
+  readonly discardPaoCount: number;
+}
+
+export interface MahjongScoreboard {
+  readonly completedHands: number;
+  readonly stats: Record<MahjongSeat, MahjongPlayerStats>;
+}
+
 export interface MahjongPlayerView {
   readonly seat: MahjongSeat;
   readonly seatLabel: string;
@@ -294,6 +307,7 @@ export interface MahjongPlayerView {
   readonly connected: boolean;
   readonly handCount: number;
   readonly score: number;
+  readonly ready?: boolean;
   readonly isListening: boolean;
   readonly melds: MahjongMeld[];
   readonly discards: MahjongTile[];
@@ -360,6 +374,7 @@ export interface MahjongPublicSnapshot {
     readonly isDuiBao?: boolean;
   } | null;
   readonly revealedHands?: ReadonlyArray<{ readonly seat: MahjongSeat; readonly nickname: string; readonly hand: MahjongTile[] }>;
+  readonly scoreboard?: MahjongScoreboard;
   readonly settlement: MahjongSettlement | null;
 }
 
@@ -434,7 +449,7 @@ const TEXAS_COMMAND_TYPES = new Set<TexasCommandType>([
 ]);
 
 const MAHJONG_COMMAND_TYPES = new Set<MahjongCommandType>([
-  'start-hand', 'discard', 'listen', 'chi', 'peng', 'exposed-kong', 'added-kong', 'concealed-kong', 'hu', 'pass', 'next-hand', 'remove-player',
+  'start-hand', 'ready', 'discard', 'listen', 'chi', 'peng', 'exposed-kong', 'added-kong', 'concealed-kong', 'hu', 'pass', 'next-hand', 'remove-player',
 ]);
 
 export function isTexasCommandEnvelope(value: unknown): value is TexasCommandEnvelope {

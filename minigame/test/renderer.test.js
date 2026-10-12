@@ -1,5 +1,6 @@
 const { MahjongRenderer } = require('../src/renderer');
 const { MahjongGameApp } = require('../src/app');
+/* global vi */
 
 function createContext(overrides = {}) {
   return new Proxy({}, {
@@ -1433,6 +1434,92 @@ describe('native mini-game Canvas renderer', () => {
     frames.shift()();
     expect(app.animationRunning).toBe(false);
     expect(frames).toHaveLength(0);
+    expect(draws).toBe(3);
+  });
+
+  it('redraws an interactive hand when dealing ends and completes a discard tap', async () => {
+    vi.useFakeTimers();
+    try {
+      const now = new Date('2026-10-12T12:00:00.000Z');
+      vi.setSystemTime(now);
+      const frames = [];
+      const tiles = Array.from({ length: 13 }, (_, i) => ({ id: `tile-${i}`, suit: 'dots', rank: (i % 9) + 1 }));
+      const state = {
+        screen: 'game', selectedTileId: '', selectedTarget: null, busy: false,
+        snapshot: {
+          public: { gameId: 'mahjong', phase: 'playing', handNumber: 1, currentTurn: 'A', players: [], chat: [], pendingDiscard: null },
+          private: { seat: 'A', spectator: false, hand: tiles, availableActions: ['discard'] },
+        },
+        dealingAnimation: { startTime: Date.now() - 1990, duration: 2000 },
+      };
+      const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext());
+      const commands = [];
+      const app = {
+        state, renderer, animationRunning: false, animationId: null, pixelRatio: 1, tileGesture: null,
+        scheduleNextFrame: (callback) => { frames.push(callback); return frames.length; },
+        hasActiveRoomAnimation: MahjongGameApp.prototype.hasActiveRoomAnimation,
+        draw: () => renderer.draw(state),
+        getTouchPoint: (touch) => ({ ...touch, canvasX: touch.clientX, canvasY: touch.clientY, x: touch.clientX, y: touch.clientY }),
+        wx: {},
+        runCommand: async (...args) => commands.push(args),
+        handleTarget: (target) => MahjongGameApp.prototype.handleTarget.call(app, target),
+        handleAction: (data) => MahjongGameApp.prototype.handleAction.call(app, data),
+      };
+
+      app.draw();
+      expect(renderer.targets.some((target) => target.type === 'select-tile')).toBe(false);
+      MahjongGameApp.prototype.startAnimationLoop.call(app);
+      frames.shift()(); // Last animation frame before the deadline.
+      vi.setSystemTime(new Date(now.getTime() + 20));
+      frames.shift()(); // Completion paints the settled hand and its hit targets.
+
+      expect(app.animationRunning).toBe(false);
+      const tileTarget = renderer.targets.find((target) => target.type === 'select-tile');
+      expect(tileTarget).toBeDefined();
+      const touch = { clientX: tileTarget.x + tileTarget.width / 2, clientY: tileTarget.y + tileTarget.height / 2 };
+      MahjongGameApp.prototype.onTouchStart.call(app, { touches: [touch] });
+      MahjongGameApp.prototype.onTouchEnd.call(app, { changedTouches: [touch] });
+      expect(state.selectedTileId).toBe(tileTarget.data.tileId);
+
+      const discardTarget = renderer.targets.find((target) => target.type === 'action' && target.data.action === 'discard');
+      expect(discardTarget).toBeDefined();
+      await app.handleTarget(discardTarget);
+      expect(commands).toEqual([['discard', { tileId: tileTarget.data.tileId }]]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('lets a tap on a tile finish dealing and select it in the same gesture', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-10-12T12:00:00.000Z'));
+      const tiles = Array.from({ length: 13 }, (_, i) => ({ id: `tile-${i}`, suit: 'dots', rank: (i % 9) + 1 }));
+      const state = {
+        screen: 'game', selectedTileId: '', busy: false,
+        snapshot: {
+          public: { gameId: 'mahjong', phase: 'playing', handNumber: 1, currentTurn: 'A', players: [], chat: [] },
+          private: { seat: 'A', spectator: false, hand: tiles, availableActions: ['discard'] },
+        },
+        dealingAnimation: { startTime: Date.now() - 500, duration: 2000 },
+      };
+      const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext());
+      const app = {
+        state, renderer, tileGesture: null, pixelRatio: 1, wx: {},
+        draw: () => renderer.draw(state),
+        getTouchPoint: (touch) => ({ ...touch, canvasX: touch.clientX, canvasY: touch.clientY, x: touch.clientX, y: touch.clientY }),
+        handleTarget: (target) => MahjongGameApp.prototype.handleTarget.call(app, target),
+      };
+      app.draw();
+      const point = { clientX: 480, clientY: renderer.roomLayout().contentBottom - 40 };
+      MahjongGameApp.prototype.onTouchStart.call(app, { touches: [point] });
+      MahjongGameApp.prototype.onTouchEnd.call(app, { changedTouches: [point] });
+
+      expect(state.dealingAnimation.startTime).toBe(Date.now() - state.dealingAnimation.duration);
+      expect(state.selectedTileId).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('coalesces a burst of touch events into one frame at the latest drag position', () => {
@@ -1527,7 +1614,6 @@ describe('native mini-game Canvas renderer', () => {
 
   it('renders scoreboard with red highlights on highest metrics and provides ? help explanation', () => {
     const labels = [];
-    const fills = [];
     const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({
       fillText: (value) => labels.push(String(value)),
       fillRect: () => {},
@@ -1607,7 +1693,7 @@ describe('native mini-game Canvas renderer', () => {
     expect(target.x + target.width).toBeLessThan(200);
   });
 
-  it('implements dealing animation with 6-tile batches, flip, and sorting glide', () => {
+  it('implements dealing animation with 6-tile batches, flip, and non-overlapping sorting settle', () => {
     const labels = [];
     const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({
       fillText: (value) => labels.push(String(value)),
@@ -1653,11 +1739,15 @@ describe('native mini-game Canvas renderer', () => {
     renderer.drawHand(state);
     expect(labels).toContain('🀄 开牌展示…');
 
-    // Stage 4: 1750~2000ms, cards sort glide
+    // Stage 4: 1750~2000ms, cards settle into their final non-overlapping slots
     labels.length = 0;
     state.dealingAnimation.startTime = Date.now() - 1850;
+    const sortingXs = [];
+    renderer.drawTile = (_tile, x) => sortingXs.push(x);
     renderer.drawHand(state);
     expect(labels).toContain('🀄 理牌排序中…');
+    expect(sortingXs).toHaveLength(13);
+    expect(sortingXs).toEqual([...sortingXs].sort((a, b) => a - b));
 
     // Stage 5: Animation finished (> 2000ms), standard interactive tiles
     labels.length = 0;

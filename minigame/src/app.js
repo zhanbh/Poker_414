@@ -199,6 +199,11 @@ class MahjongGameApp {
         this.draw();
         this.scheduleNextFrame(tick);
       } else {
+        // Draw once more after a room animation expires. In particular, the
+        // dealing frames intentionally have no hand hit targets; without this
+        // final frame the canvas can look settled while taps still hit the
+        // target list from the last (non-interactive) animation frame.
+        if (this.state.screen === 'game') this.draw();
         this.animationRunning = false;
         this.animationId = null;
       }
@@ -895,9 +900,20 @@ class MahjongGameApp {
     const gesture = this.tileGesture;
     this.tileGesture = null;
     const target = this.renderer.hit(point.canvasX, point.canvasY);
-    if (this.state.selfDrawAnimation && (Date.now() - this.state.selfDrawAnimation.startTime < this.state.selfDrawAnimation.duration)) {
-      this.state.selfDrawAnimation.startTime = Date.now() - this.state.selfDrawAnimation.duration;
+    const now = Date.now();
+    const selfDrawInProgress = this.state.selfDrawAnimation
+      && now - this.state.selfDrawAnimation.startTime < this.state.selfDrawAnimation.duration;
+    const dealingInProgress = this.state.dealingAnimation
+      && now - this.state.dealingAnimation.startTime < this.state.dealingAnimation.duration;
+    if (selfDrawInProgress || dealingInProgress) {
+      if (selfDrawInProgress) this.state.selfDrawAnimation.startTime = now - this.state.selfDrawAnimation.duration;
+      if (dealingInProgress) this.state.dealingAnimation.startTime = now - this.state.dealingAnimation.duration;
       this.draw();
+      // A tap on a tile can both dismiss the reveal/deal animation and select
+      // that tile. Other taps only dismiss it, so the overlay cannot trigger
+      // an action underneath it by accident.
+      const settledTarget = this.renderer.hit(point.canvasX, point.canvasY);
+      if (settledTarget?.type === 'select-tile') void this.handleTarget(settledTarget);
       return;
     }
     const insideChat = target && (['chat-panel', 'toggle-chat', 'close-chat', 'send-chat', 'chat-tab', 'toggle-chat-mode', 'voice-bar', 'send-phrase', 'play-voice'].includes(target.type)

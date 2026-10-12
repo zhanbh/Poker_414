@@ -1012,11 +1012,11 @@ class MahjongRenderer {
 
     // If help opened, render help dialog on top
     if (state.scoreboardHelpOpen) {
-      this.drawScoreboardHelp(state);
+      this.drawScoreboardHelp();
     }
   }
 
-  drawScoreboardHelp(state) {
+  drawScoreboardHelp() {
     const { width, height } = this.roomLayout();
     const ctx = this.ctx;
 
@@ -2198,11 +2198,11 @@ class MahjongRenderer {
     this.targets.push({ x: leaveX, y: 7, width: 48, height: 48, type: 'leave', data: {} });
 
     if (state.settlementHelpOpen) {
-      this.drawSettlementHelp(state);
+      this.drawSettlementHelp();
     }
   }
 
-  drawSettlementHelp(state) {
+  drawSettlementHelp() {
     const { width, height } = this.roomLayout();
     const ctx = this.ctx;
 
@@ -2443,16 +2443,6 @@ class MahjongRenderer {
     if (isDealing) {
       const elapsed = Date.now() - state.dealingAnimation.startTime;
       const count = hand.length;
-      const stride = 5;
-      const scrambled = [];
-      const used = new Set();
-      for (let i = 0; scrambled.length < count; i += 1) {
-        const idx = (i * stride) % count;
-        if (!used.has(idx)) {
-          used.add(idx);
-          scrambled.push(idx);
-        }
-      }
 
       const visibleCount = elapsed < 500 ? Math.min(6, count)
         : elapsed < 1000 ? Math.min(12, count)
@@ -2469,17 +2459,15 @@ class MahjongRenderer {
       this.text(bannerText, x + width / 2, y - 17, 11, '#bbf7d0', 'center', '600');
 
       for (let k = 0; k < visibleCount; k += 1) {
-        const sortedIdx = scrambled[k];
-        const tile = hand[sortedIdx];
-        const dealtSlotX = x + (width - totalWidth) / 2 + k * tileWidth;
-        const finalSortedX = x + (width - totalWidth) / 2 + sortedIdx * tileWidth + (tile === drawnTile ? drawnGap : 0);
+        const tile = hand[k];
+        const slotX = x + (width - totalWidth) / 2 + k * tileWidth + (tile === drawnTile ? drawnGap : 0);
 
         if (elapsed < 1500) {
-          this.drawTileBack(dealtSlotX, y, tileWidth - 0.5, tileHeight);
+          this.drawTileBack(slotX, y, tileWidth - 0.5, tileHeight);
         } else if (elapsed < 1750) {
           const flipT = Math.min(1, Math.max(0, (elapsed - 1500) / 250));
           const scaleX = Math.max(0.06, Math.abs(Math.cos(flipT * Math.PI)));
-          const midX = dealtSlotX + (tileWidth - 0.5) / 2;
+          const midX = slotX + (tileWidth - 0.5) / 2;
           const midY = y + tileHeight / 2;
           this.ctx.save();
           this.ctx.translate(midX, midY);
@@ -2492,10 +2480,12 @@ class MahjongRenderer {
           this.ctx.restore();
         } else {
           const sortT = Math.min(1, Math.max(0, (elapsed - 1750) / 250));
-          const ease = 0.5 - 0.5 * Math.cos(sortT * Math.PI);
-          const curX = dealtSlotX + (finalSortedX - dealtSlotX) * ease;
-          const liftY = -Math.sin(sortT * Math.PI) * 12;
-          this.drawTile(tile, curX, y + liftY, tileWidth - 0.5, tileHeight, false);
+          // The server hand is already sorted. Keep each tile in its own
+          // final slot and use a small vertical settle instead of crossing
+          // every tile through its neighbors (which caused the pile-up seen
+          // during the old horizontal glide animation).
+          const liftY = -Math.sin(sortT * Math.PI) * 7;
+          this.drawTile(tile, slotX, y + liftY, tileWidth - 0.5, tileHeight, false);
         }
       }
       return;

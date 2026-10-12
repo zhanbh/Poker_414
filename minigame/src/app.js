@@ -50,7 +50,7 @@ class MahjongGameApp {
     this.state = {
       screen: 'loading', loadingProgress: 0, loadingTip: '正在载入牌桌高清纹理与音效…',
       inviteCode: '', nickname: '', avatarUrl: '', chatDraft: '', error: '',
-      statusMessage: '邀请码进入 · 仅供测试、学习和交流', connectionStatus: 'disconnected',
+      statusMessage: '体验版 · 微信授权一键入局', connectionStatus: 'disconnected',
       canRequestUserInfo: typeof this.wx.createUserInfoButton === 'function',
       busy: false, chatOpen: false, chatReadId: '', chatMode: 'text', chatTab: 'messages',
       recordingVoice: false, playingVoiceId: '', selectedTileId: '', selectedTarget: null,
@@ -253,6 +253,7 @@ class MahjongGameApp {
     this.state.screen = 'entry';
     this.draw();
     this.restoreSession();
+    this.updateUserInfoButton();
   }
 
   updateUserInfoButton(forceRecreate = false) {
@@ -261,7 +262,7 @@ class MahjongGameApp {
       this.destroyUserInfoButton();
       return;
     }
-    const shouldShowOnEntry = this.state.screen === 'entry' && Boolean(this.state.inviteCode.trim()) && !this.state.profileAuthorized;
+    const shouldShowOnEntry = this.state.screen === 'entry' && !this.state.profileAuthorized;
     if (!shouldShowOnEntry || this.state.busy || this.state.profileUpdating) {
       this.destroyUserInfoButton();
       return;
@@ -275,7 +276,7 @@ class MahjongGameApp {
       const vy = this.renderer.viewport.y || 0;
       const pr = this.pixelRatio || 1;
       const left = Math.round((vx + 110 * scale) / pr);
-      const top = Math.round((vy + 625 * scale) / pr);
+      const top = Math.round((vy + 560 * scale) / pr);
       const width = Math.round((320 * scale) / pr);
       const height = Math.round((58 * scale) / pr);
 
@@ -299,7 +300,7 @@ class MahjongGameApp {
         this.userInfoBtn = null;
         this.state.canRequestUserInfo = false;
         this.authorizationButtonError = true;
-        this.state.statusMessage = '微信授权按钮不可用，请重新输入邀请码后重试';
+        this.state.statusMessage = '微信授权按钮不可用，请稍后重试';
         this.state.error = '授权控件未就绪，暂未加入房间';
         this.draw();
         return;
@@ -315,7 +316,7 @@ class MahjongGameApp {
       this.userInfoBtn = null;
       this.state.canRequestUserInfo = false;
       this.authorizationButtonError = true;
-      this.state.statusMessage = `微信授权按钮创建失败${error && error.errMsg ? `：${error.errMsg}` : ''}，请重新输入邀请码后重试`;
+      this.state.statusMessage = `微信授权按钮创建失败${error && error.errMsg ? `：${error.errMsg}` : ''}，请稍后重试`;
       this.state.error = '授权控件未就绪，暂未加入房间';
       this.draw();
     }
@@ -748,12 +749,6 @@ class MahjongGameApp {
 
   async handleEntryAction() {
     if (this.state.busy) return;
-    const code = this.state.inviteCode.trim();
-    if (!code) {
-      this.state.error = '请输入房间邀请码';
-      if (typeof this.draw === 'function') this.draw();
-      return;
-    }
     if (this.userInfoBtn) {
       this.state.statusMessage = '请点击“进入房间”并确认昵称头像授权';
       if (typeof this.draw === 'function') this.draw();
@@ -763,11 +758,11 @@ class MahjongGameApp {
       if (typeof this.updateUserInfoButton === 'function') this.updateUserInfoButton();
       if (!this.userInfoBtn) {
         this.state.error = this.authorizationButtonError
-          ? '微信授权按钮未能创建，请重新输入邀请码后再试'
+          ? '微信授权按钮未能创建，请稍后重试'
           : '正在准备微信授权，请稍后再点';
         if (typeof this.draw === 'function') this.draw();
       } else {
-        this.state.statusMessage = '邀请码已就绪，请点击“进入房间”确认授权';
+        this.state.statusMessage = '体验成员已就绪，请点击“进入房间”确认授权';
         if (typeof this.draw === 'function') this.draw();
       }
       return;
@@ -1130,8 +1125,7 @@ class MahjongGameApp {
   }
 
   async enterRoom(options = {}) {
-    const inviteCode = this.state.inviteCode.trim();
-    if (!inviteCode) { this.state.error = '请输入邀请码'; this.draw(); return; }
+    const inviteCode = (this.state.inviteCode || config.defaultInviteCode || '').trim();
 
     const profileAuthorized = options.profileAuthorized ?? this.state.profileAuthorized;
     let nickname = String(options.nickname ?? (profileAuthorized

@@ -13,11 +13,12 @@ describe('native mini-game Canvas renderer', () => {
     const labels = [];
     const renderer = new MahjongRenderer({ width: 540, height: 960 }, createContext({ fillText: (value) => labels.push(String(value)) }));
     renderer.draw({ screen: 'entry', inviteCode: '', statusMessage: '', canRequestUserInfo: true });
-    expect(renderer.hit(270, 409)).toMatchObject({ type: 'input', data: { field: 'inviteCode' } });
-    expect(renderer.hit(270, 654)).toMatchObject({ type: 'enter' });
-    expect(renderer.targets.some((target) => target.type === 'input' && target.data.field === 'nickname')).toBe(false);
+    expect(renderer.hit(270, 589)).toMatchObject({ type: 'enter' });
+    expect(renderer.targets.some((target) => target.type === 'input')).toBe(false);
     expect(labels).toContain('进入房间');
     expect(labels).toContain('308娱乐 · 微信小游戏');
+    expect(labels).toContain('🛡️ 体验版 · 体验成员专属通道');
+    expect(labels).toContain('⚡ 已配置体验名单，无需输入邀请码直接入局');
     expect(labels).not.toContain('414 麻将');
     expect(labels).not.toContain('授权昵称头像并进入');
     expect(labels).not.toContain('点击填写昵称（可授权微信资料）');
@@ -90,7 +91,7 @@ describe('native mini-game Canvas renderer', () => {
     expect(entryActionCalled).toBe(true);
   });
 
-  it('places the native WeChat consent button directly over the entry button after an invite is entered', () => {
+  it('places the native WeChat consent button directly over the entry button without needing invite input', () => {
     let buttonOptions;
     let onTap;
     const app = {
@@ -102,14 +103,14 @@ describe('native mini-game Canvas renderer', () => {
       },
       renderer: { viewport: { scale: 2, x: 0, y: 100 } },
       pixelRatio: 2,
-      state: { screen: 'entry', inviteCode: '308', profileAuthorized: false, busy: false, profileUpdating: false },
+      state: { screen: 'entry', inviteCode: '', profileAuthorized: false, busy: false, profileUpdating: false },
       handleUserInfoButtonResult: (result) => { app.result = result; },
       userInfoBtn: null,
       draw: () => {},
     };
     MahjongGameApp.prototype.updateUserInfoButton.call(app);
     expect(buttonOptions.text).toBe('进入房间');
-    expect(buttonOptions.style).toMatchObject({ left: 110, top: 675, width: 320, height: 58 });
+    expect(buttonOptions.style).toMatchObject({ left: 110, top: 610, width: 320, height: 58 });
     const result = { userInfo: { nickName: '测试用户', avatarUrl: 'avatar' } };
     onTap(result);
     expect(app.result).toBe(result);
@@ -473,7 +474,7 @@ describe('native mini-game Canvas renderer', () => {
       renderer: { viewport: { scale: 1, x: 0, y: 0 } },
       pixelRatio: 1,
       userInfoBtn: null,
-      state: { screen: 'entry', inviteCode: '308', profileAuthorized: false, busy: false, profileUpdating: false, error: '', statusMessage: '' },
+      state: { screen: 'entry', inviteCode: '', profileAuthorized: false, busy: false, profileUpdating: false, error: '', statusMessage: '' },
       draw: () => {},
       enterRoom: async () => { entered = true; },
     };

@@ -206,8 +206,8 @@ export class MahjongRoomService {
     this.random = options.random ?? Math.random;
   }
 
-  login(inviteCode: string): MahjongAuthResult {
-    if (inviteCode !== this.inviteCode) throw new MahjongRoomServiceError('INVALID_INVITE', '邀请码错误');
+  login(inviteCode?: string): MahjongAuthResult {
+    if (this.inviteCode && inviteCode && inviteCode !== this.inviteCode) throw new MahjongRoomServiceError('INVALID_INVITE', '邀请码错误');
     const session = this.sessions.create(this.now());
     return { sessionToken: session.sessionToken, playerId: session.playerId };
   }

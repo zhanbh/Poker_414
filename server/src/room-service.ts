@@ -85,8 +85,8 @@ export class RoomService {
     this.random = options.random ?? Math.random;
   }
 
-  login(inviteCode: string): AuthResult {
-    if (inviteCode !== this.inviteCode) throw new RoomServiceError('INVALID_INVITE', '邀请码错误');
+  login(inviteCode?: string): AuthResult {
+    if (this.inviteCode && inviteCode && inviteCode !== this.inviteCode) throw new RoomServiceError('INVALID_INVITE', '邀请码错误');
     const session = this.sessions.create(this.now());
     return { sessionToken: session.sessionToken, playerId: session.playerId };
   }

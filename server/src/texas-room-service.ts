@@ -105,8 +105,8 @@ export class TexasRoomService {
     this.random = options.random ?? Math.random;
   }
 
-  login(inviteCode: string): TexasAuthResult {
-    if (inviteCode !== this.inviteCode) throw new TexasRoomServiceError('INVALID_INVITE', '邀请码错误');
+  login(inviteCode?: string): TexasAuthResult {
+    if (this.inviteCode && inviteCode && inviteCode !== this.inviteCode) throw new TexasRoomServiceError('INVALID_INVITE', '邀请码错误');
     const session = this.sessions.create(this.now());
     return { sessionToken: session.sessionToken, playerId: session.playerId };
   }

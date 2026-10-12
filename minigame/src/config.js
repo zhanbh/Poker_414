@@ -8,4 +8,5 @@ module.exports = {
   sessionStorageKey: 'mahjong.sessionToken',
   nicknameStorageKey: 'mahjong.nickname',
   profileAuthorizedStorageKey: 'mahjong.profileAuthorized',
+  defaultInviteCode: 'inner-414',
 };

@@ -73,6 +73,7 @@ interface MahjongPlayer {
   score: number;
   ready: boolean;
   isListening: boolean;
+  mustListenAfterChi: boolean;
   listenWaits: MahjongTile[];
   listenBao: MahjongTile | null;
   lastDrawnTileId: string | null;
@@ -623,6 +624,7 @@ export class MahjongRoomService {
       players[seat]!.melds = [];
       players[seat]!.discards = [];
       players[seat]!.isListening = false;
+      players[seat]!.mustListenAfterChi = false;
       players[seat]!.listenWaits = [];
       players[seat]!.listenBao = null;
       players[seat]!.lastDrawnTileId = null;
@@ -663,6 +665,7 @@ export class MahjongRoomService {
     const postDiscardWaits = !player.isListening && player.melds.some((meld) => meld.kind !== 'concealed-kong')
       ? this.validListenWaits(player.hand.filter((candidate) => candidate.id !== tileId), player.melds.length, player.melds)
       : [];
+    if (player.mustListenAfterChi && postDiscardWaits.length === 0) throw new MahjongRoomServiceError('MUST_LISTEN_AFTER_CHI', '这次隔位吃牌后必须听牌并打出一张牌');
     const baoSeatsBeforeDiscard = this.baoSeatsFor(tile);
     player.hand = removeTileIds(player.hand, [tileId]);
     player.lastDrawnTileId = null;
@@ -673,6 +676,7 @@ export class MahjongRoomService {
     if (postDiscardWaits.length > 0) {
       player.isListening = true;
       player.listenWaits = postDiscardWaits;
+      player.mustListenAfterChi = false;
     }
     this.refreshListenerBao();
     state.lastDiscard = { seat, tile };
@@ -711,6 +715,7 @@ export class MahjongRoomService {
     const baoSeatsBeforeDiscard = this.baoSeatsFor(tile);
     player.hand = hand;
     player.isListening = true;
+    player.mustListenAfterChi = false;
     player.listenWaits = waits;
     player.lastDrawnTileId = null;
     player.discards.push(tile);
@@ -820,12 +825,14 @@ export class MahjongRoomService {
     const pending = state.pending;
     const discard = pending.tile;
     let usedTiles: MahjongTile[];
+    let chiRequiresListen = false;
     if (action === 'chi') {
       const requested = payload.tileIds ?? [];
       const option = this.chiPlans(player, discard, pending.seat)
-        .find((tiles) => requested.length === 2 && tiles.every((tile) => requested.includes(tile.id)));
+        .find((plan) => requested.length === 2 && plan.tiles.every((tile) => requested.includes(tile.id)));
       if (!option) throw new MahjongRoomServiceError('INVALID_ACTION', '没有合法的吃牌组合');
-      usedTiles = option;
+      usedTiles = option.tiles;
+      chiRequiresListen = option.requiresListen;
     } else {
       const count = action === 'exposed-kong' ? 3 : 2;
       usedTiles = findTilesByKey(player.hand, tileKey(discard), count);
@@ -839,6 +846,7 @@ export class MahjongRoomService {
     this.removeClaimedDiscard(pending);
     player.hand = removeTileIds(player.hand, usedTiles.map((tile) => tile.id));
     player.melds.push(meld);
+    player.mustListenAfterChi = chiRequiresListen;
     this.refreshListenerBao();
     state.pending = null;
     state.lastDiscard = null;
@@ -1070,13 +1078,14 @@ export class MahjongRoomService {
       && this.listenPreviews(player, false).length > 0;
   }
 
-  private chiPlans(player: MahjongPlayer, discard: MahjongTile, fromSeat: MahjongSeat): MahjongTile[][] {
+  private chiPlans(player: MahjongPlayer, discard: MahjongTile, fromSeat: MahjongSeat): Array<{ tiles: MahjongTile[]; requiresListen: boolean }> {
     if (player.melds.length >= 4) return [];
     const options = findChiOptions(player.hand, discard);
     if (nextMahjongSeat(fromSeat) === player.seat) return options
-      .filter((tiles) => player.melds.length < 3 || this.canReachRedSingleWait(player.hand.filter((tile) => !tiles.some((used) => used.id === tile.id)), [...player.melds, { kind: 'chi', tiles: sortMahjongTiles([discard, ...tiles]) }]));
+      .filter((tiles) => player.melds.length < 3 || this.canReachRedSingleWait(player.hand.filter((tile) => !tiles.some((used) => used.id === tile.id)), [...player.melds, { kind: 'chi', tiles: sortMahjongTiles([discard, ...tiles]) }]))
+      .map((tiles) => ({ tiles, requiresListen: false }));
     if (!this.state || player.isListening) return [];
-    const plans: MahjongTile[][] = [];
+    const plans: Array<{ tiles: MahjongTile[]; requiresListen: boolean }> = [];
     for (const tiles of options) {
       const afterClaim = player.hand.filter((tile) => !tiles.some((used) => used.id === tile.id));
       const melds: MahjongMeld[] = [...player.melds, { kind: 'chi', tiles: sortMahjongTiles([discard, ...tiles]) }];
@@ -1084,13 +1093,13 @@ export class MahjongRoomService {
         const afterDiscard = afterClaim.filter((tile) => tile.id !== discardTile.id);
         return this.validListenWaits(afterDiscard, melds.length, melds).length > 0;
       });
-      if (canListenAfterClaim) plans.push(tiles);
+      if (canListenAfterClaim) plans.push({ tiles, requiresListen: true });
     }
     return plans;
   }
 
   private privateChiOptions(player: MahjongPlayer, pending: PendingResponses): string[][] {
-    return this.chiPlans(player, pending.tile, pending.seat).map((tiles) => tiles.map((tile) => tile.id));
+    return this.chiPlans(player, pending.tile, pending.seat).map((plan) => plan.tiles.map((tile) => tile.id));
   }
 
   private actionPriority(action: MahjongAction, seat: MahjongSeat, fromSeat: MahjongSeat): number {
@@ -1242,6 +1251,7 @@ export class MahjongRoomService {
         player.melds = [];
         player.discards = [];
         player.isListening = false;
+        player.mustListenAfterChi = false;
         player.listenWaits = [];
         player.listenBao = null;
         player.lastDrawnTileId = null;
@@ -1262,7 +1272,7 @@ export class MahjongRoomService {
     this.state.players[seat] = {
       id: session.playerId, seat, nickname, avatarUrl, connected: true, score: 1000,
       ready: false,
-      isListening: false, listenWaits: [], listenBao: null, lastDrawnTileId: null,
+      isListening: false, mustListenAfterChi: false, listenWaits: [], listenBao: null, lastDrawnTileId: null,
       hand: [], melds: [], discards: [],
     };
     this.sessions.setMahjongSeat(session.sessionToken, seat);

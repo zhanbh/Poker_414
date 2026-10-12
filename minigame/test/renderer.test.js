@@ -425,6 +425,29 @@ describe('native mini-game Canvas renderer', () => {
     expect(renderer.targets.some((target) => target.type === 'action' && target.data.action === 'added-kong')).toBe(false);
   });
 
+  it('keeps ordinary discard available after selecting a tile that does not declare listening', () => {
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext());
+    const state = {
+      selectedTileId: 'tile-not-listening',
+      snapshot: {
+        public: { phase: 'playing', currentTurn: 'A', pendingDiscard: null },
+        private: {
+          seat: 'A',
+          availableActions: ['discard', 'listen'],
+          listenTileIds: ['tile-listening'],
+        },
+      },
+    };
+
+    renderer.drawActions(state);
+    expect(renderer.targets.map((target) => target.data.action)).toEqual(['discard']);
+
+    renderer.targets = [];
+    state.selectedTileId = 'tile-listening';
+    renderer.drawActions(state);
+    expect(renderer.targets.map((target) => target.data.action)).toEqual(['discard', 'listen']);
+  });
+
   it('keeps the settlement screen open after preparing so the player can see who is still unready', async () => {
     const app = {
       state: { screen: 'game', reviewingTable: false, snapshot: { public: { phase: 'settled' } } },

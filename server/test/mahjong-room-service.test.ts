@@ -1294,7 +1294,7 @@ describe('MahjongRoomService', () => {
     expect(room.getSnapshot(players[1].sessionToken).public.currentTurn).toBe('B');
   });
 
-  it('隔位吃后可听时先于普通吃响应，且吃后必须听牌', () => {
+  it('隔位吃只要求存在听口，不强制玩家听牌；打出非听口牌仍正常继续', () => {
     const room = new MahjongRoomService({ inviteCode: 'inner-414', random: () => 0.42 });
     const players = ['甲', '乙', '丙', '丁'].map((nickname) => {
       const auth = room.login('inner-414');
@@ -1332,11 +1332,9 @@ describe('MahjongRoomService', () => {
     expect(claimed.private.availableActions).toEqual(['discard', 'listen']);
     expect(claimed.private.listenTileIds).toContain(east.id);
     const invalid = claimed.private.hand.find((tile) => !claimed.private.listenTileIds?.includes(tile.id))!;
-    expect(() => room.dispatch(players[2].sessionToken, command('discard', claimed.public.handNumber, claimed.public.version, { tileId: invalid.id })))
-      .toThrow('这次隔位吃牌后必须听牌');
-    const auto = room.dispatch(players[2].sessionToken, command('discard', claimed.public.handNumber, claimed.public.version, { tileId: east.id })).snapshot;
-    expect(auto.private.isListening).toBe(true);
-    expect(auto.private.postDiscardListenWaits).toBeUndefined();
+    const afterOrdinaryDiscard = room.dispatch(players[2].sessionToken, command('discard', claimed.public.handNumber, claimed.public.version, { tileId: invalid.id })).snapshot;
+    expect(afterOrdinaryDiscard.private.isListening).toBe(false);
+    expect(afterOrdinaryDiscard.private.hand.map((tile) => tile.id)).not.toContain(invalid.id);
   });
 
   it('听牌玩家可以自摸由三组碰完成的大风牌', () => {

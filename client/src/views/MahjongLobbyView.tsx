@@ -3,11 +3,11 @@ import { MAHJONG_SEATS, MahjongSeat } from '../../../shared/src/mahjong';
 import { InteractionEffect, RoomInteractionEffect } from '../components/InteractionMenu';
 import { RoomPurposeNotice } from '../components/RoomPurposeNotice';
 
-export function MahjongLobbyView({ snapshot, ownSeat, spectator = false, onStart, onRemove, onLeave, testMode, interactionEffect = null }: {
+export function MahjongLobbyView({ snapshot, ownSeat, spectator = false, onReady, onRemove, onLeave, testMode, interactionEffect = null }: {
   readonly snapshot: MahjongPublicSnapshot;
   readonly ownSeat: MahjongSeat | null;
   readonly spectator?: boolean;
-  readonly onStart: () => void;
+  readonly onReady: () => void;
   readonly onRemove: (seat: MahjongSeat) => void;
   readonly onLeave: () => void;
   readonly testMode: boolean;
@@ -15,13 +15,23 @@ export function MahjongLobbyView({ snapshot, ownSeat, spectator = false, onStart
 }) {
   const players = new Map(snapshot.players.map((player) => [player.seat, player]));
   const ownPlayer = snapshot.players.find((player) => player.seat === ownSeat);
+  const readyCount = snapshot.players.filter((player) => player.ready).length;
   return (
     <main className="mahjong-lobby">
       {testMode ? <div className="test-mode-banner" role="status">单机四人测试模式 · 每个标签页都是独立玩家</div> : null}
       <header className="mahjong-header"><div><h1>麻将房间 {snapshot.roomId}</h1><p>四人大众麻将 · 满员后开始</p></div><span>等待开局</span></header>
       <RoomPurposeNotice />
       <section className="mahjong-lobby-table" aria-label="麻将座位">
-        <div className="mahjong-lobby-felt"><strong>麻将</strong><span>{snapshot.players.length}/4 人已入座</span><small>东家为本局庄家，牌局规则后续可按地区玩法调整</small>{ownPlayer?.isHost ? <button type="button" onClick={onStart} disabled={snapshot.players.length !== 4}>开始牌局</button> : null}</div>
+        <div className="mahjong-lobby-felt">
+          <strong>麻将</strong>
+          <span>{snapshot.players.length}/4 人已入座 · 已准备 {readyCount}/4</span>
+          <small>所有玩家准备后自动开局</small>
+          {ownPlayer && !spectator ? (
+            <button type="button" onClick={onReady} disabled={snapshot.players.length !== 4}>
+              {ownPlayer.ready ? '已准备（点击取消）' : '准备开局'}
+            </button>
+          ) : null}
+        </div>
         {MAHJONG_SEATS.map((seat) => {
           const player = players.get(seat);
           const canRemove = Boolean(player && ownPlayer?.isHost && player.seat !== ownSeat);
@@ -29,6 +39,7 @@ export function MahjongLobbyView({ snapshot, ownSeat, spectator = false, onStart
             {player ? <>
               <b>{player.nickname}</b>
               <small>{player.score} 积分</small>
+              {player.ready ? <span className="mahjong-ready-label">已准备</span> : null}
               {interactionEffect?.targetSeat === seat ? <InteractionEffect interaction={interactionEffect.interaction} /> : null}
               {(() => {
                 const latestPhrase = [...(snapshot.chat || [])].reverse().find(

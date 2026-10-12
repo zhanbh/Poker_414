@@ -1188,21 +1188,28 @@ export class MahjongRoomService {
       const player = this.state.players[seat];
       if (player) player.score += delta;
     }
-    this.state.scoreboard.completedHands += 1;
-    if (settlement.winnerSeat) {
-      this.state.scoreboard.stats[settlement.winnerSeat].winCount += 1;
-    }
-    if (settlement.type === 'discard-win' && settlement.payingSeat) {
-      const discarderListening = settlement.discarderWasListening ?? this.state.players[settlement.payingSeat]?.isListening ?? false;
-      if (!discarderListening) {
-        this.state.scoreboard.stats[settlement.payingSeat].discardPaoCount += 1;
-      }
-    }
-    for (const seat of MAHJONG_SEATS) {
-      if (this.state.players[seat]?.isListening) {
-        this.state.scoreboard.stats[seat].listenCount += 1;
-      }
-    }
+    const previousScoreboard = this.state.scoreboard;
+    const paoSeat = settlement.type === 'discard-win' && settlement.payingSeat
+      && !(settlement.discarderWasListening ?? this.state.players[settlement.payingSeat]?.isListening ?? false)
+      ? settlement.payingSeat
+      : null;
+    const nextStats = (seat: MahjongSeat): MahjongPlayerStats => {
+      const previous = previousScoreboard.stats[seat];
+      return {
+        winCount: previous.winCount + Number(settlement.winnerSeat === seat),
+        discardPaoCount: previous.discardPaoCount + Number(paoSeat === seat),
+        listenCount: previous.listenCount + Number(this.state?.players[seat]?.isListening ?? false),
+      };
+    };
+    this.state.scoreboard = {
+      completedHands: previousScoreboard.completedHands + 1,
+      stats: {
+        A: nextStats('A'),
+        B: nextStats('B'),
+        C: nextStats('C'),
+        D: nextStats('D'),
+      },
+    };
     this.state.phase = 'settled';
     this.state.version += 1;
     this.state.currentTurn = null;

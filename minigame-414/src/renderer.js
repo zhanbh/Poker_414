@@ -306,28 +306,24 @@ class FourOneFourRenderer {
 
   button(label, x, y, w, h, type, data = {}, disabled = false, secondary = false) {
     if (type === 'enter') {
-      const radius = 14;
-      if (!disabled) {
-        // 3D bottom bevel for tactile cartoon feel
-        this.roundRect(x, y + 4, w, h, radius, '#b45309', null);
-      }
-      let fill = disabled ? '#94a3b8' : '#f59e0b';
+      const radius = 12;
+      let fill = disabled ? '#374953' : '#e7a52d';
       if (!disabled && this.ctx.createLinearGradient) {
         const grad = this.ctx.createLinearGradient(x, y, x, y + h);
         if (grad && typeof grad.addColorStop === 'function') {
-          grad.addColorStop(0, '#fde047');
-          grad.addColorStop(1, '#f59e0b');
+          grad.addColorStop(0, '#ffd87a');
+          grad.addColorStop(1, '#df9a28');
           fill = grad;
         }
       }
-      const stroke = disabled ? '#cbd5e1' : '#fef08a';
+      const stroke = disabled ? '#475d69' : '#fff0ba';
       this.roundRect(x, y, w, h, radius, fill, stroke, 1.5);
-      this.text(label, x + w / 2, y + h / 2, 18, disabled ? '#f1f5f9' : '#ffffff', 'center', '800');
+      this.text(label, x + w / 2, y + h / 2, 18, disabled ? '#8b9da6' : '#15252b', 'center', '700');
       if (!disabled) this.targets.push({ x, y, w, h, width: w, height: h, type, data });
       return;
     }
 
-    let fill = disabled ? '#374953' : (secondary ? COLORS.panel : COLORS.gold);
+    let fill = disabled ? 'rgba(38, 55, 66, 0.7)' : (secondary ? 'rgba(18, 44, 56, 0.88)' : COLORS.gold);
     if (!disabled && !secondary && this.ctx.createLinearGradient) {
       const grad = this.ctx.createLinearGradient(x, y, x, y + h);
       if (grad && typeof grad.addColorStop === 'function') {
@@ -336,9 +332,9 @@ class FourOneFourRenderer {
         fill = grad;
       }
     }
-    const stroke = disabled ? '#475d69' : (secondary ? COLORS.line : '#fff0ba');
-    this.roundRect(x, y, w, h, 10, fill, stroke);
-    this.text(label, x + w / 2, y + h / 2, 16, disabled ? '#8b9da6' : (secondary ? COLORS.text : '#132227'), 'center', '600');
+    const stroke = disabled ? 'rgba(58, 80, 94, 0.5)' : (secondary ? 'rgba(56, 189, 248, 0.65)' : '#fff0ba');
+    this.roundRect(x, y, w, h, 10, fill, stroke, 1.2);
+    this.text(label, x + w / 2, y + h / 2, 15, disabled ? '#718894' : (secondary ? '#e0f2fe' : '#132227'), 'center', '700');
     if (!disabled) this.targets.push({ x, y, w, h, width: w, height: h, type, data });
   }
 
@@ -507,95 +503,58 @@ class FourOneFourRenderer {
       } catch { /* Use the gradient fallback if the image cannot be drawn. */ }
     }
     if (hasSceneBackground) {
-      // Light airy vignette to preserve the vibrant emerald table and white card highlights
       const overlay = this.linearFill(0, 0, 0, 960, [
-        [0, 'rgba(4, 78, 59, 0.12)'],
-        [0.3, 'rgba(4, 47, 46, 0.08)'],
-        [0.7, 'rgba(4, 78, 59, 0.22)'],
-        [1, 'rgba(4, 47, 46, 0.50)'],
-      ], 'rgba(4, 78, 59, 0.18)');
+        [0, 'rgba(6, 22, 30, 0.45)'],
+        [0.35, 'rgba(6, 22, 30, 0.68)'],
+        [0.75, 'rgba(4, 18, 24, 0.88)'],
+        [1, 'rgba(4, 14, 20, 0.96)'],
+      ], 'rgba(6, 22, 30, 0.7)');
       ctx.fillStyle = overlay;
       ctx.fillRect(0, 0, 540, 960);
     } else {
-      // Vibrant fresh cartoon green felt fallback
       const bgGrad = this.linearFill(0, 0, 540, 960, [
-        [0, '#10b981'],
-        [0.3, '#059669'],
-        [0.7, '#047857'],
-        [1, '#064e3b'],
-      ], '#059669');
+        [0, '#07161e'],
+        [0.35, '#0c2e26'],
+        [0.75, '#071f1a'],
+        [1, '#051318'],
+      ], '#07161e');
       ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, 540, 960);
 
-      // Playful cartoon table rim
-      this.drawOval(270, 480, 245, 450, null, 'rgba(255, 255, 255, 0.22)', 3);
-      this.drawOval(270, 480, 235, 440, null, 'rgba(52, 211, 153, 0.35)', 1.5);
+      // Subtle table rim outline
+      this.drawOval(270, 480, 245, 450, null, 'rgba(218, 170, 75, 0.15)', 2);
     }
 
-    // Floating cartoon mini-cards & suits
+    // Floating suits & sparkle particles
     this.drawSuits();
-
-    // Sparkling starlight particles
     this.drawParticles();
 
-    // Brand Header - Modern Cartoon Capsule
-    const badgeW = 144;
-    const badgeH = 28;
-    const badgeX = (540 - badgeW) / 2;
-    const badgeY = 82;
-    this.roundRect(badgeX, badgeY + 2, badgeW, badgeH, 14, 'rgba(4, 47, 46, 0.35)', null);
-    this.roundRect(badgeX, badgeY, badgeW, badgeH, 14, '#ffffff', '#34d399', 2);
-    this.text('♣ 414 欢乐扑克 ♠', 270, badgeY + 14, 13, '#059669', 'center', '700');
+    // Brand Header
+    this.roundRect(238, 80, 64, 24, 6, '#861c24', '#d49b29');
+    this.text('414扑克', 270, 92, 12, '#ffdb88', 'center', '600');
+    this.text('308娱乐 · 414扑克', 270, 140, 30, COLORS.gold, 'center', '700');
+    this.text('经典四人二打二 · 跨端实时对决', 270, 180, 14, COLORS.muted, 'center');
 
-    // Vibrant 3D Cartoon Title: 414 扑克对决
-    this.text('414 扑克对决', 270, 150, 36, '#064e3b', 'center', '900');
-    this.text('414 扑克对决', 270, 146, 36, '#ffffff', 'center', '900');
+    // Translucent frosted glass card (aligned with Mahjong)
+    this.roundRect(75, 390, 390, 220, 20, 'rgba(10, 26, 34, 0.62)', 'rgba(224, 180, 80, 0.45)');
+    this.roundRect(81, 396, 378, 208, 16, null, 'rgba(255, 220, 140, 0.15)');
 
-    // Modern Subtitle Pill
-    this.roundRect(165, 182, 210, 26, 13, 'rgba(255, 255, 255, 0.22)', 'rgba(255, 255, 255, 0.45)', 1);
-    this.text('经典四人二打二 · 欢乐开局', 270, 195, 13, '#ffffff', 'center', '600');
+    this.text('加入牌局', 270, 435, 22, COLORS.gold, 'center', '700');
+    this.text('四人二打二 · 跨端实时互通', 270, 472, 13, '#8ba4ae', 'center');
 
-    // Pure White Cartoon Card with 3D bottom bevel
-    const cardX = 75;
-    const cardY = 270;
-    const cardW = 390;
-    const cardH = 370;
-    // 3D shadow for card
-    this.roundRect(cardX, cardY + 5, cardW, cardH, 22, 'rgba(4, 78, 59, 0.35)', null);
-    // Main card face: pure crisp white with mint border
-    this.roundRect(cardX, cardY, cardW, cardH, 22, '#ffffff', '#a7f3d0', 2.5);
-    // Inner gentle rim
-    this.roundRect(cardX + 6, cardY + 6, cardW - 12, cardH - 12, 17, null, 'rgba(16, 185, 129, 0.15)', 1.2);
-
-    this.text('✦ 快速加入房间 ✦', 270, cardY + 36, 18, '#059669', 'center', '800');
-
-    // Invite Code Input
-    this.input('邀请码', state.inviteCode, cardX + 25, cardY + 70, cardW - 50, 'inviteCode');
-
-    // Mode Tag
-    this.text('四人二打二 · 跨端实时互通', 270, cardY + 144, 12.5, '#059669', 'center', '600');
-
-    // Tip Banner (Sunny lemon yellow pill)
-    this.roundRect(cardX + 25, cardY + 166, cardW - 50, 26, 8, '#fef9c3', '#fde047', 1);
-    this.text('💡 输入邀请码后点【进入房间】即可入局', 270, cardY + 179, 11, '#854d0e', 'center', '600');
-
-    // Authorization Notice
-    const authAvailable = state.canRequestUserInfo && !state.profileAuthorized;
-    this.text(authAvailable ? '首次进入将同步微信昵称与头像' : '输入 6 位房间邀请码即可入局对战', 270, cardY + 214, 12, '#64748b', 'center', '500');
-
-    // Enter Button (Cartoon 3D Amber Button)
-    this.button(state.busy ? '正在进入…' : '进入房间', cardX + 25, cardY + 240, cardW - 50, 56, 'enter', {}, state.busy);
+    // Single Enter Button
+    const btnLabel = state.busy ? '正在连接…' : '进入房间';
+    this.button(btnLabel, 110, 520, 320, 58, 'enter', {}, state.busy);
     if (!state.busy) {
-      this.drawButtonShimmer(cardX + 25, cardY + 240, cardW - 50, 56);
+      this.drawButtonShimmer(110, 520, 320, 58);
     }
 
-    // Status Message
-    const cardMsg = state.statusMessage || (state.error ? state.error : '请输入 6 位房间邀请码');
-    this.text(this.fit(cardMsg, cardW - 30, 12), 270, cardY + 326, 12, state.error ? '#ef4444' : '#64748b', 'center', '500');
+    // Status Message & Compliance Footer
+    const cardMsg = state.statusMessage || (state.error ? state.error : '游戏仅供测试、学习和交流');
+    this.text(this.fit(cardMsg, 360, 12), 270, 650, 12, state.error ? '#f87171' : COLORS.muted, 'center');
+    this.text('虚拟积分无现实价值，不涉及充值或兑现。', 270, 674, 11, '#537480', 'center');
 
-    // Footer
-    this.text('虚拟筹码不具有现金或财产价值，仅供测试、学习和交流', 270, 875, 11, 'rgba(255, 255, 255, 0.85)', 'center');
-    this.text('308娱乐 出品', 270, 902, 13, '#ffffff', 'center', '700');
+    this.text('308娱乐 出品', 270, 890, 13, '#537480', 'center');
   }
 
   drawRoom(state, width) {
@@ -681,12 +640,13 @@ class FourOneFourRenderer {
     this.roundRect(tableX - 12, tableY - 10, tableW + 24, tableH + 20, 96,
       this.linearFill(tableX, tableY, tableX, tableY + tableH, [
         [0, '#532810'],
-        [0.5, '#7c401e'],
+        [0.35, '#7c401e'],
+        [0.7, '#532810'],
         [1, '#3a1a09'],
-      ], '#5d2e14'), '#d49b42', 2.5);
+      ], '#5d2e14'), '#d49b29', 2.5);
 
     // Middle Gold Inlay Line
-    this.roundRect(tableX - 3, tableY - 2, tableW + 6, tableH + 4, 88, null, 'rgba(255, 215, 120, 0.4)', 1.2);
+    this.roundRect(tableX - 3, tableY - 2, tableW + 6, tableH + 4, 88, null, 'rgba(255, 215, 120, 0.45)', 1.2);
 
     // Inner Velvet Felt
     this.roundRect(tableX, tableY, tableW, tableH, 85,
@@ -697,10 +657,21 @@ class FourOneFourRenderer {
         [1, '#072b21'],
       ], '#0d4234'), '#1b634e', 1.5);
 
+    // Felt Radial Center Glow
+    if (ctx.createRadialGradient) {
+      const glow = ctx.createRadialGradient(width / 2, tableY + tableH / 2, 10, width / 2, tableY + tableH / 2, tableW * 0.42);
+      if (glow && typeof glow.addColorStop === 'function') {
+        glow.addColorStop(0, 'rgba(40, 169, 156, 0.16)');
+        glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = glow;
+        ctx.fillRect(tableX, tableY, tableW, tableH);
+      }
+    }
+
     // Felt Center Watermark Emblem
     ctx.save();
     ctx.globalAlpha = 0.12;
-    this.text('♠ 414 扑克', width / 2, tableY + tableH / 2, 42, COLORS.gold, 'center', '700');
+    this.text('♠ 414 扑克 ♠', width / 2, tableY + tableH / 2, 38, COLORS.gold, 'center', '700');
     ctx.restore();
 
     // Seating Calculation
@@ -709,23 +680,23 @@ class FourOneFourRenderer {
       ? [SEATS[(ownIndex + 2) % 4], SEATS[(ownIndex + 1) % 4], me, SEATS[(ownIndex + 3) % 4]]
       : SEATS;
 
-    // Card positions around table
+    // Card positions around table: Top player sits centered at 12 o'clock, bottom player sits centered above action dock
     const cardPositions = [
-      { x: width / 2 - 92, y: tableY - 28, pos: 'top' },
+      { x: width / 2 - 88, y: 52, pos: 'top' },
       { x: tableX - 45, y: tableY + 85, pos: 'left' },
-      { x: width / 2 - 92, y: tableY + tableH - 36, pos: 'bottom' },
-      { x: tableX + tableW - 139, y: tableY + 85, pos: 'right' },
+      { x: width / 2 - 88, y: tableY + tableH - 56, pos: 'bottom' },
+      { x: tableX + tableW - 131, y: tableY + 85, pos: 'right' },
     ];
 
     relative.forEach((seat, index) => {
       const position = cardPositions[index];
-      this.drawPlayerCard(state, seat, position.x, position.y, 184, 68);
+      this.drawPlayerCard(state, seat, position.x, position.y, 176, 58);
     });
 
     // Center Trick & Table Status
     if (pub.phase === 'lobby') {
       this.text(`${pub.players.length} / 4 人已入座`, width / 2, tableY + 110, 20, COLORS.gold, 'center', '700');
-      this.text('分享邀请码，坐满四位玩家后房主可开局', width / 2, tableY + 138, 12, '#9dc1b6', 'center');
+      this.text('四位玩家到齐后房主可开局', width / 2, tableY + 138, 12, '#9dc1b6', 'center');
     } else {
       const lastPlay = pub.publicLastPlay;
       const trick = pub.trick;
@@ -737,18 +708,18 @@ class FourOneFourRenderer {
         const cardW = Math.min(48, 380 / cards.length);
         const startX = width / 2 - (cards.length * cardW) / 2;
         cards.slice(0, 16).forEach((card, idx) => {
-          this.drawCard(card, startX + idx * cardW, tableY + 80, cardW - 3, 62, false);
+          this.drawCard(card, startX + idx * cardW, tableY + 76, cardW - 3, 62, false);
         });
-        this.roundRect(width / 2 - 90, tableY + 152, 180, 24, 6, 'rgba(8, 28, 22, 0.85)', '#3b7a67');
-        this.text(`${leader} 位出牌 · ${handKind}`, width / 2, tableY + 164, 12, '#ffd782', 'center', '600');
+        this.roundRect(width / 2 - 90, tableY + 146, 180, 24, 6, 'rgba(8, 28, 22, 0.85)', '#3b7a67');
+        this.text(`${leader} 位出牌 · ${handKind}`, width / 2, tableY + 158, 12, '#ffd782', 'center', '600');
       } else {
-        this.text(pub.currentTurn ? `轮到 ${pub.currentTurn} 位行动` : '等待首家出牌', width / 2, tableY + 120, 16, COLORS.gold, 'center', '600');
+        this.text(pub.currentTurn ? `轮到 ${pub.currentTurn} 位行动` : '等待首家出牌', width / 2, tableY + 116, 16, COLORS.gold, 'center', '600');
       }
 
       if (pub.settlement) {
         const winTeam = pub.settlement.winnerTeam === 'AC' ? '1队' : '2队';
-        this.roundRect(width / 2 - 120, tableY + 185, 240, 30, 8, 'rgba(18, 48, 32, 0.94)', COLORS.gold);
-        this.text(`🏆 本局结束 · ${winTeam} 获胜！`, width / 2, tableY + 200, 13, COLORS.goldLight, 'center', '700');
+        this.roundRect(width / 2 - 120, tableY + 180, 240, 28, 8, 'rgba(18, 48, 32, 0.94)', COLORS.gold);
+        this.text(`🏆 本局结束 · ${winTeam} 获胜！`, width / 2, tableY + 194, 13, COLORS.goldLight, 'center', '700');
       }
     }
   }
@@ -764,13 +735,13 @@ class FourOneFourRenderer {
 
     const ctx = this.ctx;
     ctx.save();
-    ctx.shadowColor = isTurn || selected ? '#f4c75e' : 'rgba(5, 20, 16, 0.6)';
-    ctx.shadowBlur = isTurn || selected ? 10 : 4;
+    ctx.shadowColor = isTurn || selected ? '#f4c75e' : 'rgba(2, 20, 28, 0.6)';
+    ctx.shadowBlur = isTurn || selected ? 12 : 5;
     ctx.shadowOffsetY = 2;
 
     this.roundRect(x, y, width, height, 10,
-      player ? (isMe ? '#163f35' : 'rgba(14, 38, 48, 0.92)') : 'rgba(8, 24, 32, 0.55)',
-      isTurn || selected ? COLORS.gold : (player ? (isMe ? '#2e7c67' : '#275263') : '#1e3c49'), 1.5);
+      player ? (isMe ? '#13382f' : 'rgba(13, 34, 44, 0.92)') : 'rgba(7, 20, 27, 0.55)',
+      isTurn ? '#ffd87a' : (selected ? COLORS.gold : (player ? (isMe ? '#277a64' : '#274e5e') : '#1e3c49')), isTurn ? 2 : 1.5);
     ctx.restore();
 
     if (selected) {
@@ -778,46 +749,64 @@ class FourOneFourRenderer {
     }
 
     if (player) {
-      // Avatar circle
-      const avX = x + 24;
+      // Circular Avatar with gold border ring
+      const avX = x + 25;
       const avY = y + height / 2;
-      const avatarD = 36;
-      const hasImage = this.drawAvatar(player.avatarUrl, avX - avatarD / 2, avY - avatarD / 2, avatarD, false);
+      const avatarR = 19;
+      const avatarD = avatarR * 2;
+
+      // Active player turn pulse halo
+      if (isTurn) {
+        const turnPulse = 1 + 0.12 * Math.sin(Date.now() * 0.007);
+        this.circle(avX, avY, avatarR * turnPulse + 1, null, 'rgba(255, 215, 120, 0.7)', 1.5);
+      }
+
+      const hasImage = this.drawAvatar(player.avatarUrl, avX - avatarR, avY - avatarR, avatarD, false);
       if (!hasImage) {
-        this.circle(avX, avY, 18, isMe ? '#226050' : '#1e4859', isMe ? COLORS.gold : '#508398', 1.5);
+        this.circle(avX, avY, avatarR, isMe ? '#205c4d' : '#1a4150', isMe ? COLORS.gold : '#4a7d90', 1.5);
         this.text(player.nickname ? player.nickname.slice(0, 1) : seat, avX, avY, 14, '#ffffff', 'center', '700');
       } else {
-        this.circle(avX, avY, 18, null, isMe ? COLORS.gold : '#508398', 1.5);
+        this.circle(avX, avY, avatarR, null, isMe ? COLORS.gold : '#4a7d90', 1.5);
       }
 
       // Nickname & Seat label
-      this.text(this.fit(player.nickname, 86, 13), x + 48, y + 17, 13, '#f2f8fa', 'left', '600');
+      this.text(this.fit(player.nickname, 78, 12.5), x + 48, y + 16, 12.5, '#f2f8fa', 'left', '600');
 
       // Team badge
       const teamBg = team === '1队' ? '#0284c7' : '#e11d48';
-      this.roundRect(x + 48, y + 32, 34, 16, 4, teamBg);
-      this.text(team, x + 65, y + 40, 10, '#ffffff', 'center', '700');
+      this.roundRect(x + 48, y + 31, 34, 16, 4, teamBg);
+      this.text(team, x + 65, y + 39, 10, '#ffffff', 'center', '700');
 
       // Hand count badge
       const countLabel = player.finishedRank ? `第${player.finishedRank}名` : `${player.handCount || 0} 张`;
-      this.text(countLabel, x + 88, y + 40, 11, player.finishedRank ? COLORS.gold : '#9eb6c2', 'left');
+      this.text(countLabel, x + 88, y + 39, 11, player.finishedRank ? COLORS.gold : '#9eb6c2', 'left', player.finishedRank ? '700' : '500');
 
       // Host badge
       if (player.isHost) {
-        this.roundRect(x + width - 36, y + 6, 28, 16, 4, '#b45309');
-        this.text('庄', x + width - 22, y + 14, 10, '#ffedd5', 'center', '700');
+        this.roundRect(x + width - 28, y + 5, 22, 15, 4, '#b45309', '#fde68a', 1);
+        this.text('庄', x + width - 17, y + 12, 9.5, '#fff7ed', 'center', '700');
+      }
+
+      // Consistent Ready Badge
+      if ((pub.phase === 'lobby' || pub.phase === 'settled') && player.ready) {
+        const badgeW = 44;
+        const badgeH = 16;
+        const bx = avX - badgeW / 2;
+        const by = avY + avatarR - 6;
+        this.roundRect(bx, by, badgeW, badgeH, 8, 'rgba(16, 75, 40, 0.94)', '#4ade80', 1.2);
+        this.text('已准备', bx + badgeW / 2, by + badgeH / 2, 9.5, '#bbf7d0', 'center', '700');
       }
 
       // Gift badge and touch target (only for other players)
       if (!isMe) {
-        this.circle(x + width - 18, y + height - 18, 10, selected ? '#eab308' : 'rgba(18, 48, 58, 0.9)', selected ? '#ffffff' : 'rgba(255, 215, 120, 0.7)');
-        this.text('🎁', x + width - 18, y + height - 17, 9.5, selected ? '#1f2937' : '#ffd875', 'center');
+        this.circle(x + width - 16, y + height - 16, 9.5, selected ? '#eab308' : 'rgba(18, 48, 58, 0.9)', selected ? '#ffffff' : 'rgba(255, 215, 120, 0.7)');
+        this.text('🎁', x + width - 16, y + height - 15, 9, selected ? '#1f2937' : '#ffd875', 'center');
         this.targets.push({ x, y, w: width, h: height, width, height, type: 'select-player', data: { seat: player.seat, nickname: player.nickname } });
       }
     } else {
-      this.circle(x + 24, y + height / 2, 16, 'rgba(16, 40, 52, 0.6)', 'rgba(56, 106, 128, 0.5)');
-      this.text('+', x + 24, y + height / 2, 18, '#8ba4b0', 'center');
-      this.text(`${seat} 号空位`, x + 50, y + height / 2 - 6, 13, '#74929f');
+      this.circle(x + 25, y + height / 2, 16, 'rgba(16, 40, 52, 0.6)', 'rgba(56, 106, 128, 0.5)');
+      this.text('+', x + 25, y + height / 2, 18, '#8ba4b0', 'center');
+      this.text(`${seat} 号空位`, x + 50, y + height / 2 - 6, 12.5, '#74929f');
       this.text('等待入座…', x + 50, y + height / 2 + 10, 11, '#4e6d7a');
     }
 
@@ -1563,14 +1552,14 @@ class FourOneFourRenderer {
 
   drawCard(card, x, y, width, height, selected) {
     const ctx = this.ctx;
-    const cardY = y - (selected ? 14 : 0);
+    const cardY = y - (selected ? 16 : 0);
 
     ctx.save();
-    ctx.shadowColor = selected ? 'rgba(245, 158, 11, 0.7)' : 'rgba(0, 0, 0, 0.35)';
-    ctx.shadowBlur = selected ? 10 : 3;
+    ctx.shadowColor = selected ? 'rgba(245, 158, 11, 0.75)' : 'rgba(0, 0, 0, 0.35)';
+    ctx.shadowBlur = selected ? 12 : 3;
     ctx.shadowOffsetY = selected ? 2 : 1;
 
-    this.roundRect(x, cardY, width, height, 6, '#ffffff', selected ? COLORS.gold : '#cbd5e1', selected ? 2 : 1);
+    this.roundRect(x, cardY, width, height, 6, '#ffffff', selected ? '#ffd700' : '#cbd5e1', selected ? 2 : 1);
     ctx.restore();
 
     const isJoker = card?.kind === 'joker';
@@ -1633,12 +1622,18 @@ class FourOneFourRenderer {
       buttons = [{ label: '返回入口', type: 'leave', secondary: true }];
     }
 
-    const totalWidth = buttons.length * 104 + Math.max(0, buttons.length - 1) * 8;
-    let bx = width / 2 - totalWidth / 2;
-    buttons.forEach((button) => {
-      this.button(button.label, bx, 370, 104, 42, button.type, button.data, state.busy || button.disabled, button.secondary);
-      bx += 112;
-    });
+    if (buttons.length) {
+      const totalWidth = buttons.length * 104 + Math.max(0, buttons.length - 1) * 8;
+      // Action Dock Frosted Capsule Background
+      this.roundRect(width / 2 - totalWidth / 2 - 12, 365, totalWidth + 24, 52, 26, 'rgba(10, 28, 36, 0.85)', 'rgba(218, 170, 75, 0.45)', 1.2);
+      this.roundRect(width / 2 - totalWidth / 2 - 8, 369, totalWidth + 16, 44, 22, null, 'rgba(255, 255, 255, 0.1)', 1);
+
+      let bx = width / 2 - totalWidth / 2;
+      buttons.forEach((button) => {
+        this.button(button.label, bx, 370, 104, 42, button.type, button.data, state.busy || button.disabled, button.secondary);
+        bx += 112;
+      });
+    }
 
     if (pub.phase === 'opening' && pub.openingTurn !== seat) this.text(`等待 ${pub.openingTurn || ''} 位选择首牌权`, width / 2, 388, 14, COLORS.muted, 'center');
     if (pub.phase === 'playing' && (isSpectator || pub.currentTurn !== seat)) this.text(isSpectator ? '观战中' : `等待 ${pub.currentTurn || ''} 位出牌`, width / 2, 388, 14, COLORS.muted, 'center');

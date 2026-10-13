@@ -41,19 +41,26 @@ describe('414 mini-game project split', () => {
     });
   });
 
-  it('does not enter a room when there is no invite code, even if a saved session exists', async () => {
+  it('enters room directly in trial mode without requiring manual invite code input', async () => {
     let loginCalled = false;
+    let joined;
     const app = {
-      state: { inviteCode: '', profileAuthorized: true, error: '', statusMessage: '' },
-      wx: { getStorageSync: () => 'stale-session' },
-      transport: { login: async () => { loginCalled = true; } },
+      state: { inviteCode: '', profileAuthorized: true, nickname: '测试玩家', avatarUrl: '', error: '', statusMessage: '', busy: false },
+      wx: { getStorageSync: () => '', setStorageSync: () => {} },
+      transport: {
+        login: async (inviteCode) => { loginCalled = true; return { sessionToken: 's-1' }; },
+        join: async (nickname, avatar) => { joined = { nickname, avatar }; return { public: { roomId: '414', phase: 'lobby', players: [] }, private: { seat: 'A' } }; },
+      },
+      destroyUserInfoButton: () => {},
+      updateSnapshot: () => {},
       draw: () => {},
     };
 
     await FourOneFourGameApp.prototype.enterRoom.call(app);
 
-    expect(loginCalled).toBe(false);
-    expect(app.state.error).toBe('请输入邀请码');
+    expect(loginCalled).toBe(true);
+    expect(joined.nickname).toBe('测试玩家');
+    expect(app.state.error).toBe('');
   });
 
   it('sorts the visible hand and renders the correct card suit labels', () => {
@@ -70,8 +77,8 @@ describe('414 mini-game project split', () => {
   it('draws a portrait entry and a landscape room with touch targets', () => {
     const entryRenderer = mockRenderer(540, 960);
     entryRenderer.draw({ screen: 'entry', inviteCode: '', nickname: '', statusMessage: '', error: '' });
-    expect(entryRenderer.hit(100, 350)?.data.field).toBe('inviteCode');
-    expect(entryRenderer.targets.some((target) => target.type === 'input' && target.data.field === 'nickname')).toBe(false);
+    expect(entryRenderer.hit(270, 540)?.type).toBe('enter');
+    expect(entryRenderer.targets.some((target) => target.type === 'input')).toBe(false);
 
     const roomRenderer = mockRenderer(960, 540);
     roomRenderer.draw({
@@ -188,7 +195,7 @@ describe('414 mini-game project split', () => {
     }).not.toThrow();
   });
 
-  it('creates wx.createUserInfoButton overlay on entry when inviteCode is entered', () => {
+  it('creates wx.createUserInfoButton overlay on entry directly for trial users', () => {
     let buttonOptions;
     let onTap;
     const app = {
@@ -200,17 +207,99 @@ describe('414 mini-game project split', () => {
       },
       renderer: { viewport: { scale: 1, x: 0, y: 0 } },
       pixelRatio: 1,
-      state: { screen: 'entry', inviteCode: '414', profileAuthorized: false, busy: false },
+      state: { screen: 'entry', inviteCode: '', profileAuthorized: false, busy: false },
       handleUserInfoButtonResult: (result) => { app.result = result; },
       userInfoBtn: null,
       draw: () => {},
     };
     FourOneFourGameApp.prototype.updateUserInfoButton.call(app);
     expect(buttonOptions.text).toBe('进入房间');
-    expect(buttonOptions.style).toMatchObject({ left: 100, top: 510, width: 340, height: 56 });
+    expect(buttonOptions.style).toMatchObject({ left: 110, top: 520, width: 320, height: 58 });
     const result = { userInfo: { nickName: '测试扑克用户', avatarUrl: 'https://avatar.url/414.jpg' } };
     onTap(result);
     expect(app.result).toBe(result);
+  });
+
+  it('renders player card with consistent 已准备 badge when ready in settled phase', () => {
+    const labels = [];
+    const context = new Proxy({}, {
+      get: (target, property) => {
+        if (property === 'createLinearGradient' || property === 'createRadialGradient') return () => ({ addColorStop() {} });
+        if (property === 'measureText') return (text) => ({ width: String(text).length * 7 });
+        if (property === 'fillText') return (value) => labels.push(String(value));
+        return target[property] || (() => undefined);
+      },
+      set: (target, property, value) => { target[property] = value; return true; },
+    });
+    const renderer = new FourOneFourRenderer({ width: 960, height: 540 }, context);
+    renderer.draw({
+      screen: 'table', chatOpen: false, selectedIds: [], selectedTarget: null, busy: false,
+      snapshot: {
+        public: {
+          roomId: '414', phase: 'settled', handNumber: 1,
+          players: [
+            { seat: 'A', nickname: '玩家A', isHost: true, handCount: 0, connected: true, ready: true },
+            { seat: 'B', nickname: '玩家B', isHost: false, handCount: 0, connected: true, ready: false },
+            { seat: 'C', nickname: '玩家C', isHost: false, handCount: 0, connected: true, ready: true },
+            { seat: 'D', nickname: '玩家D', isHost: false, handCount: 0, connected: true, ready: false },
+          ],
+          chat: [],
+        },
+        private: { seat: 'A', hand: [], spectator: false },
+      },
+    });
+    const readyBadges = labels.filter((l) => l === '已准备');
+    // Player A and Player C are ready on their cards + action button
+    expect(readyBadges.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('renders Action Dock backdrop and lifts selected card by 16px', () => {
+    const cardYCoords = [];
+    const context = new Proxy({}, {
+      get: (target, property) => {
+        if (property === 'createLinearGradient' || property === 'createRadialGradient') return () => ({ addColorStop() {} });
+        if (property === 'measureText') return (text) => ({ width: String(text).length * 7 });
+        return target[property] || (() => undefined);
+      },
+      set: (target, property, value) => { target[property] = value; return true; },
+    });
+    const renderer = new FourOneFourRenderer({ width: 960, height: 540 }, context);
+    const origRoundRect = renderer.roundRect.bind(renderer);
+    renderer.roundRect = (x, y, w, h, ...args) => {
+      if (h === 76) cardYCoords.push(y);
+      return origRoundRect(x, y, w, h, ...args);
+    };
+    renderer.draw({
+      screen: 'table', chatOpen: false, selectedIds: ['c1'], selectedTarget: null, busy: false,
+      snapshot: {
+        public: {
+          roomId: '414', phase: 'playing', currentTurn: 'A', handNumber: 1,
+          players: [
+            { seat: 'A', nickname: '我', isHost: true, handCount: 2, connected: true, activeInHand: true },
+            { seat: 'B', nickname: '下家', isHost: false, handCount: 2, connected: true, activeInHand: true },
+            { seat: 'C', nickname: '对家', isHost: false, handCount: 2, connected: true, activeInHand: true },
+            { seat: 'D', nickname: '上家', isHost: false, handCount: 2, connected: true, activeInHand: true },
+          ],
+          trick: { leadSeat: 'D', lastPlaySeat: 'D', kind: 'single', cards: [{ id: 'x', suit: 'hearts', rank: '3' }], passCount: 0 },
+          chat: [],
+        },
+        private: {
+          seat: 'A',
+          hand: [
+            { id: 'c1', kind: 'standard', suit: 'spades', rank: 'A' },
+            { id: 'c2', kind: 'standard', suit: 'clubs', rank: 'K' },
+          ],
+          spectator: false,
+        },
+      },
+    });
+
+    // Action Dock button targets exist
+    expect(renderer.targets.some((t) => t.type === 'play')).toBe(true);
+    expect(renderer.targets.some((t) => t.type === 'pass')).toBe(true);
+    // Selected card is elevated (441 - 16 = 425 vs unselected 441)
+    expect(cardYCoords).toContain(425);
+    expect(cardYCoords).toContain(441);
   });
 
   it('joins immediately with a generated guest nickname when WeChat profile is not authorized', async () => {

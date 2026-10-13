@@ -178,7 +178,7 @@ class FourOneFourGameApp {
       this.destroyUserInfoButton();
       return;
     }
-    const shouldShowOnEntry = this.state.screen === 'entry' && Boolean(this.state.inviteCode.trim()) && !this.state.profileAuthorized;
+    const shouldShowOnEntry = this.state.screen === 'entry' && !this.state.profileAuthorized;
     if (!shouldShowOnEntry || this.state.busy) {
       this.destroyUserInfoButton();
       return;
@@ -191,10 +191,10 @@ class FourOneFourGameApp {
       const vx = this.renderer.viewport.x || 0;
       const vy = this.renderer.viewport.y || 0;
       const pr = this.pixelRatio || 1;
-      const left = Math.round((vx + 100 * scale) / pr);
-      const top = Math.round((vy + 510 * scale) / pr);
-      const width = Math.round((340 * scale) / pr);
-      const height = Math.round((56 * scale) / pr);
+      const left = Math.round((vx + 110 * scale) / pr);
+      const top = Math.round((vy + 520 * scale) / pr);
+      const width = Math.round((320 * scale) / pr);
+      const height = Math.round((58 * scale) / pr);
 
       this.userInfoBtn = this.wx.createUserInfoButton({
         type: 'text',
@@ -203,20 +203,20 @@ class FourOneFourGameApp {
         lang: 'zh_CN',
         style: {
           left, top, width, height,
-          backgroundColor: '#f59e0b',
-          borderColor: '#fde68a',
-          color: '#ffffff',
+          backgroundColor: '#e7a52d',
+          borderColor: '#fff0ba',
+          color: '#15252b',
           textAlign: 'center',
           fontSize: 18,
           lineHeight: height,
-          borderRadius: 14,
+          borderRadius: 12,
         },
       });
       if (!this.userInfoBtn || typeof this.userInfoBtn.onTap !== 'function') {
         this.userInfoBtn = null;
         this.state.canRequestUserInfo = false;
         this.authorizationButtonError = true;
-        this.state.statusMessage = '微信授权按钮不可用，请重新输入邀请码后重试';
+        this.state.statusMessage = '微信授权按钮不可用，请稍后重试';
         this.state.error = '授权控件未就绪，暂未加入房间';
         this.draw();
         return;
@@ -232,7 +232,7 @@ class FourOneFourGameApp {
       this.userInfoBtn = null;
       this.state.canRequestUserInfo = false;
       this.authorizationButtonError = true;
-      this.state.statusMessage = `微信授权按钮创建失败${error && error.errMsg ? `：${error.errMsg}` : ''}，请重新输入邀请码后重试`;
+      this.state.statusMessage = `微信授权按钮创建失败${error && error.errMsg ? `：${error.errMsg}` : ''}，请稍后重试`;
       this.state.error = '授权控件未就绪，暂未加入房间';
       this.draw();
     }
@@ -291,12 +291,6 @@ class FourOneFourGameApp {
 
   async handleEntryAction() {
     if (this.state.busy) return;
-    const code = this.state.inviteCode.trim();
-    if (!code) {
-      this.state.error = '请输入房间邀请码';
-      this.draw();
-      return;
-    }
     if (this.userInfoBtn) {
       this.state.statusMessage = '请点击“进入房间”并确认昵称头像授权';
       this.draw();
@@ -306,11 +300,11 @@ class FourOneFourGameApp {
       this.updateUserInfoButton();
       if (!this.userInfoBtn) {
         this.state.error = this.authorizationButtonError
-          ? '微信授权按钮未能创建，请重新输入邀请码后再试'
+          ? '微信授权按钮未能创建，请稍后再试'
           : '正在准备微信授权，请稍后再点';
         this.draw();
       } else {
-        this.state.statusMessage = '邀请码已就绪，请点击“进入房间”确认授权';
+        this.state.statusMessage = '请点击“进入房间”确认授权';
         this.draw();
       }
       return;
@@ -777,8 +771,7 @@ class FourOneFourGameApp {
   }
 
   async enterRoom(options = {}) {
-    const inviteCode = this.state.inviteCode.trim();
-    if (!inviteCode) { this.state.error = '请输入邀请码'; this.draw(); return; }
+    const inviteCode = this.state.inviteCode ? this.state.inviteCode.trim() : '';
 
     const profileAuthorized = options.profileAuthorized ?? this.state.profileAuthorized;
     let nickname = String(options.nickname ?? (profileAuthorized

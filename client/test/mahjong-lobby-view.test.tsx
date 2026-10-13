@@ -30,7 +30,7 @@ describe('MahjongLobbyView player cards', () => {
     expect(cards.map((card) => card.textContent).join(' ')).not.toMatch(/东家|南家|西家|北家/);
     expect(screen.getByText('4/4 人已入座 · 已准备 1/4')).toBeInTheDocument();
     expect(screen.getByText('已准备')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '已准备（点击取消）' }));
+    fireEvent.click(screen.getByRole('button', { name: '取消准备' }));
     expect(onReady).toHaveBeenCalledOnce();
   });
 

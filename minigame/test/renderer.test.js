@@ -1853,8 +1853,68 @@ describe('native mini-game Canvas renderer', () => {
     renderer.targets = [];
     state.snapshot.public.players[0].ready = true;
     renderer.drawLobby(state);
-    expect(labels).toContain('已准备 (点击取消)');
+    expect(labels).toContain('取消准备');
     expect(renderer.targets.some((t) => t.type === 'command' && t.data.action === 'ready' && t.data.payload.ready === false)).toBe(true);
+  });
+
+  it('coordinates 12 oclock seat position in lobby and unifies ready badge placement across all players', () => {
+    const badges = [];
+    const renderer = new MahjongRenderer({ width: 960, height: 540 }, createContext({
+      fillText: (value, x, y) => {
+        if (value === '已准备') badges.push({ text: value, x, y });
+      },
+    }));
+
+    const { lobbyCards, width } = renderer.roomLayout();
+    // 12 o'clock position (index 2) must be centered at the top of the room
+    expect(lobbyCards[2].x).toBe(Math.round((width - 94) / 2));
+    expect(lobbyCards[2].y).toBe(28);
+    expect(lobbyCards[2].width).toBe(94);
+    expect(lobbyCards[2].height).toBe(114);
+    // All 4 lobby cards have identical dimensions and 64x64 avatars
+    expect(lobbyCards.every((card) => card.width === 94 && card.height === 114)).toBe(true);
+
+    const state = {
+      screen: 'lobby',
+      snapshot: {
+        public: {
+          phase: 'lobby',
+          roomId: 'room-1',
+          players: [
+            { seat: 'A', nickname: '玩家东', score: 1000, ready: true, connected: true, melds: [], discards: [] },
+            { seat: 'B', nickname: '玩家南', score: 1000, ready: true, connected: true, melds: [], discards: [] },
+            { seat: 'C', nickname: '玩家西', score: 1000, ready: true, connected: true, melds: [], discards: [] },
+            { seat: 'D', nickname: '玩家北', score: 1000, ready: true, connected: true, melds: [], discards: [] },
+          ],
+          chat: [],
+          dealerSeat: 'A',
+          hostSeat: 'A',
+        },
+        private: { seat: 'A', hand: [], availableActions: [] },
+      },
+    };
+
+    renderer.drawLobby(state);
+    expect(badges).toHaveLength(4);
+    // 12 o'clock (position 2, seat C) badge is horizontally centered at 480
+    const topSeatBadge = badges[2];
+    expect(topSeatBadge.x).toBe(480);
+
+    // Also verify compact cards (in-game) center the ready badge at bottom of avatar rather than beside it
+    const compactBadges = [];
+    renderer.ctx = createContext({
+      fillText: (value, x, y) => {
+        if (value === '已准备') compactBadges.push({ text: value, x, y });
+      },
+    });
+    renderer.drawPlayerCard(
+      { snapshot: { public: { phase: 'settled', players: [{ seat: 'C', ready: true, nickname: '玩家西', score: 1000 }] } } },
+      'C', 644, 8, 114, 46
+    );
+    // In compact mode, avatar is at x=644 with size 40. Avatar center is 644 + 20 = 664.
+    // Ready badge is centered on avatar: bx + badgeW / 2 = 664.
+    expect(compactBadges).toHaveLength(1);
+    expect(compactBadges[0].x).toBe(664);
   });
 
   it('renders self-draw thumb reveal ritual animation and turns hu button into 自摸 button', () => {

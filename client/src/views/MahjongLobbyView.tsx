@@ -28,7 +28,7 @@ export function MahjongLobbyView({ snapshot, ownSeat, spectator = false, onReady
           <small>所有玩家准备后自动开局</small>
           {ownPlayer && !spectator ? (
             <button type="button" onClick={onReady}>
-              {ownPlayer.ready ? '已准备（点击取消）' : '准备开局'}
+              {ownPlayer.ready ? '取消准备' : '准备开局'}
             </button>
           ) : null}
         </div>

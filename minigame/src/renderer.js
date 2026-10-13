@@ -434,6 +434,12 @@ class MahjongRenderer {
         { x: Math.min(width - rightInset - 114, topHandRight + 10), y: 8, width: 114, height: 46 },
         { x: Math.min(width - rightInset - 94, this.project(table, 0.99, 0.4)[0] + 14), y: 154, width: 94, height: 114 },
       ],
+      lobbyCards: [
+        { x: leftInset, y: contentBottom - 211, width: 94, height: 114 },
+        { x: Math.max(leftInset, this.project(table, 0.01, 0.4)[0] - 108), y: 154, width: 94, height: 114 },
+        { x: Math.round((width - 94) / 2), y: 28, width: 94, height: 114 },
+        { x: Math.min(width - rightInset - 94, this.project(table, 0.99, 0.4)[0] + 14), y: 154, width: 94, height: 114 },
+      ],
       chat: { x: width - rightInset - 404, y: 178, width: 300, height: 240 - bottomInset },
       chatIcon: { x: width - rightInset - 32, y: 315, radius: 26 },
       center: { x: width / 2, y: 231 - bottomInset * 0.8 },
@@ -1115,10 +1121,10 @@ class MahjongRenderer {
         this.text('庄', avatarX + avatarSize - 8, y + avatarSize - 6, 17, '#fff2bc', 'center', '700');
       }
       if ((state.snapshot.public.phase === 'lobby' || state.snapshot.public.phase === 'settled') && player.ready) {
-        const badgeW = compact ? 36 : 46;
-        const badgeH = 16;
-        const bx = compact ? x + width - badgeW - 2 : avatarX + (avatarSize - badgeW) / 2;
-        const by = compact ? y + 2 : y + avatarSize - 14;
+        const badgeW = compact ? 38 : 46;
+        const badgeH = compact ? 15 : 16;
+        const bx = avatarX + (avatarSize - badgeW) / 2;
+        const by = y + avatarSize - (compact ? 12 : 14);
         this.roundRect(bx, by, badgeW, badgeH, 4, 'rgba(16, 75, 40, 0.94)', '#4ade80', 1.2);
         this.text('已准备', bx + badgeW / 2, by + badgeH / 2 + 0.5, compact ? 9 : 10, '#bbf7d0', 'center', '700');
       }
@@ -1288,8 +1294,10 @@ class MahjongRenderer {
           ? { seat: state.snapshot.private.seat }
           : null);
       const senderIdx = relativeSeats(state.snapshot.private.seat || 'A').indexOf(sender?.seat);
-      if (senderIdx >= 0 && this.roomLayout().cards[senderIdx]) {
-        const sCard = this.roomLayout().cards[senderIdx];
+      const layout = this.roomLayout();
+      const cards = state.snapshot.public.phase === 'lobby' ? layout.lobbyCards : layout.cards;
+      if (senderIdx >= 0 && cards[senderIdx]) {
+        const sCard = cards[senderIdx];
         startX = sCard.x + (sCard.height < 70 ? 20 : sCard.width / 2);
         startY = sCard.y + (sCard.height < 70 ? 20 : 32);
       }
@@ -1702,13 +1710,13 @@ class MahjongRenderer {
 
   drawLobby(state) {
     const snapshot = state.snapshot;
-    const { table, center, cards, width } = this.roomLayout();
+    const { table, center, lobbyCards, width } = this.roomLayout();
     this.drawMahjongTable(table);
     this.drawTableMedallion(state, true);
     this.text('好友入座，好局将启', center.x, 335, 23, '#f2e5b2', 'center', '700');
     this.text('分享房间邀请码，邀请好友一起玩', center.x, 365, 12, '#c4d1ad', 'center');
     relativeSeats(snapshot.private.seat || 'A').forEach((seat, index) => {
-      const card = cards[index];
+      const card = lobbyCards[index];
       this.drawPlayerCard(state, seat, card.x, card.y, card.width, card.height);
     });
     const ownPlayer = snapshot.private.seat ? playerForSeat(snapshot, snapshot.private.seat) : null;
@@ -1716,7 +1724,7 @@ class MahjongRenderer {
     const readyCount = (snapshot.public.players || []).filter((p) => p.ready).length;
     if (isSeated) {
       if (ownPlayer?.ready) {
-        this.button('已准备 (点击取消)', width / 2 - 90, 389, 180, 44, 'command', { action: 'ready', payload: { ready: false } }, 'secondary');
+        this.button('取消准备', width / 2 - 90, 389, 180, 44, 'command', { action: 'ready', payload: { ready: false } }, 'secondary');
       } else {
         this.button('准备', width / 2 - 90, 389, 180, 44, 'command', { action: 'ready', payload: { ready: true } }, 'primary');
       }

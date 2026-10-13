@@ -6,13 +6,14 @@ const { sortCards } = require('../src/cards');
 const { FourOneFourRenderer, cardLabel } = require('../src/renderer');
 const { FourOneFourGameApp } = require('../src/app');
 
-function mockRenderer(width, height) {
+function mockRenderer(width, height, textCalls = null) {
   const gradient = { addColorStop() {} };
   const context = new Proxy({}, {
     get: (target, property) => {
       if (property === 'createLinearGradient' || property === 'createRadialGradient') {
         return () => gradient;
       }
+      if (property === 'fillText' && textCalls) return (text) => textCalls.push(String(text));
       if (property === 'measureText') {
         return (text) => ({ width: String(text).length * 7 });
       }
@@ -72,6 +73,181 @@ describe('414 mini-game project split', () => {
     expect(sortCards(cards).map((card) => card.id)).toEqual(['b', 'c', 'a']);
     expect(cardLabel(cards[0])).toBe('A♠');
     expect(cardLabel({ kind: 'joker', joker: 'big' })).toBe('大王');
+  });
+
+  it('sorts hand cards by ascending rank and places both jokers last', () => {
+    const cards = [
+      { id: 'big', kind: 'joker', joker: 'big' },
+      { id: 'queen', kind: 'standard', suit: 'spades', rank: 'Q' },
+      { id: 'three', kind: 'standard', suit: 'hearts', rank: '3' },
+      { id: 'queen-2', kind: 'standard', suit: 'clubs', rank: 'Q' },
+      { id: 'small', kind: 'joker', joker: 'small' },
+      { id: 'seven', kind: 'standard', suit: 'diamonds', rank: '7' },
+    ];
+
+    expect(sortCards(cards).map((card) => card.id)).toEqual(['three', 'seven', 'queen-2', 'queen', 'small', 'big']);
+  });
+
+  it('keeps the effective main in ascending power order instead of regrouping 414 candidates', () => {
+    const cards = [
+      { id: 'ace', kind: 'standard', suit: 'spades', rank: 'A' },
+      { id: 'three', kind: 'standard', suit: 'hearts', rank: '3' },
+      { id: 'two', kind: 'standard', suit: 'clubs', rank: '2' },
+      { id: 'seven', kind: 'standard', suit: 'diamonds', rank: '7' },
+      { id: 'big', kind: 'joker', joker: 'big' },
+      { id: 'small', kind: 'joker', joker: 'small' },
+    ];
+
+    expect(sortCards(cards, '3').map((card) => card.id)).toEqual(['seven', 'ace', 'two', 'three', 'small', 'big']);
+  });
+
+  it('renders played sequence cards in ascending face order', () => {
+    const renderer = mockRenderer(960, 540);
+    const played = [];
+    renderer.drawCard = (card) => played.push(card);
+    renderer.drawPlayerCard = () => {};
+
+    renderer.drawTable({
+      snapshot: {
+        public: {
+          phase: 'playing', players: [], currentTurn: 'A', handNumber: 1, effectiveMain: '5',
+          publicLastPlay: { seat: 'B', kind: 'sequence', cards: [
+            { id: 'six', kind: 'standard', suit: 'clubs', rank: '6' },
+            { id: 'four', kind: 'standard', suit: 'hearts', rank: '4' },
+            { id: 'five', kind: 'standard', suit: 'spades', rank: '5' },
+          ] },
+        },
+        private: { seat: 'A' },
+      },
+    }, 960);
+
+    expect(played.map((card) => card.id)).toEqual(['four', 'five', 'six']);
+  });
+
+  it('uses most of the desktop canvas for the poker table', () => {
+    const renderer = mockRenderer(960, 540);
+    const rectangles = [];
+    renderer.roundRect = (...args) => rectangles.push(args);
+    renderer.drawPlayerCard = () => {};
+
+    renderer.drawTable({
+      snapshot: {
+        public: { phase: 'lobby', players: [], currentTurn: null, handNumber: 0 },
+        private: { seat: 'A' },
+      },
+    }, 960);
+
+    const outerRail = rectangles.find(([, , , , , , stroke]) => stroke === '#d49b29');
+    expect(outerRail?.[2]).toBeGreaterThanOrEqual(860);
+  });
+
+  it('places every player card outside the felt, with the local player at six o’clock', () => {
+    const seats = ['A', 'B', 'C', 'D'];
+    for (const me of seats) {
+      const renderer = mockRenderer(960, 540);
+      const positions = [];
+      renderer.drawPlayerCard = (_state, seat, x, y) => positions.push({ seat, x, y });
+      renderer.drawTable({
+        snapshot: {
+          public: {
+            phase: 'playing', currentTurn: me, handNumber: 1,
+            players: seats.map((seat) => ({ seat, nickname: seat, handCount: 13 })),
+          },
+          private: { seat: me },
+        },
+      }, 960);
+
+      expect(positions).toHaveLength(4);
+      expect(positions.find((position) => position.seat === me)?.y).toBeGreaterThan(400);
+      expect(positions.every((position) => position.y < 90 || position.y > 350 || position.x < 30 || position.x > 800)).toBe(true);
+    }
+  });
+
+  it('renders larger, readable hand cards', () => {
+    const renderer = mockRenderer(960, 540);
+    const cards = [];
+    renderer.drawCard = (card, x, y, width, height) => cards.push({ card, x, y, width, height });
+    renderer.drawPlayerCard = () => {};
+    const hand = Array.from({ length: 13 }, (_, index) => ({
+      id: `card-${index}`, kind: 'standard', suit: 'spades', rank: '3',
+    }));
+
+    renderer.drawGameControls({
+      snapshot: {
+        public: { phase: 'playing', currentTurn: 'A', players: [{ seat: 'A', activeInHand: true }] },
+        private: { seat: 'A', hand, spectator: false },
+      },
+      selectedIds: [], busy: false,
+    }, 960);
+
+    expect(cards).toHaveLength(13);
+    expect(cards[0].width).toBeGreaterThanOrEqual(64);
+    expect(cards[0].height).toBeGreaterThanOrEqual(88);
+  });
+
+  it('labels burst actions as 爆/不爆 and hides burst-wait text from other players', () => {
+    const ownLabels = [];
+    const ownRenderer = mockRenderer(960, 540, ownLabels);
+    ownRenderer.drawCard = () => {};
+    ownRenderer.drawGameControls({
+      snapshot: {
+        public: { phase: 'playing', currentTurn: 'A', burstPendingSeat: 'A', players: [{ seat: 'A' }] },
+        private: { seat: 'A', hand: [], burstKinds: ['sequence'], spectator: false },
+      },
+      selectedIds: [], busy: false,
+    }, 960);
+    expect(ownLabels).toContain('爆');
+    expect(ownLabels).toContain('不爆');
+    expect(ownLabels).not.toContain('顺子');
+    expect(ownLabels).not.toContain('不炸');
+
+    const otherLabels = [];
+    const otherRenderer = mockRenderer(960, 540, otherLabels);
+    otherRenderer.drawCard = () => {};
+    otherRenderer.drawGameControls({
+      snapshot: {
+        public: { phase: 'playing', currentTurn: 'B', burstPendingSeat: 'B', players: [{ seat: 'A' }, { seat: 'B' }] },
+        private: { seat: 'A', hand: [], spectator: false },
+      },
+      selectedIds: [], busy: false,
+    }, 960);
+    expect(otherLabels.some((label) => label.includes('等待') && label.includes('爆'))).toBe(false);
+    expect(otherLabels).not.toContain('等待 B 位出牌');
+  });
+
+  it('shows a playable response recommendation only when the current player can beat the table', () => {
+    const labels = [];
+    const renderer = mockRenderer(960, 540, labels);
+    renderer.drawCard = () => {};
+    const lead = { id: 'lead', kind: 'standard', suit: 'hearts', rank: '8' };
+    const hand = [
+      { id: 'weak', kind: 'standard', suit: 'clubs', rank: '5' },
+      { id: 'strong', kind: 'standard', suit: 'spades', rank: '9' },
+    ];
+
+    renderer.drawGameControls({
+      snapshot: {
+        public: { phase: 'playing', currentTurn: 'A', effectiveMain: '2', trick: { kind: 'single', cards: [lead] }, players: [{ seat: 'A', activeInHand: true }] },
+        private: {
+          seat: 'A', hand, spectator: false,
+          recommendedPlay: { cardIds: ['strong'], kind: 'single', isDifference: false },
+        },
+      },
+      selectedIds: [], busy: false,
+    }, 960);
+    expect(labels.some((label) => label.includes('推荐出牌'))).toBe(true);
+
+    labels.length = 0;
+    const noResponseRenderer = mockRenderer(960, 540, labels);
+    noResponseRenderer.drawCard = () => {};
+    noResponseRenderer.drawGameControls({
+      snapshot: {
+        public: { phase: 'playing', currentTurn: 'A', effectiveMain: '2', trick: { kind: 'single', cards: [lead] }, players: [{ seat: 'A', activeInHand: true }] },
+        private: { seat: 'A', hand: [hand[0]], spectator: false },
+      },
+      selectedIds: [], busy: false,
+    }, 960);
+    expect(labels.some((label) => label.includes('推荐出牌'))).toBe(false);
   });
 
   it('draws a portrait entry and a landscape room with touch targets', () => {
@@ -266,7 +442,7 @@ describe('414 mini-game project split', () => {
     const renderer = new FourOneFourRenderer({ width: 960, height: 540 }, context);
     const origRoundRect = renderer.roundRect.bind(renderer);
     renderer.roundRect = (x, y, w, h, ...args) => {
-      if (h === 76) cardYCoords.push(y);
+      if (h === 92) cardYCoords.push(y);
       return origRoundRect(x, y, w, h, ...args);
     };
     renderer.draw({
@@ -297,9 +473,9 @@ describe('414 mini-game project split', () => {
     // Action Dock button targets exist
     expect(renderer.targets.some((t) => t.type === 'play')).toBe(true);
     expect(renderer.targets.some((t) => t.type === 'pass')).toBe(true);
-    // Selected card is elevated (441 - 16 = 425 vs unselected 441)
-    expect(cardYCoords).toContain(425);
-    expect(cardYCoords).toContain(441);
+    // Selected card is elevated (442 - 16 = 426 vs unselected 442)
+    expect(cardYCoords).toContain(426);
+    expect(cardYCoords).toContain(442);
   });
 
   it('joins immediately with a generated guest nickname when WeChat profile is not authorized', async () => {
@@ -548,4 +724,3 @@ describe('414 mini-game project split', () => {
     expect(dy5).toBe(4);    // 20 - 16 = 4 (elevated by 16px when selected)
   });
 });
-

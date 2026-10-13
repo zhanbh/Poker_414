@@ -30,6 +30,7 @@ import {
 } from '../../shared/src/game-state';
 import { HandKind } from '../../shared/src/hand-types';
 import { findBurstCandidates } from '../../shared/src/rule-engine';
+import { findRecommendedPlay } from '../../shared/src/rules';
 import { RoomChatMessage, RoomChatPayload } from '../../shared/src/protocol';
 import { appendRoomChatMessage, createRoomChatMessage } from './room-chat';
 import { isValidNickname } from '../../shared/src/validation';
@@ -218,6 +219,14 @@ export class RoomService {
     const burstKinds = ownPlayer && state.burstPending?.seat === ownPlayer.seat && state.effectiveMain
       ? Array.from(new Set(findBurstCandidates(ownPlayer.hand, state.effectiveMain).map((candidate) => candidate.kind)))
       : [];
+    const recommendedPlay = ownPlayer
+      && state.phase === 'playing'
+      && state.currentTurn === ownPlayer.seat
+      && !state.burstPending
+      && state.trick
+      && state.effectiveMain
+      ? findRecommendedPlay(ownPlayer.hand, state.trick.lead, state.effectiveMain)
+      : null;
     return {
       public: publicState,
       private: {
@@ -225,6 +234,7 @@ export class RoomService {
         hand: ownPlayer ? [...ownPlayer.hand] : [],
         burstLocked: ownPlayer?.burstLocked ?? false,
         burstKinds,
+        ...(recommendedPlay ? { recommendedPlay } : {}),
         spectator: session.role === 'spectator',
         ...(session.role === 'spectator' ? {
           spectatorHands: Object.values(state.players)

@@ -19,6 +19,7 @@ export function CardHand({
   cards,
   main = null,
   selectedIds,
+  recommendedIds = [],
   onToggle,
   dimmed = false,
   resetKey,
@@ -26,6 +27,7 @@ export function CardHand({
   readonly cards: readonly Card[];
   readonly main?: Rank | null;
   readonly selectedIds: readonly string[];
+  readonly recommendedIds?: readonly string[];
   readonly onToggle: (card: Card) => void;
   readonly dimmed?: boolean;
   readonly resetKey?: number;
@@ -86,7 +88,7 @@ export function CardHand({
       <div className={`card-hand${dimmed ? ' dimmed' : ''}`} aria-label={dimmed ? '已弃牌的手牌' : '我的手牌'}>
       {orderedCards.map((card) => (
         <button
-          className={`${cardClassName(card, selectedIds.includes(card.id))}${draggingId === card.id ? ' dragging' : ''}${dragOverId === card.id ? ' drag-over' : ''}`}
+          className={`${cardClassName(card, selectedIds.includes(card.id))}${recommendedIds.includes(card.id) ? ' recommended' : ''}${draggingId === card.id ? ' dragging' : ''}${dragOverId === card.id ? ' drag-over' : ''}`}
           key={card.id}
           type="button"
           disabled={dimmed}

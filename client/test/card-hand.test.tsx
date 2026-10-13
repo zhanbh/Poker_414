@@ -18,7 +18,7 @@ describe('手牌组件', () => {
     ];
     const { container } = render(<CardHand cards={cards} selectedIds={[]} onToggle={vi.fn()} />);
 
-    expect(cardIds(container)).toEqual(['five', 'seven', 'six-1', 'six-2']);
+    expect(cardIds(container)).toEqual(['five', 'six-1', 'six-2', 'seven']);
     expect(screen.getByText('可拖动调整顺序')).toBeInTheDocument();
   });
 

@@ -155,6 +155,7 @@ export interface PrivateSnapshot {
   readonly hand: Card[];
   readonly burstLocked: boolean;
   readonly burstKinds?: HandKind[];
+  readonly recommendedPlay?: { readonly cardIds: readonly string[]; readonly kind: HandKind; readonly isDifference: boolean };
   readonly spectator?: boolean;
   readonly spectatorHands?: ReadonlyArray<{ readonly seat: Seat; readonly nickname: string; readonly hand: Card[] }>;
 }

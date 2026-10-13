@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { analyzeHand } from '../../shared/src/hand-types';
+import { standardCard } from '../../shared/src/cards';
 import { RoomService } from '../src/room-service';
 
 function service(): RoomService {
@@ -10,6 +12,33 @@ function service(): RoomService {
 }
 
 describe('单房间会话与命令服务', () => {
+  it('只向当前行动玩家的私有快照提供合法压制推荐', () => {
+    const room = service();
+    const first = room.login('inner-414');
+    room.join(first.sessionToken, '甲', '414');
+    const second = room.login('inner-414');
+    room.join(second.sessionToken, '乙', '414');
+
+    const state = room.getState()!;
+    state.phase = 'playing';
+    state.currentTurn = 'A';
+    state.effectiveMain = 'K';
+    state.trick = {
+      lead: analyzeHand([standardCard('5', 'hearts', 'table-five')], 'K')!,
+      leadSeat: 'B', lastPlaySeat: 'B', passCount: 0,
+    };
+    state.players.A!.activeInHand = true;
+    state.players.A!.hand = [
+      standardCard('3', 'clubs', 'weak-three'),
+      standardCard('6', 'spades', 'legal-six'),
+    ];
+
+    expect(room.getSnapshot(first.sessionToken).private.recommendedPlay).toMatchObject({
+      cardIds: ['legal-six'], kind: 'single', isDifference: false,
+    });
+    expect(room.getSnapshot(second.sessionToken).private).not.toHaveProperty('recommendedPlay');
+  });
+
   it('入房时保存并向房间快照返回玩家头像', () => {
     const room = service();
     const auth = room.login('inner-414');

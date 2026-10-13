@@ -113,7 +113,7 @@ describe('对局视图', () => {
     expect(onCommand).toHaveBeenCalledWith('play', { cardIds: ['a4'] });
   });
 
-  it('轮到跟单牌时自动选中最小的合法压制牌，但保留玩家决定权', () => {
+  it('轮到跟牌时显示服务端推荐，但不自动代替玩家选牌', () => {
     const snapshot: RoomSnapshot = {
       ...playing,
       public: {
@@ -124,15 +124,37 @@ describe('对局视图', () => {
           cards: [standardCard('5', 'diamonds', 'lead-five')], passCount: 0,
         },
       },
+      private: {
+        ...playing.private,
+        recommendedPlay: { cardIds: ['a6'], kind: 'single', isDifference: false },
+      },
     };
     const onCommand = vi.fn();
     render(<GameView snapshot={snapshot} onCommand={onCommand} onActivity={vi.fn()} onLeave={vi.fn()} testMode={false} />);
 
-    expect(screen.getByRole('button', { name: '6♣' })).toHaveClass('selected');
-    expect(screen.getByRole('status')).toHaveTextContent('已自动选中建议牌，可手动调整后再出牌');
-    fireEvent.click(screen.getByRole('button', { name: '6♣' }));
+    expect(screen.getByRole('button', { name: '6♣' })).toHaveClass('recommended');
     expect(screen.getByRole('button', { name: '6♣' })).not.toHaveClass('selected');
+    expect(screen.getByRole('status')).toHaveTextContent('推荐出牌：6♣');
+    fireEvent.click(screen.getByRole('button', { name: '6♣' }));
+    expect(screen.getByRole('button', { name: '6♣' })).toHaveClass('selected');
     expect(onCommand).not.toHaveBeenCalled();
+  });
+
+  it('服务端没有推荐时不显示建议提示', () => {
+    const snapshot: RoomSnapshot = {
+      ...playing,
+      public: {
+        ...playing.public,
+        trick: {
+          leadSeat: 'B', lastPlaySeat: 'B', kind: 'single',
+          cards: [standardCard('A', 'diamonds', 'lead-ace')], passCount: 0,
+        },
+      },
+    };
+    const { container } = render(<GameView snapshot={snapshot} onCommand={vi.fn()} onActivity={vi.fn()} onLeave={vi.fn()} testMode={false} />);
+
+    expect(container.querySelector('.hand-suggestion')).toBeNull();
+    expect(container.querySelector('.card.recommended')).toBeNull();
   });
 
   it('不是自己的牌权时不能点击出牌，避免提交必然被服务端拒绝的命令', () => {
@@ -156,6 +178,22 @@ describe('对局视图', () => {
     expect(document.querySelector('.player-avatar.current-turn')).toBeInTheDocument();
   });
 
+  it('展示顺子时按牌面顺序排列，不能把当前主挪到末尾', () => {
+    const snapshot: RoomSnapshot = {
+      ...playing,
+      public: {
+        ...playing.public,
+        publicLastPlay: {
+          seat: 'B', kind: 'sequence', isDifference: false,
+          cards: [standardCard('6', 'clubs', 'seq-6'), standardCard('4', 'hearts', 'seq-4'), standardCard('5', 'spades', 'seq-5')],
+        },
+      },
+    };
+    const { container } = render(<GameView snapshot={snapshot} onCommand={vi.fn()} onActivity={vi.fn()} onLeave={vi.fn()} testMode={false} />);
+
+    expect(Array.from(container.querySelectorAll('.public-play .played-card')).map((card) => card.textContent)).toEqual(['4♥', '5♠', '6♣']);
+  });
+
   it('剩余手牌可整手出完时强制先选择报爆或不爆', () => {
     const snapshot: RoomSnapshot = {
       ...playing,
@@ -168,8 +206,10 @@ describe('对局视图', () => {
     const onCommand = vi.fn();
     render(<GameView snapshot={snapshot} onCommand={onCommand} onActivity={vi.fn()} onLeave={vi.fn()} testMode={false} />);
 
-    expect(screen.getByText('剩余手牌可以一次出完，请选择是否爆牌')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '不爆，继续出牌' }));
+    expect(screen.getByText('剩余手牌可以一次出完')).toBeInTheDocument();
+    expect(screen.queryByText(/等待.*爆/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /顺子/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '不爆' }));
     expect(onCommand).toHaveBeenCalledWith('burst', { kind: 'skip' });
   });
 
@@ -227,7 +267,8 @@ describe('对局视图', () => {
     render(<GameView snapshot={snapshot} onCommand={onCommand} onActivity={vi.fn()} onLeave={vi.fn()} testMode={false} />);
 
     expect(screen.queryByRole('button', { name: '差牌' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '2♥' })).toHaveClass('selected');
+    expect(screen.getByRole('button', { name: '2♥' })).not.toHaveClass('selected');
+    fireEvent.click(screen.getByRole('button', { name: '2♥' }));
     fireEvent.click(screen.getByRole('button', { name: '出牌' }));
     expect(onCommand).toHaveBeenCalledWith('play', { cardIds: ['ui-split-2-2'] });
   });

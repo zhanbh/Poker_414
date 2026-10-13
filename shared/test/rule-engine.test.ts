@@ -1,10 +1,51 @@
 import { describe, expect, it } from 'vitest';
 import { createDeck, joker, standardCard } from '../src/cards';
 import { analyzeHand, getHandOptions } from '../src/hand-types';
-import { canBeat, validatePlay } from '../src/rules';
+import { canBeat, findRecommendedPlay, validatePlay } from '../src/rules';
 import { canBurst, findBurstCandidates } from '../src/rule-engine';
 
 describe('基础牌模型与单牌规则', () => {
+  it('推荐当前手牌中最小的合法单牌跟牌，不推荐无效大牌', () => {
+    const lead = analyzeHand([standardCard('5', 'hearts', 'lead')], 'K');
+    const hand = [
+      standardCard('3', 'clubs', 'too-small'),
+      standardCard('9', 'spades', 'too-large'),
+      standardCard('6', 'diamonds', 'smallest-legal'),
+      standardCard('2', 'hearts', 'jump'),
+    ];
+
+    expect(findRecommendedPlay(hand, lead!, 'K')).toMatchObject({
+      cardIds: ['smallest-legal'], kind: 'single', isDifference: false,
+    });
+  });
+
+  it('推荐能贴着管的同长度顺子，错误长度或跳级不作为推荐', () => {
+    const lead = analyzeHand([
+      standardCard('3', 'spades', 'lead-3'),
+      standardCard('4', 'hearts', 'lead-4'),
+      standardCard('5', 'clubs', 'lead-5'),
+    ], 'K');
+    const hand = [
+      standardCard('4', 'clubs', 'four'),
+      standardCard('5', 'diamonds', 'five'),
+      standardCard('6', 'spades', 'six'),
+      standardCard('5', 'hearts', 'jump-5'),
+      standardCard('6', 'diamonds', 'jump-6'),
+      standardCard('7', 'clubs', 'jump-7'),
+    ];
+
+    expect(findRecommendedPlay(hand, lead!, 'K')).toMatchObject({
+      cardIds: ['four', 'five', 'six'], kind: 'sequence', isDifference: false,
+    });
+  });
+
+  it('没有任何合法压制时不生成推荐', () => {
+    const lead = analyzeHand([standardCard('8', 'hearts', 'lead')], 'K');
+    const hand = [standardCard('5', 'clubs', 'only-card')];
+
+    expect(findRecommendedPlay(hand, lead!, 'K')).toBeNull();
+  });
+
   it('创建一副不重复的54张牌', () => {
     const deck = createDeck();
 

@@ -653,10 +653,10 @@ class FourOneFourRenderer {
     const ctx = this.ctx;
 
     // Deluxe Oval Poker Felt Table
-    const tableW = Math.min(740, width * 0.74);
-    const tableH = 265;
+    const tableW = width * 0.88;
+    const tableH = 320;
     const tableX = width / 2 - tableW / 2;
-    const tableY = 82;
+    const tableY = 80;
 
     // Outer Wooden Rail Rim
     this.roundRect(tableX - 12, tableY - 10, tableW + 24, tableH + 20, 96,
@@ -702,17 +702,17 @@ class FourOneFourRenderer {
       ? [SEATS[(ownIndex + 2) % 4], SEATS[(ownIndex + 1) % 4], me, SEATS[(ownIndex + 3) % 4]]
       : SEATS;
 
-    // Card positions around table: Top player sits centered at 12 o'clock, bottom player sits centered above action dock
+    // Keep player avatars outside the felt and keep the local player beside their hand.
     const cardPositions = [
-      { x: width / 2 - 88, y: 52, pos: 'top' },
-      { x: tableX - 45, y: tableY + 85, pos: 'left' },
-      { x: width / 2 - 88, y: tableY + tableH - 56, pos: 'bottom' },
-      { x: tableX + tableW - 131, y: tableY + 85, pos: 'right' },
+      { x: width / 2 - 88, y: 6, width: 176, height: 60 },
+      { x: 4, y: tableY + 96, width: 44, height: 60 },
+      { x: 4, y: 432, width: 44, height: 60 },
+      { x: width - 48, y: tableY + 96, width: 44, height: 60 },
     ];
 
     relative.forEach((seat, index) => {
       const position = cardPositions[index];
-      this.drawPlayerCard(state, seat, position.x, position.y, 176, 58);
+      this.drawPlayerCard(state, seat, position.x, position.y, position.width, position.height);
     });
 
     // Center Trick & Table Status
@@ -722,18 +722,20 @@ class FourOneFourRenderer {
     } else {
       const lastPlay = pub.publicLastPlay;
       const trick = pub.trick;
-      const cards = lastPlay?.cards || trick?.cards || [];
+      const playKind = lastPlay?.kind || trick?.kind;
+      const sequencePlay = playKind === 'sequence' || playKind === 'consecutive-pairs';
+      const cards = sortCards(lastPlay?.cards || trick?.cards || [], sequencePlay ? null : pub.effectiveMain);
       const leader = lastPlay?.seat || trick?.lastPlaySeat || '';
       const handKind = HAND_NAMES[lastPlay?.kind || trick?.kind] || '';
 
       if (cards.length) {
-        const cardW = Math.min(48, 380 / cards.length);
+        const cardW = Math.min(64, (tableW - 80) / cards.length);
         const startX = width / 2 - (cards.length * cardW) / 2;
         cards.slice(0, 16).forEach((card, idx) => {
-          this.drawCard(card, startX + idx * cardW, tableY + 76, cardW - 3, 62, false);
+          this.drawCard(card, startX + idx * cardW, tableY + 74, cardW - 3, 82, false);
         });
-        this.roundRect(width / 2 - 90, tableY + 146, 180, 24, 6, 'rgba(8, 28, 22, 0.85)', '#3b7a67');
-        this.text(`${leader} 位出牌 · ${handKind}`, width / 2, tableY + 158, 12, '#ffd782', 'center', '600');
+        this.roundRect(width / 2 - 100, tableY + 164, 200, 26, 7, 'rgba(8, 28, 22, 0.88)', '#3b7a67');
+        this.text(`${leader} 位出牌 · ${handKind}`, width / 2, tableY + 177, 13, '#ffd782', 'center', '600');
       } else {
         this.text(pub.currentTurn ? `轮到 ${pub.currentTurn} 位行动` : '等待首家出牌', width / 2, tableY + 116, 16, COLORS.gold, 'center', '600');
       }
@@ -771,6 +773,39 @@ class FourOneFourRenderer {
     }
 
     if (player) {
+      if (width < 100) {
+        const avatarR = 16;
+        const avatarX = x + width / 2;
+        const avatarY = y + 28;
+        this.text(seat, avatarX, y + 7, 8, '#f2f8fa', 'center', '700');
+        if (isTurn) {
+          const turnPulse = 1 + 0.12 * Math.sin(Date.now() * 0.007);
+          this.circle(avatarX, avatarY, avatarR * turnPulse + 1, null, 'rgba(255, 215, 120, 0.8)', 1.5);
+        }
+        const hasImage = this.drawAvatar(player.avatarUrl, avatarX - avatarR, avatarY - avatarR, avatarR * 2, false);
+        if (!hasImage) {
+          this.circle(avatarX, avatarY, avatarR, isMe ? '#205c4d' : '#1a4150', isMe ? COLORS.gold : '#4a7d90', 1.5);
+          this.text(player.nickname ? player.nickname.slice(0, 1) : seat, avatarX, avatarY, 12, '#ffffff', 'center', '700');
+        } else {
+          this.circle(avatarX, avatarY, avatarR, null, isMe ? COLORS.gold : '#4a7d90', 1.5);
+        }
+        if (player.isHost) {
+          this.roundRect(x + width - 13, y + 1, 12, 10, 3, '#b45309', '#fde68a', 0.8);
+          this.text('庄', x + width - 7, y + 6, 7, '#fff7ed', 'center', '700');
+        }
+        this.text(player.finishedRank ? `${player.finishedRank}名` : `${player.handCount || 0}张`, avatarX, y + height - 7, 8, COLORS.muted, 'center');
+        if ((pub.phase === 'lobby' || pub.phase === 'settled') && player.ready) {
+          this.roundRect(x + 1, y + height - 7, width - 2, 13, 6, 'rgba(16, 75, 40, 0.96)', '#4ade80', 1);
+          this.text('已准备', avatarX, y + height - 1, 7.5, '#bbf7d0', 'center', '700');
+        }
+        if (!isMe) {
+          this.circle(x + width - 5, y + height - 5, 8, selected ? '#eab308' : 'rgba(18, 48, 58, 0.9)', selected ? '#ffffff' : 'rgba(255, 215, 120, 0.7)');
+          this.text('🎁', x + width - 5, y + height - 5, 7, selected ? '#1f2937' : '#ffd875', 'center');
+          this.targets.push({ x, y, w: width, h: height, width, height, type: 'select-player', data: { seat: player.seat, nickname: player.nickname } });
+        }
+        return;
+      }
+
       // Circular Avatar with gold border ring
       const avX = x + 25;
       const avY = y + height / 2;
@@ -1736,8 +1771,9 @@ class FourOneFourRenderer {
         ? [{ label: '反立', type: 'opening', data: { kind: 'reverse', seat } }, { label: '过', type: 'opening', data: { kind: 'pass' }, secondary: true }]
         : [{ label: '立棍', type: 'opening', data: { kind: 'stand', seat } }, { label: '过', type: 'opening', data: { kind: 'pass' }, secondary: true }];
     } else if (!isSpectator && pub.burstPendingSeat === seat) {
-      buttons = (snapshot.private.burstKinds || []).map((kind) => ({ label: HAND_NAMES[kind] || kind, type: 'burst', data: { kind } }));
-      buttons.push({ label: '不炸', type: 'burst', data: { kind: 'skip' }, secondary: true });
+      const burstKind = (snapshot.private.burstKinds || [])[0];
+      buttons = burstKind ? [{ label: '爆', type: 'burst', data: { kind: burstKind } }] : [];
+      buttons.push({ label: '不爆', type: 'burst', data: { kind: 'skip' }, secondary: true });
     } else if (!isSpectator && pub.phase === 'playing' && pub.currentTurn === seat && player?.activeInHand) {
       const canDifference = pub.trick?.kind === 'single' && pub.differenceAvailable && state.selectedIds.length >= 2;
       buttons = [
@@ -1765,7 +1801,7 @@ class FourOneFourRenderer {
     }
 
     if (pub.phase === 'opening' && pub.openingTurn !== seat) this.text(`等待 ${pub.openingTurn || ''} 位选择首牌权`, width / 2, 388, 14, COLORS.muted, 'center');
-    if (pub.phase === 'playing' && (isSpectator || pub.currentTurn !== seat)) this.text(isSpectator ? '观战中' : `等待 ${pub.currentTurn || ''} 位出牌`, width / 2, 388, 14, COLORS.muted, 'center');
+    if (pub.phase === 'playing' && !pub.burstPendingSeat && (isSpectator || pub.currentTurn !== seat)) this.text(isSpectator ? '观战中' : `等待 ${pub.currentTurn || ''} 位出牌`, width / 2, 388, 14, COLORS.muted, 'center');
 
     // Spectator mode
     if (isSpectator) {
@@ -1780,22 +1816,41 @@ class FourOneFourRenderer {
     // Player Hand Cards
     const hand = sortCards(snapshot.private.hand || [], pub.effectiveMain);
     const main = pub.effectiveMain;
-    this.text('我的手牌', 24, 424, 13, COLORS.muted);
-    const cardWidth = Math.min(56, (width - 60) / Math.max(14, hand.length));
-    const gap = Math.min(cardWidth - 4, Math.max(28, (width - 60 - cardWidth) / Math.max(1, hand.length - 1)));
+    this.text('我的手牌', 64, 416, 13, COLORS.muted);
+    const cardWidth = Math.min(72, width - 84);
+    const availableWidth = width - 84;
+    const gap = hand.length > 1
+      ? Math.min(cardWidth - 6, (availableWidth - cardWidth) / (hand.length - 1))
+      : 0;
     const rowWidth = hand.length ? cardWidth + gap * (hand.length - 1) : 0;
-    const startX = Math.max(24, (width - rowWidth) / 2);
+    const startX = 64 + Math.max(0, (availableWidth - rowWidth) / 2);
+    const recommendedPlay = pub.phase === 'playing'
+      && pub.currentTurn === seat
+      && !pub.burstPendingSeat
+      && !(state.selectedIds || []).length
+      ? snapshot.private.recommendedPlay
+      : null;
+    const recommendedIds = new Set(recommendedPlay?.cardIds || []);
+
+    if (recommendedPlay && recommendedIds.size > 0) {
+      const recommendedCards = hand.filter((card) => recommendedIds.has(card.id));
+      const recommendationLabel = `推荐出牌：${recommendedCards.map(cardLabel).join(' ')}`;
+      const calloutWidth = Math.min(width - 80, Math.max(164, recommendationLabel.length * 12 + 24));
+      this.roundRect(width / 2 - calloutWidth / 2, 408, calloutWidth, 24, 8, 'rgba(7, 48, 38, 0.96)', '#59d9a7', 1.3);
+      this.text(recommendationLabel, width / 2, 420, 11, '#baffdf', 'center', '700');
+    }
 
     hand.forEach((card, index) => {
       const cx = startX + index * gap;
-      const selected = state.selectedIds.includes(card.id);
-      this.drawCard(card, cx, 441, cardWidth, 76, selected);
-      this.targets.push({ x: cx, y: 425, w: cardWidth, h: 95, width: cardWidth, height: 95, type: 'select-card', data: { cardId: card.id } });
+      const selected = (state.selectedIds || []).includes(card.id);
+      this.drawCard(card, cx, 442, cardWidth, 92, selected);
+      if (!selected && recommendedIds.has(card.id)) this.roundRect(cx, 442, cardWidth, 92, 6, null, '#59d9a7', 2.5);
+      this.targets.push({ x: cx, y: 426, w: cardWidth, h: 108, width: cardWidth, height: 108, type: 'select-card', data: { cardId: card.id } });
     });
 
     if (main) {
       const mainSuitLabel = SUITS[main] ? `${main}${SUITS[main]}` : main;
-      this.text(`本局主牌：${mainSuitLabel}`, width - 24, 424, 13, COLORS.gold, 'right', '600');
+      this.text(`本局主牌：${mainSuitLabel}`, width - 24, 416, 13, COLORS.gold, 'right', '600');
     }
   }
 

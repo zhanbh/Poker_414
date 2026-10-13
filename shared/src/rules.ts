@@ -1,4 +1,4 @@
-import { Rank, rankIndex } from './cards';
+import { Card, Rank, rankIndex } from './cards';
 import { analyzeHand, HandAnalysis, HandKind, isBomb } from './hand-types';
 
 export type PlayDeclaration = HandKind | 'difference';
@@ -8,6 +8,12 @@ export interface PlayResult {
   readonly hand: HandAnalysis | null;
   readonly clearsTrick: boolean;
   readonly reason?: string;
+}
+
+export interface PlayRecommendation {
+  readonly cardIds: readonly string[];
+  readonly kind: HandKind;
+  readonly isDifference: boolean;
 }
 
 const bombLevels = new Map<string, number>([
@@ -131,6 +137,76 @@ export function validatePlay(
   return canBeat(hand, lead, main)
     ? { legal: true, hand, clearsTrick: false }
     : { legal: false, hand, clearsTrick: false, reason: '牌力不足或未贴着管' };
+}
+
+function* cardCombinations(cards: readonly Card[], size: number, start = 0, picked: Card[] = []): Generator<Card[]> {
+  if (picked.length === size) {
+    yield [...picked];
+    return;
+  }
+  const stillNeeded = size - picked.length;
+  for (let index = start; index <= cards.length - stillNeeded; index += 1) {
+    picked.push(cards[index]);
+    yield* cardCombinations(cards, size, index + 1, picked);
+    picked.pop();
+  }
+}
+
+/** Finds the weakest legal response without mutating the player's hand. */
+export function findRecommendedPlay(
+  cards: readonly Card[],
+  lead: HandAnalysis,
+  main: Rank,
+): PlayRecommendation | null {
+  const directSizes = new Set([lead.length, ...(lead.kind === 'single' ? [2] : [])]);
+  const directResponses: HandAnalysis[] = [];
+
+  for (const size of directSizes) {
+    if (size > cards.length) continue;
+    for (const candidateCards of cardCombinations(cards, size)) {
+      const result = validatePlay(candidateCards, lead, main);
+      if (result.legal && result.hand && !isBomb(result.hand)) directResponses.push(result.hand);
+    }
+  }
+
+  if (directResponses.length > 0) {
+    directResponses.sort((left, right) => {
+      const leftKindPriority = left.isDifference ? 1 : 0;
+      const rightKindPriority = right.isDifference ? 1 : 0;
+      if (leftKindPriority !== rightKindPriority) return leftKindPriority - rightKindPriority;
+      const leftRank = left.rank ? (left.rank === main ? 13 : rankIndex(left.rank)) : rankIndex(left.startRank ?? '3');
+      const rightRank = right.rank ? (right.rank === main ? 13 : rankIndex(right.rank)) : rankIndex(right.startRank ?? '3');
+      if (leftRank !== rightRank) return leftRank - rightRank;
+      if (left.wildCount !== right.wildCount) return left.wildCount - right.wildCount;
+      return 0;
+    });
+    const best = directResponses[0];
+    return { cardIds: best.cards.map((card) => card.id), kind: best.kind, isDifference: best.isDifference };
+  }
+
+  const bombSizes = new Set<number>([lead.length]);
+  for (let size = 2; size <= Math.min(cards.length, 6); size += 1) bombSizes.add(size);
+  const bombResponses: HandAnalysis[] = [];
+  for (const size of bombSizes) {
+    if (size > cards.length) continue;
+    for (const candidateCards of cardCombinations(cards, size)) {
+      const result = validatePlay(candidateCards, lead, main);
+      if (result.legal && result.hand && isBomb(result.hand)) bombResponses.push(result.hand);
+    }
+  }
+
+  bombResponses.sort((left, right) => {
+    const levelDifference = bombLevel(left) - bombLevel(right);
+    if (levelDifference !== 0) return levelDifference;
+    const leftRank = left.rank ? rankIndex(left.rank) : -1;
+    const rightRank = right.rank ? rankIndex(right.rank) : -1;
+    if (leftRank !== rightRank) return leftRank - rightRank;
+    if (left.wildCount !== right.wildCount) return left.wildCount - right.wildCount;
+    return left.cards.length - right.cards.length;
+  });
+  const best = bombResponses[0];
+  if (!best) return null;
+  return { cardIds: best.cards.map((card) => card.id), kind: best.kind, isDifference: best.isDifference };
 }
 
 export { bombLevel };

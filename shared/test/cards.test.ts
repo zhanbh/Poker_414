@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { joker, sortCards, standardCard } from '../src/cards';
 
 describe('手牌展示排序', () => {
-  it('先按单牌、对子、炸牌分组，再按牌面排序', () => {
+  it('按当前有效牌力从小到大排列，并将大小王放在末尾', () => {
     const cards = [
       standardCard('5', 'spades', 'main-5'),
       standardCard('2', 'clubs', 'two'),
@@ -14,11 +14,11 @@ describe('手牌展示排序', () => {
     ];
 
     expect(sortCards(cards, '5').map((card) => card.id)).toEqual([
-      'two', 'three-clubs', 'three-spades', 'ordinary-5', 'main-5', 'small', 'big',
+      'three-clubs', 'three-spades', 'two', 'ordinary-5', 'main-5', 'small', 'big',
     ]);
   });
 
-  it('将可灵活解释为414的4和A按特殊牌型顺序整理', () => {
+  it('不因 414 候选而打乱牌面顺序', () => {
     const cards = [
       standardCard('A', 'hearts', 'ace'),
       standardCard('4', 'spades', 'four'),
@@ -27,10 +27,10 @@ describe('手牌展示排序', () => {
       standardCard('2', 'diamonds', 'two'),
     ];
 
-    expect(sortCards(cards, '5').map((card) => card.id)).toEqual(['three', 'two', 'four', 'wild', 'ace']);
+    expect(sortCards(cards, '5').map((card) => card.id)).toEqual(['three', 'four', 'ace', 'two', 'wild']);
   });
 
-  it('按示例将单牌、对子、普通炸和414候选分组', () => {
+  it('相同点数仍按花色稳定排序，不按对子或炸牌分组', () => {
     const cards = [
       standardCard('4', 'clubs', 'four-1'),
       standardCard('4', 'spades', 'four-2'),
@@ -53,14 +53,14 @@ describe('手牌展示排序', () => {
     ];
 
     expect(sortCards(cards).map((card) => card.id)).toEqual([
-      'five',
       'four-1', 'four-2',
+      'five',
       'six-1', 'six-2',
       'seven-1', 'seven-2',
       'eight-1', 'eight-2',
       'nine-1', 'nine-2',
-      'two-1', 'two-2', 'two-3',
       'ace-1', 'ace-2', 'ace-3', 'ace-4',
+      'two-1', 'two-2', 'two-3',
     ]);
   });
 });

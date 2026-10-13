@@ -64,9 +64,12 @@ class FourOneFourRenderer {
     this.animTime = 0;
     this.bgImage = null;
     this.bgLoaded = false;
+    this.cardAtlas = null;
+    this.cardAtlasLoaded = false;
     this.particles = [];
     this.suits = [];
     this.initBackground();
+    this.initCardAtlas();
     this.initParticles();
     this.initSuits();
   }
@@ -85,6 +88,25 @@ class FourOneFourRenderer {
       image.src = 'assets/poker-entry-bg.jpg';
       this.bgImage = image;
     } catch { /* Keep the procedural gradient fallback. */ }
+  }
+
+  initCardAtlas() {
+    try {
+      const image = typeof wx !== 'undefined' && typeof wx.createImage === 'function'
+        ? wx.createImage()
+        : typeof Image !== 'undefined' ? new Image() : null;
+      if (!image) return;
+      image.onload = () => {
+        this.cardAtlas = image;
+        this.cardAtlasLoaded = true;
+        if (typeof this.onAssetLoaded === 'function') this.onAssetLoaded();
+      };
+      image.onerror = () => {
+        this.cardAtlas = null;
+        this.cardAtlasLoaded = false;
+      };
+      image.src = 'assets/poker-cards.png';
+    } catch { /* Keep procedural Canvas fallback */ }
   }
 
   save() {
@@ -777,9 +799,14 @@ class FourOneFourRenderer {
       this.roundRect(x + 48, y + 31, 34, 16, 4, teamBg);
       this.text(team, x + 65, y + 39, 10, '#ffffff', 'center', '700');
 
-      // Hand count badge
+      // Hand count badge with mini card back icon
       const countLabel = player.finishedRank ? `第${player.finishedRank}名` : `${player.handCount || 0} 张`;
-      this.text(countLabel, x + 88, y + 39, 11, player.finishedRank ? COLORS.gold : '#9eb6c2', 'left', player.finishedRank ? '700' : '500');
+      if (!player.finishedRank) {
+        this.drawMiniCardBack(x + 88, y + 32, 10, 14);
+        this.text(countLabel, x + 102, y + 39, 11, '#9eb6c2', 'left', '500');
+      } else {
+        this.text(countLabel, x + 88, y + 39, 11, COLORS.gold, 'left', '700');
+      }
 
       // Host badge
       if (player.isHost) {
@@ -1550,38 +1577,140 @@ class FourOneFourRenderer {
     }
   }
 
-  drawCard(card, x, y, width, height, selected) {
+  drawMiniCardBack(x, y, w, h) {
+    const ctx = this.ctx;
+    if (this.cardAtlas && this.cardAtlas.width) {
+      const cellW = this.cardAtlas.width / 14;
+      const cellH = this.cardAtlas.height / 4;
+      const sx = 13 * cellW;
+      const sy = 2 * cellH; // Classic Navy Blue ornate card back
+      ctx.save();
+      this.roundRect(x, y, w, h, 2, null);
+      if (typeof ctx.clip === 'function') ctx.clip();
+      try {
+        if (typeof ctx.drawImage === 'function') {
+          ctx.drawImage(this.cardAtlas, sx, sy, cellW, cellH, x, y, w, h);
+        }
+      } catch { /* proceed to fallback */ }
+      ctx.restore();
+      return;
+    }
+    this.roundRect(x, y, w, h, 2, '#1e3a8a', '#eab308', 0.8);
+  }
+
+  drawCard(card, x, y, width, height, selected, isBack = false) {
     const ctx = this.ctx;
     const cardY = y - (selected ? 16 : 0);
 
     ctx.save();
     ctx.shadowColor = selected ? 'rgba(245, 158, 11, 0.75)' : 'rgba(0, 0, 0, 0.35)';
-    ctx.shadowBlur = selected ? 12 : 3;
+    ctx.shadowBlur = selected ? 14 : 3;
     ctx.shadowOffsetY = selected ? 2 : 1;
 
     this.roundRect(x, cardY, width, height, 6, '#ffffff', selected ? '#ffd700' : '#cbd5e1', selected ? 2 : 1);
     ctx.restore();
 
+    const isBackCard = isBack || card?.kind === 'back';
     const isJoker = card?.kind === 'joker';
     const isBig = isJoker && card.joker === 'big';
     const isRed = isJoker ? isBig : (card?.suit === 'hearts' || card?.suit === 'diamonds');
     const color = isRed ? '#dc2626' : '#1e293b';
 
+    // 1. If Open-Source Vector Playing Card Atlas is loaded, render high-fidelity slice
+    if (this.cardAtlas && this.cardAtlas.width) {
+      const SUIT_ROWS = { spades: 0, hearts: 1, clubs: 2, diamonds: 3 };
+      const RANK_COLS = {
+        A: 0, '2': 1, '3': 2, '4': 3, '5': 4, '6': 5,
+        '7': 6, '8': 7, '9': 8, '10': 9, J: 10, Q: 11, K: 12,
+      };
+
+      let col = 0;
+      let row = 0;
+      if (isBackCard) {
+        col = 13;
+        row = 2; // Classic Blue card back
+      } else if (isJoker) {
+        col = 13;
+        row = isBig ? 1 : 0;
+      } else {
+        const rankKey = String(card?.rank || 'A').toUpperCase();
+        col = RANK_COLS[rankKey] ?? 0;
+        row = SUIT_ROWS[card?.suit] ?? 0;
+      }
+
+      const cellW = this.cardAtlas.width / 14;
+      const cellH = this.cardAtlas.height / 4;
+      const sx = col * cellW;
+      const sy = row * cellH;
+
+      ctx.save();
+      this.roundRect(x, cardY, width, height, 6, null);
+      if (typeof ctx.clip === 'function') ctx.clip();
+      try {
+        if (typeof ctx.drawImage === 'function') {
+          ctx.drawImage(this.cardAtlas, sx, sy, cellW, cellH, x, cardY, width, height);
+        }
+      } catch { /* proceed to procedural fallback */ }
+      ctx.restore();
+
+      // Selected card golden highlight border
+      if (selected) {
+        this.roundRect(x, cardY, width, height, 6, null, '#ffd700', 2);
+      }
+      return;
+    }
+
+    // 2. High-precision Procedural Canvas Fallback
+    if (isBackCard) {
+      this.roundRect(x + 2, cardY + 2, width - 4, height - 4, 4, '#1e3a8a', '#eab308', 1);
+      return;
+    }
+
     if (isJoker) {
+      // Top-left index
       this.text(isBig ? '大' : '小', x + 7, cardY + 10, 11, color, 'left', '700');
       this.text('王', x + 7, cardY + 22, 11, color, 'left', '700');
-      this.text('JOKER', x + width / 2, cardY + height / 2 + 6, 9.5, color, 'center', '700');
+
+      // Rotated bottom-right index
+      ctx.save();
+      ctx.translate(x + width - 7, cardY + height - 10);
+      ctx.rotate(Math.PI);
+      this.text(isBig ? '大' : '小', 0, 0, 11, color, 'left', '700');
+      this.text('王', 0, 12, 11, color, 'left', '700');
+      ctx.restore();
+
+      // Center decorative badge
+      this.roundRect(x + width / 2 - 24, cardY + height / 2 - 9, 48, 18, 5, isBig ? '#fef2f2' : '#f8fafc', isBig ? '#f87171' : '#94a3b8', 1);
+      this.text(isBig ? '★ JOKER ★' : 'JOKER', x + width / 2, cardY + height / 2, 9, color, 'center', '700');
     } else {
       const rank = String(card?.rank || '');
       const suit = SUITS[card?.suit] || '';
+
+      // Top-left index
       this.text(rank, x + 6, cardY + 10, 12, color, 'left', '700');
       this.text(suit, x + 6, cardY + 22, 10, color, 'left');
 
-      // Center suit emblem
+      // Rotated bottom-right index (Bicycle style)
       ctx.save();
-      ctx.globalAlpha = 0.85;
-      this.text(suit, x + width / 2, cardY + height / 2 + 2, Math.min(22, width * 0.42), color, 'center');
+      ctx.translate(x + width - 6, cardY + height - 10);
+      ctx.rotate(Math.PI);
+      this.text(rank, 0, 0, 12, color, 'left', '700');
+      this.text(suit, 0, 12, 10, color, 'left');
       ctx.restore();
+
+      // Center Graphic
+      if (['J', 'Q', 'K'].includes(rank)) {
+        const courtIcons = { J: '⚔️', Q: '👑', K: '♔' };
+        this.roundRect(x + width / 2 - 13, cardY + height / 2 - 15, 26, 30, 4, isRed ? 'rgba(254, 226, 226, 0.5)' : 'rgba(241, 245, 249, 0.5)', '#ca8a04', 1);
+        this.text(courtIcons[rank] || suit, x + width / 2, cardY + height / 2 - 2, 15, color, 'center');
+        this.text(suit, x + width / 2, cardY + height / 2 + 9, 9, color, 'center');
+      } else {
+        // Center suit emblem
+        ctx.save();
+        ctx.globalAlpha = 0.85;
+        this.text(suit, x + width / 2, cardY + height / 2 + 2, Math.min(22, width * 0.42), color, 'center');
+        ctx.restore();
+      }
     }
   }
 

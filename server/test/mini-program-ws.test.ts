@@ -175,7 +175,7 @@ describe('微信小程序原生 WebSocket 通道', () => {
     expect(joined1.snapshot?.public?.players).toHaveLength(1);
 
     const broadcastTo1 = waitForMessage(socket1, (message) => {
-      const payload = message.payload as any;
+      const payload = message.payload as { public?: { players?: unknown[] } };
       return message.event === EVENTS.snapshot && payload?.public?.players?.length === 2;
     });
 
@@ -187,7 +187,8 @@ describe('微信小程序原生 WebSocket 通道', () => {
     expect(joined2.snapshot?.public?.players).toHaveLength(2);
 
     const receivedBy1 = await broadcastTo1;
-    expect((receivedBy1.payload as any).public.players).toHaveLength(2);
+    const receivedPayload = receivedBy1.payload as { public: { players: unknown[] } };
+    expect(receivedPayload.public.players).toHaveLength(2);
   });
 
   it('复现并修复：玩家一异常断开后，玩家二入座庄位并成为房主，玩家一重连后自动入座空余座位并正确同步', async () => {
@@ -206,6 +207,7 @@ describe('微信小程序原生 WebSocket 通道', () => {
     // 3. 此时玩家二（鳕熊）登录并入房
     const socketBear = await connect(url);
     const authBear = await request(socketBear, EVENTS.login, { inviteCode: 'inner-414', gameId: 'mahjong' });
+    expect(authBear.ok).toBe(true);
     const joinedBear = await request(socketBear, EVENTS.join, { nickname: '鳕熊', roomId: 'mahjong', gameId: 'mahjong' });
     expect(joinedBear.ok).toBe(true);
     expect(joinedBear.snapshot?.public?.hostSeat).toBe('B');

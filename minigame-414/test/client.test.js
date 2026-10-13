@@ -48,7 +48,7 @@ describe('414 mini-game project split', () => {
       state: { inviteCode: '', profileAuthorized: true, nickname: '测试玩家', avatarUrl: '', error: '', statusMessage: '', busy: false },
       wx: { getStorageSync: () => '', setStorageSync: () => {} },
       transport: {
-        login: async (inviteCode) => { loginCalled = true; return { sessionToken: 's-1' }; },
+        login: async () => { loginCalled = true; return { sessionToken: 's-1' }; },
         join: async (nickname, avatar) => { joined = { nickname, avatar }; return { public: { roomId: '414', phase: 'lobby', players: [] }, private: { seat: 'A' } }; },
       },
       destroyUserInfoButton: () => {},
@@ -490,4 +490,62 @@ describe('414 mini-game project split', () => {
     app.stopAnimationLoop();
     expect(app.animationRunning).toBe(false);
   });
+
+  it('samples correct card sprite frames when cardAtlas is loaded', () => {
+    const drawCalls = [];
+    const context = new Proxy({}, {
+      get: (target, property) => {
+        if (property === 'drawImage') {
+          return (...args) => drawCalls.push(args);
+        }
+        if (property === 'createLinearGradient' || property === 'createRadialGradient') return () => ({ addColorStop() {} });
+        if (property === 'measureText') return (text) => ({ width: String(text).length * 7 });
+        return target[property] || (() => undefined);
+      },
+      set: (target, property, value) => { target[property] = value; return true; },
+    });
+    const renderer = new FourOneFourRenderer({ width: 960, height: 540 }, context);
+    const mockAtlas = { width: 1400, height: 400 };
+    renderer.cardAtlas = mockAtlas;
+
+    // Test Ace of Spades (col 0, row 0)
+    renderer.drawCard({ id: '1', kind: 'standard', suit: 'spades', rank: 'A' }, 10, 20, 50, 70, false);
+    expect(drawCalls.length).toBe(1);
+    const [img1, sx1, sy1, sw1, sh1] = drawCalls[0];
+    expect(img1).toBe(mockAtlas);
+    expect(sx1).toBe(0); // Col 0
+    expect(sy1).toBe(0); // Row 0 (spades)
+    expect(sw1).toBe(100); // 1400 / 14
+    expect(sh1).toBe(100); // 400 / 4
+
+    // Test Big Joker (col 13, row 1)
+    renderer.drawCard({ id: '2', kind: 'joker', joker: 'big' }, 10, 20, 50, 70, false);
+    expect(drawCalls.length).toBe(2);
+    const [, sx2, sy2] = drawCalls[1];
+    expect(sx2).toBe(1300); // Col 13 * 100
+    expect(sy2).toBe(100);  // Row 1 * 100
+
+    // Test Small Joker (col 13, row 0)
+    renderer.drawCard({ id: '3', kind: 'joker', joker: 'small' }, 10, 20, 50, 70, false);
+    expect(drawCalls.length).toBe(3);
+    const [, sx3, sy3] = drawCalls[2];
+    expect(sx3).toBe(1300);
+    expect(sy3).toBe(0);
+
+    // Test Card Back (col 13, row 2)
+    renderer.drawCard({ id: '4', kind: 'back' }, 10, 20, 50, 70, false);
+    expect(drawCalls.length).toBe(4);
+    const [, sx4, sy4] = drawCalls[3];
+    expect(sx4).toBe(1300);
+    expect(sy4).toBe(200);
+
+    // Test King of Hearts (col 12, row 1)
+    renderer.drawCard({ id: '5', kind: 'standard', suit: 'hearts', rank: 'K' }, 10, 20, 50, 70, true);
+    expect(drawCalls.length).toBe(5);
+    const [, sx5, sy5, , , , dy5] = drawCalls[4];
+    expect(sx5).toBe(1200); // Col 12 * 100
+    expect(sy5).toBe(100);  // Row 1 (hearts)
+    expect(dy5).toBe(4);    // 20 - 16 = 4 (elevated by 16px when selected)
+  });
 });
+
